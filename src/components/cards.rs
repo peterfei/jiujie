@@ -343,5 +343,24 @@ fn create_starting_deck() -> Vec<Card> {
             },
             CardRarity::Uncommon,
         ),
+        // 2张治疗卡
+        Card::new(
+            10,
+            "治疗",
+            "恢复5点生命",
+            CardType::Skill,
+            1,
+            CardEffect::Heal { amount: 5 },
+            CardRarity::Uncommon,
+        ),
+        Card::new(
+            11,
+            "治疗",
+            "恢复5点生命",
+            CardType::Skill,
+            1,
+            CardEffect::Heal { amount: 5 },
+            CardRarity::Uncommon,
+        ),
     ]
 }

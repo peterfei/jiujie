@@ -1457,13 +1457,15 @@ fn apply_card_effect(
                 let old_hp = player.hp;
                 player.hp = (player.hp + amount).min(player.max_hp);
                 info!("卡牌效果：回复 {} 点生命，{} -> {}", amount, old_hp, player.hp);
-                // 触发治疗特效
+                // 触发治疗粒子特效
                 effect_events.send(SpawnEffectEvent {
                     effect_type: EffectType::Heal,
                     position: Vec3::new(0.0, -200.0, 999.0),
                     burst: true,
                     count: 20,
                 });
+                // 触发白色闪光
+                screen_events.send(ScreenEffectEvent::white_flash(0.3));
             }
         }
         CardEffect::DrawCards { amount } => {
