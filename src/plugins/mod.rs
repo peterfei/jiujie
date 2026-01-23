@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use crate::states::GameState;
-use crate::components::{MapNode, NodeType, MapConfig, generate_map_nodes};
+use crate::components::{MapNode, NodeType, MapConfig, generate_map_nodes, Player, Enemy, CombatState, TurnPhase};
 
 /// 核心游戏插件
 pub struct CorePlugin;
@@ -33,6 +33,15 @@ impl Plugin for MenuPlugin {
         app.add_systems(OnExit(GameState::Map), cleanup_map_ui);
         // 处理地图界面按钮点击
         app.add_systems(Update, handle_map_button_clicks.run_if(in_state(GameState::Map)));
+
+        // 在进入Combat状态时设置战斗UI
+        app.add_systems(OnEnter(GameState::Combat), setup_combat_ui);
+        // 在退出Combat状态时清理战斗UI
+        app.add_systems(OnExit(GameState::Combat), cleanup_combat_ui);
+        // 处理战斗界面按钮点击
+        app.add_systems(Update, handle_combat_button_clicks.run_if(in_state(GameState::Combat)));
+        // 更新战斗UI显示
+        app.add_systems(Update, update_combat_ui.run_if(in_state(GameState::Combat)));
     }
 }
 
@@ -211,9 +220,9 @@ fn handle_map_button_clicks(
     // 处理地图节点点击
     for (interaction, node_btn, mut color) in button_queries.p0().iter_mut() {
         if matches!(interaction, Interaction::Pressed) {
-            // 点击地图节点
-            info!("地图节点 {} 被点击", node_btn.node_id);
-            // TODO: 进入战斗或相应场景
+            // 点击地图节点 - 进入战斗
+            info!("地图节点 {} 被点击，进入战斗", node_btn.node_id);
+            next_state.set(GameState::Combat);
         } else if matches!(interaction, Interaction::Hovered) {
             // 悬停效果（稍微变亮）
             if let Color::Srgba(ref c) = color.0 {
@@ -456,5 +465,375 @@ fn get_node_icon(node_type: NodeType) -> &'static str {
         NodeType::Shop => "店",
         NodeType::Treasure => "宝",
         NodeType::Unknown => "?",
+    }
+}
+
+// ============================================================================
+// 战斗系统
+// ============================================================================
+
+/// 战斗UI根节点标记
+#[derive(Component)]
+struct CombatUiRoot;
+
+/// 结束回合按钮标记
+#[derive(Component)]
+struct EndTurnButton;
+
+/// 返回地图按钮标记（战斗结束）
+#[derive(Component)]
+struct ReturnToMapButton;
+
+// 战斗UI文本标记组件
+#[derive(Component)]
+struct EnemyHpText;
+
+#[derive(Component)]
+struct EnemyIntentText;
+
+#[derive(Component)]
+struct PlayerHpText;
+
+#[derive(Component)]
+struct PlayerEnergyText;
+
+#[derive(Component)]
+struct TurnText;
+
+/// 设置战斗UI
+fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
+
+    // 创建玩家和敌人实体
+    commands.spawn(Player::default());
+    commands.spawn(Enemy::new(0, "哥布林", 30));
+
+    // 初始化战斗状态
+    commands.insert_resource(CombatState::default());
+
+    // 创建战斗UI根容器
+    commands
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },
+            CombatUiRoot,
+        ))
+        .with_children(|parent| {
+            // 顶部：敌人区域
+            parent
+                .spawn(Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(40.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|enemy_area| {
+                    // 敌人信息面板
+                    enemy_area
+                        .spawn(Node {
+                            width: Val::Px(200.0),
+                            height: Val::Px(150.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            flex_direction: FlexDirection::Column,
+                            row_gap: Val::Px(10.0),
+                            ..default()
+                        })
+                        .with_children(|enemy_panel| {
+                            // 敌人名称
+                            enemy_panel.spawn((
+                                Text::new("哥布林"),
+                                TextFont {
+                                    font: chinese_font.clone(),
+                                    font_size: 24.0,
+                                    ..default()
+                                },
+                                TextColor(Color::WHITE),
+                            ));
+
+                            // 敌人血量
+                            enemy_panel.spawn((
+                                Text::new("HP: 30/30"),
+                                TextFont {
+                                    font: chinese_font.clone(),
+                                    font_size: 18.0,
+                                    ..default()
+                                },
+                                TextColor(Color::srgb(1.0, 0.3, 0.3)),
+                                EnemyHpText,
+                            ));
+
+                            // 敌人意图
+                            enemy_panel.spawn((
+                                Text::new("意图: 攻击(10)"),
+                                TextFont {
+                                    font: chinese_font.clone(),
+                                    font_size: 16.0,
+                                    ..default()
+                                },
+                                TextColor(Color::srgb(1.0, 0.8, 0.0)),
+                                EnemyIntentText,
+                            ));
+                        });
+                });
+
+            // 中部：玩家区域
+            parent
+                .spawn(Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(40.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|player_area| {
+                    // 玩家信息面板
+                    player_area
+                        .spawn(Node {
+                            width: Val::Px(300.0),
+                            height: Val::Px(150.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            flex_direction: FlexDirection::Column,
+                            row_gap: Val::Px(10.0),
+                            ..default()
+                        })
+                        .with_children(|player_panel| {
+                            // 玩家血量
+                            player_panel.spawn((
+                                Text::new("HP: 80/80"),
+                                TextFont {
+                                    font: chinese_font.clone(),
+                                    font_size: 20.0,
+                                    ..default()
+                                },
+                                TextColor(Color::srgb(0.3, 1.0, 0.3)),
+                                PlayerHpText,
+                            ));
+
+                            // 玩家能量
+                            player_panel.spawn((
+                                Text::new("能量: 3/3"),
+                                TextFont {
+                                    font: chinese_font.clone(),
+                                    font_size: 20.0,
+                                    ..default()
+                                },
+                                TextColor(Color::srgb(0.3, 0.6, 1.0)),
+                                PlayerEnergyText,
+                            ));
+
+                            // 当前回合
+                            player_panel.spawn((
+                                Text::new("第 1 回合"),
+                                TextFont {
+                                    font: chinese_font.clone(),
+                                    font_size: 16.0,
+                                    ..default()
+                                },
+                                TextColor(Color::srgb(0.7, 0.7, 0.7)),
+                                TurnText,
+                            ));
+                        });
+                });
+
+            // 底部：控制按钮区域
+            parent
+                .spawn(Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(20.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    column_gap: Val::Px(20.0),
+                    ..default()
+                })
+                .with_children(|button_area| {
+                    // 结束回合按钮
+                    button_area
+                        .spawn((
+                            Node {
+                                width: Val::Px(120.0),
+                                height: Val::Px(40.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0.3, 0.5, 0.3)),
+                            Button,
+                            EndTurnButton,
+                        ))
+                        .with_children(|parent| {
+                            parent.spawn((
+                                Text::new("结束回合"),
+                                TextFont {
+                                    font: chinese_font.clone(),
+                                    font_size: 16.0,
+                                    ..default()
+                                },
+                                TextColor(Color::WHITE),
+                            ));
+                        });
+
+                    // 返回地图按钮
+                    button_area
+                        .spawn((
+                            Node {
+                                width: Val::Px(120.0),
+                                height: Val::Px(40.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0.3, 0.3, 0.3)),
+                            Button,
+                            ReturnToMapButton,
+                        ))
+                        .with_children(|parent| {
+                            parent.spawn((
+                                Text::new("返回地图"),
+                                TextFont {
+                                    font: chinese_font,
+                                    font_size: 16.0,
+                                    ..default()
+                                },
+                                TextColor(Color::WHITE),
+                            ));
+                        });
+                });
+        });
+}
+
+/// 清理战斗UI
+fn cleanup_combat_ui(
+    mut commands: Commands,
+    ui_query: Query<Entity, With<CombatUiRoot>>,
+    player_query: Query<Entity, With<Player>>,
+    enemy_query: Query<Entity, With<Enemy>>,
+) {
+    // 清理UI
+    for entity in ui_query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+    // 清理玩家实体
+    for entity in player_query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+    // 清理敌人实体
+    for entity in enemy_query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+    // 移除战斗状态资源
+    commands.remove_resource::<CombatState>();
+}
+
+/// 处理战斗界面按钮点击
+fn handle_combat_button_clicks(
+    mut next_state: ResMut<NextState<GameState>>,
+    mut combat_state: ResMut<CombatState>,
+    mut player_query: Query<&mut Player>,
+    _enemy_query: Query<&mut Enemy>,
+    mut button_queries: ParamSet<(
+        Query<(&Interaction, &mut BackgroundColor), With<EndTurnButton>>,
+        Query<(&Interaction, &mut BackgroundColor), With<ReturnToMapButton>>,
+    )>,
+) {
+    // 处理结束回合按钮
+    for (interaction, mut color) in button_queries.p0().iter_mut() {
+        if matches!(interaction, Interaction::Pressed) {
+            info!("结束回合按钮被点击");
+            // 简单实现：切换到敌人回合
+            combat_state.phase = TurnPhase::EnemyTurn;
+
+            // TODO: 敌人AI行动逻辑
+            // 敌人攻击玩家
+            if let Ok(mut player) = player_query.get_single_mut() {
+                player.take_damage(10);
+                info!("玩家受到10点伤害，剩余HP: {}", player.hp);
+            }
+
+            // 检查战斗是否结束
+            if let Ok(player) = player_query.get_single() {
+                if player.hp <= 0 {
+                    info!("玩家败北！");
+                    // TODO: 游戏结束逻辑
+                }
+            }
+
+            // 新回合开始
+            if let Ok(mut player) = player_query.get_single_mut() {
+                player.start_turn();
+            }
+            combat_state.phase = TurnPhase::PlayerAction;
+        } else if matches!(interaction, Interaction::Hovered) {
+            *color = BackgroundColor(Color::srgb(0.4, 0.6, 0.4));
+        } else {
+            *color = BackgroundColor(Color::srgb(0.3, 0.5, 0.3));
+        }
+    }
+
+    // 处理返回地图按钮
+    for (interaction, mut color) in button_queries.p1().iter_mut() {
+        if matches!(interaction, Interaction::Pressed) {
+            info!("返回地图按钮被点击");
+            next_state.set(GameState::Map);
+        } else if matches!(interaction, Interaction::Hovered) {
+            *color = BackgroundColor(Color::srgb(0.4, 0.4, 0.4));
+        } else {
+            *color = BackgroundColor(Color::srgb(0.3, 0.3, 0.3));
+        }
+    }
+}
+
+/// 实时更新战斗UI
+fn update_combat_ui(
+    player_query: Query<&Player>,
+    enemy_query: Query<&Enemy>,
+    mut text_queries: ParamSet<(
+        Query<&mut Text, With<EnemyHpText>>,
+        Query<&mut Text, With<EnemyIntentText>>,
+        Query<&mut Text, With<PlayerHpText>>,
+        Query<&mut Text, With<PlayerEnergyText>>,
+        Query<&mut Text, With<TurnText>>,
+    )>,
+) {
+    // 获取玩家和敌人数据
+    if let Ok(player) = player_query.get_single() {
+        if let Ok(enemy) = enemy_query.get_single() {
+            // 更新敌人HP
+            if let Ok(mut hp_text) = text_queries.p0().get_single_mut() {
+                hp_text.0 = format!("HP: {}/{}", enemy.hp, enemy.max_hp);
+            }
+
+            // 更新敌人意图
+            if let Ok(mut intent_text) = text_queries.p1().get_single_mut() {
+                let intent_str = match enemy.intent {
+                    crate::components::EnemyIntent::Attack { damage } => format!("攻击({})", damage),
+                    crate::components::EnemyIntent::Defend { block } => format!("防御({})", block),
+                    crate::components::EnemyIntent::Buff { strength } => format!("强化({})", strength),
+                    crate::components::EnemyIntent::Wait => "等待".to_string(),
+                };
+                intent_text.0 = format!("意图: {}", intent_str);
+            }
+
+            // 更新玩家HP
+            if let Ok(mut hp_text) = text_queries.p2().get_single_mut() {
+                hp_text.0 = format!("HP: {}/{}", player.hp, player.max_hp);
+            }
+
+            // 更新玩家能量
+            if let Ok(mut energy_text) = text_queries.p3().get_single_mut() {
+                energy_text.0 = format!("能量: {}/{}", player.energy, player.max_energy);
+            }
+
+            // 更新回合数
+            if let Ok(mut turn_text) = text_queries.p4().get_single_mut() {
+                turn_text.0 = format!("第 {} 回合", player.turn);
+            }
+        }
     }
 }
