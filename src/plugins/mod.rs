@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use crate::states::GameState;
-use crate::components::{MapNode, NodeType, MapConfig, generate_map_nodes, Player, Enemy, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent, CharacterType, SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent};
+use crate::components::{MapNode, NodeType, MapConfig, generate_map_nodes, Player, Enemy, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent, CharacterType, SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, ScreenEffectEvent, ScreenEffectMarker};
 use crate::systems::sprite::spawn_character_sprite;
 
 /// 核心游戏插件
@@ -898,6 +898,7 @@ fn cleanup_combat_ui(
     sprite_query: Query<Entity, With<SpriteMarker>>,
     particle_query: Query<Entity, With<ParticleMarker>>,
     emitter_query: Query<Entity, With<EmitterMarker>>,
+    screen_effect_query: Query<Entity, With<ScreenEffectMarker>>,
     draw_pile_query: Query<Entity, With<DrawPile>>,
     discard_pile_query: Query<Entity, With<DiscardPile>>,
     hand_query: Query<Entity, With<Hand>>,
@@ -927,7 +928,11 @@ fn cleanup_combat_ui(
     for entity in emitter_query.iter() {
         commands.entity(entity).despawn_recursive();
     }
-    // 清理牌组实体
+    // 清理屏幕特效实体
+    for entity in screen_effect_query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+    // 牌组实体
     for entity in draw_pile_query.iter() {
         commands.entity(entity).despawn_recursive();
     }
@@ -955,6 +960,7 @@ fn handle_combat_button_clicks(
     _enemy_query: Query<&mut Enemy>,
     mut attack_events: EventWriter<EnemyAttackEvent>,
     mut effect_events: EventWriter<SpawnEffectEvent>,
+    mut screen_events: EventWriter<ScreenEffectEvent>,
     mut button_queries: ParamSet<(
         Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<EndTurnButton>)>,
         Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<ReturnToMapButton>)>,
@@ -991,6 +997,17 @@ fn handle_combat_button_clicks(
                     position: Vec3::new(0.0, -200.0, 999.0),
                     burst: true,
                     count: 20,
+                });
+
+                // 触发屏幕特效（震动+红色闪光）
+                // 触发屏幕特效（震动+红色闪光）
+                screen_events.send(ScreenEffectEvent::Shake {
+                    trauma: 0.4,
+                    decay: 4.0,
+                });
+                screen_events.send(ScreenEffectEvent::Flash {
+                    color: Color::srgba(1.0, 0.0, 0.0, 0.6),
+                    duration: 0.15,
                 });
             }
 
@@ -1327,10 +1344,11 @@ fn handle_card_play(
     card_query: Query<(&Interaction, &HandCard), (Changed<Interaction>, With<HandCard>)>,
     mut player_query: Query<&mut Player>,
     mut hand_query: Query<&mut Hand>,
+    mut draw_pile_query: Query<&mut DrawPile>,
     mut discard_pile_query: Query<&mut DiscardPile>,
     mut enemy_query: Query<&mut Enemy>,
-    mut draw_pile_query: Query<&mut DrawPile>,
     mut effect_events: EventWriter<SpawnEffectEvent>,
+    mut screen_events: EventWriter<ScreenEffectEvent>,
 ) {
     for (interaction, hand_card) in card_query.iter() {
         if matches!(interaction, Interaction::Pressed) {
@@ -1369,6 +1387,7 @@ fn handle_card_play(
                         &mut draw_pile_query,
                         &mut discard_pile_query,
                         &mut effect_events,
+                        &mut screen_events,
                     );
 
                     // 从手牌移除卡牌
@@ -1398,6 +1417,7 @@ fn apply_card_effect(
     draw_pile_query: &mut Query<&mut DrawPile>,
     discard_pile_query: &mut Query<&mut DiscardPile>,
     effect_events: &mut EventWriter<SpawnEffectEvent>,
+    screen_events: &mut EventWriter<ScreenEffectEvent>,
 ) {
     match effect {
         CardEffect::DealDamage { amount } => {
@@ -1410,6 +1430,11 @@ fn apply_card_effect(
                     position: Vec3::new(0.0, 100.0, 999.0),
                     burst: true,
                     count: 30,
+                });
+                // 触发屏幕震动（轻）
+                screen_events.send(ScreenEffectEvent::Shake {
+                    trauma: 0.2,
+                    decay: 6.0,
                 });
             }
         }

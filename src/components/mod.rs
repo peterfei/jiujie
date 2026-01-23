@@ -6,6 +6,7 @@ pub mod cards;
 pub mod animation;
 pub mod sprite;
 pub mod particle;
+pub mod screen_effect;
 
 pub use map::{MapNode, NodeType, MapConfig, generate_map_nodes};
 pub use combat::{Player, Enemy, EnemyIntent, CombatConfig, CombatState, TurnPhase};
@@ -25,4 +26,7 @@ pub use sprite::{
 pub use particle::{
     Particle, ParticleEmitter, EmitterConfig, EffectType,
     SpawnEffectEvent, ParticleMarker, EmitterMarker
+};
+pub use screen_effect::{
+    CameraShake, ScreenFlash, ScreenEffectEvent, ScreenEffectMarker
 };
