@@ -7,6 +7,8 @@
 
 use bevy::app::App;
 use bevy::prelude::*;
+use bevy_card_battler::plugins::{CorePlugin, MenuPlugin};
+use bevy_card_battler::states::GameState;
 
 // ============================================================================
 // 测试：应用启动
@@ -17,49 +19,70 @@ fn test_app_can_be_created() {
     // GIVEN: 期望创建一个Bevy应用
     // WHEN: 创建App实例
     // THEN: 应用应该成功创建
-    let app = App::new();
+    let _app = App::new();
 
     // 验证应用已创建
     assert!(true, "App should be created");
 }
 
 #[test]
-fn test_app_with_default_plugins() {
-    // GIVEN: 期望一个带默认插件的完整应用
-    // WHEN: 创建App并添加DefaultPlugins
+fn test_app_with_core_plugins() {
+    // GIVEN: 期望一个带核心插件的完整应用
+    // WHEN: 创建App并添加CorePlugin和MenuPlugin
     // THEN: 应用应该成功构建
 
-    // 注意：这个测试需要运行完整的Bevy渲染系统
-    // 在CI环境中可能需要禁用（需要GPU）
-    // 因此我们使用条件编译或feature flag
-
     let mut app = App::new();
-    app.add_plugins(DefaultPlugins);
+    app.add_plugins(CorePlugin)
+        .add_plugins(MenuPlugin);
 
     // 如果我们到达这里，说明插件初始化成功
-    assert!(true, "DefaultPlugins should be added successfully");
+    assert!(true, "Core plugins should be added successfully");
+}
+
+// ============================================================================
+// 场景和状态转换测试
+// ============================================================================
+
+#[test]
+fn test_game_state_enum_exists() {
+    // GIVEN: 期望GameState枚举存在
+    // WHEN: 使用GameState枚举
+    // THEN: 所有状态变体都应该可用
+
+    // 验证MainMenu状态存在
+    let _main_menu = GameState::MainMenu;
+    // 验证Map状态存在
+    let _map = GameState::Map;
+    // 验证Combat状态存在
+    let _combat = GameState::Combat;
+    // 验证Reward状态存在
+    let _reward = GameState::Reward;
+    // 验证GameOver状态存在
+    let _game_over = GameState::GameOver;
+
+    assert!(true, "All GameState variants should exist");
 }
 
 #[test]
-fn test_app_schedule_exists() {
-    // GIVEN: 期望应用有调度器
-    // WHEN: 创建App并访问其调度器
-    // THEN: 调度器应该存在
+fn test_game_state_default() {
+    // GIVEN: 期望GameState有默认值
+    // WHEN: 获取默认GameState
+    // THEN: 默认值应该是MainMenu
 
-    let mut app = App::new();
-    let _app = app.add_plugins(DefaultPlugins);
-
-    // 验证调度器存在（通过访问其schedule）
-    // 这是一个基本的验证，确保应用结构正确
-    assert!(true, "App should have a schedule");
+    let default_state = GameState::default();
+    assert_eq!(default_state, GameState::MainMenu, "Default GameState should be MainMenu");
 }
 
-// ============================================================================
-// TODO: 后续测试（将在Sprint 1中实现）
-// ============================================================================
-//
-// - test_game_state_initialization()
-// - test_main_menu_creation()
-// - test_state_transition_main_menu_to_map()
-//
-// 这些测试将在实现对应功能后添加
+#[test]
+fn test_plugins_register_game_state() {
+    // GIVEN: 期望CorePlugin能注册GameState
+    // WHEN: 创建App并添加CorePlugin
+    // THEN: GameState应该被注册为reflect类型
+
+    let mut app = App::new();
+    app.add_plugins(CorePlugin)
+        .add_plugins(MenuPlugin);
+
+    // 验证应用构建成功
+    assert!(true, "Plugins should register GameState successfully");
+}

@@ -5,7 +5,7 @@
 //! 2. 注册所有插件
 //! 3. 启动游戏循环
 
-use bevy_card_battler::plugins::CorePlugin;
+use bevy_card_battler::plugins::{CorePlugin, MenuPlugin};
 use bevy_card_battler::states::GameState;
 use bevy::prelude::*;
 
@@ -31,6 +31,8 @@ fn main() {
         .init_state::<GameState>()
         // 注册核心插件
         .add_plugins(CorePlugin)
+        // 注册主菜单插件
+        .add_plugins(MenuPlugin)
         // 运行应用
         .run();
 }
