@@ -1,0 +1,56 @@
+[package]
+name = "bevy_card_battler"
+version = "0.1.0"
+edition = "2021"
+authors = ["Bevy Card Battler Team"]
+description = "A deck-building roguelike card game built with Bevy"
+repository = "https://github.com/yourusername/bevy-card-battler"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# Bevy 0.15.x - 固定版本避免breaking changes
+# 使用默认功能，后续可按需优化
+bevy = "0.15"
+
+# 随机数生成
+rand = "0.8"
+rand_core = "0.6"
+# bevy_rand - 暂时注释，后续需要时再添加
+# bevy_rand = { version = "0.7", features = ["std"] }
+# bevy_prng = { version = "0.7", features = ["wyrand"] }
+
+# 序列化（用于存档）
+serde = { version = "1.0", features = ["derive"] }
+ron = "0.8"
+
+[dev-dependencies]
+# 测试工具
+criterion = "0.5"           # 性能基准测试
+
+# Bevy测试功能 - 仅在测试时启用
+[features]
+default = []
+
+# 开发依赖功能
+dev = [
+    "bevy/bevy_dev_tools",  # 开发工具
+]
+
+# 动态链接（更快的编译时间）
+[profile.dev]
+opt-level = 1
+
+# 保留调试信息
+[profile.dev.package."*"]
+opt-level = 3
+
+# 发布优化
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+
+# 基准测试优化
+[profile.bench]
+inherits = "release"

@@ -1,0 +1,50 @@
+# Cargo配置文件
+
+[alias]
+# 测试别名
+utest = "test --lib"                                    # 单元测试
+itest = "test --test '*' --test-threads=1"             # 集成测试（单线程）
+etest = "test --test e2e"                              # E2E测试
+test-all = "test"                                      # 所有测试
+
+# 开发别名
+run-dev = "run --features dev"                         # 开发模式运行
+check-all = "check && clippy -- -D warnings"           # 完整检查
+
+# 文档生成
+doc = "doc --no-deps --document-private-items"
+doc-open = "doc --no-deps --document-private-items --open"
+
+# 构建别名
+build-release = "build --release"
+build-docker = "build --release --target x86_64-unknown-linux-gnu"
+
+[build]
+# 增量编译
+incremental = true
+
+# 使用更快的链接器（需要安装lld或mold）
+# rustflags = ["-C", "link-arg=-fuse-ld=lld"]  # Linux
+# rustflags = ["-C", "link-arg=-fuse-ld=lld"]  # macOS (需要brew install llvm)
+
+[env]
+# 设置RUST_LOG环境变量用于调试
+RUST_LOG = "info"
+
+# Bevy相关环境变量
+BEVY_LOG = "info"
+# 使用更快的 Asset 重加载
+BEVY_ASSET_HOT_RELOAD = "true"
+
+[net]
+# 使用国内镜像加速（可选）
+# git-fetch-with-cli = true
+
+[http]
+# 检查证书（生产环境建议启用，开发环境可禁用）
+check-revoke = false
+
+[target.x86_64-unknown-linux-gnu]
+# Linux特定配置
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
