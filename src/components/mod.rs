@@ -1,3 +1,5 @@
 //! ECS组件定义
 
-// 组件将在后续Sprint实现
+pub mod map;
+
+pub use map::{MapNode, NodeType, MapConfig, generate_map_nodes};
