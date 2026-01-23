@@ -2,7 +2,8 @@
 
 use bevy::prelude::*;
 use crate::states::GameState;
-use crate::components::{MapNode, NodeType, MapConfig, generate_map_nodes, Player, Enemy, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent};
+use crate::components::{MapNode, NodeType, MapConfig, generate_map_nodes, Player, Enemy, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent, CharacterType, SpriteMarker};
+use crate::systems::sprite::spawn_character_sprite;
 
 /// 核心游戏插件
 pub struct CorePlugin;
@@ -539,6 +540,22 @@ fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn(Player::default());
     commands.spawn(Enemy::new(0, "哥布林", 30));
 
+    // 创建敌人精灵
+    spawn_character_sprite(
+        &mut commands,
+        CharacterType::NormalEnemy,
+        Vec3::new(0.0, 100.0, 10.0),
+        Vec2::new(70.0, 100.0),
+    );
+
+    // 创建玩家精灵
+    spawn_character_sprite(
+        &mut commands,
+        CharacterType::Player,
+        Vec3::new(0.0, -200.0, 10.0),
+        Vec2::new(80.0, 120.0),
+    );
+
     // 初始化战斗状态
     commands.insert_resource(CombatState::default());
 
@@ -878,6 +895,7 @@ fn cleanup_combat_ui(
     ui_query: Query<Entity, With<CombatUiRoot>>,
     player_query: Query<Entity, With<Player>>,
     enemy_query: Query<Entity, With<Enemy>>,
+    sprite_query: Query<Entity, With<SpriteMarker>>,
     draw_pile_query: Query<Entity, With<DrawPile>>,
     discard_pile_query: Query<Entity, With<DiscardPile>>,
     hand_query: Query<Entity, With<Hand>>,
@@ -893,6 +911,10 @@ fn cleanup_combat_ui(
     }
     // 清理敌人实体
     for entity in enemy_query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+    // 清理精灵实体
+    for entity in sprite_query.iter() {
         commands.entity(entity).despawn_recursive();
     }
     // 清理牌组实体
