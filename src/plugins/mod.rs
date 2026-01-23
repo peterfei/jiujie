@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use crate::states::GameState;
-use crate::components::{MapNode, NodeType, MapConfig, generate_map_nodes, Player, Enemy, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent, CharacterType, SpriteMarker};
+use crate::components::{MapNode, NodeType, MapConfig, generate_map_nodes, Player, Enemy, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent, CharacterType, SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent};
 use crate::systems::sprite::spawn_character_sprite;
 
 /// 核心游戏插件
@@ -896,6 +896,8 @@ fn cleanup_combat_ui(
     player_query: Query<Entity, With<Player>>,
     enemy_query: Query<Entity, With<Enemy>>,
     sprite_query: Query<Entity, With<SpriteMarker>>,
+    particle_query: Query<Entity, With<ParticleMarker>>,
+    emitter_query: Query<Entity, With<EmitterMarker>>,
     draw_pile_query: Query<Entity, With<DrawPile>>,
     discard_pile_query: Query<Entity, With<DiscardPile>>,
     hand_query: Query<Entity, With<Hand>>,
@@ -915,6 +917,14 @@ fn cleanup_combat_ui(
     }
     // 清理精灵实体
     for entity in sprite_query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+    // 清理粒子实体
+    for entity in particle_query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+    // 清理发射器实体
+    for entity in emitter_query.iter() {
         commands.entity(entity).despawn_recursive();
     }
     // 清理牌组实体
@@ -938,11 +948,13 @@ fn cleanup_combat_ui(
 
 /// 处理战斗界面按钮点击
 fn handle_combat_button_clicks(
+    _commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
     mut combat_state: ResMut<CombatState>,
     mut player_query: Query<&mut Player>,
     _enemy_query: Query<&mut Enemy>,
     mut attack_events: EventWriter<EnemyAttackEvent>,
+    mut effect_events: EventWriter<SpawnEffectEvent>,
     mut button_queries: ParamSet<(
         Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<EndTurnButton>)>,
         Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<ReturnToMapButton>)>,
@@ -966,6 +978,20 @@ fn handle_combat_button_clicks(
 
                 // 发送攻击事件，触发动画
                 attack_events.send(EnemyAttackEvent::new(10, block_broken));
+
+                // 触发粒子特效（火焰+受击）
+                effect_events.send(SpawnEffectEvent {
+                    effect_type: EffectType::Fire,
+                    position: Vec3::new(0.0, 100.0, 999.0),
+                    burst: true,
+                    count: 30,
+                });
+                effect_events.send(SpawnEffectEvent {
+                    effect_type: EffectType::Hit,
+                    position: Vec3::new(0.0, -200.0, 999.0),
+                    burst: true,
+                    count: 20,
+                });
             }
 
             // 检查战斗是否结束
@@ -1297,13 +1323,14 @@ fn update_hand_ui(
 
 /// 处理卡牌点击事件
 fn handle_card_play(
-    mut commands: Commands,
+    _commands: Commands,
     card_query: Query<(&Interaction, &HandCard), (Changed<Interaction>, With<HandCard>)>,
     mut player_query: Query<&mut Player>,
     mut hand_query: Query<&mut Hand>,
     mut discard_pile_query: Query<&mut DiscardPile>,
     mut enemy_query: Query<&mut Enemy>,
     mut draw_pile_query: Query<&mut DrawPile>,
+    mut effect_events: EventWriter<SpawnEffectEvent>,
 ) {
     for (interaction, hand_card) in card_query.iter() {
         if matches!(interaction, Interaction::Pressed) {
@@ -1336,12 +1363,12 @@ fn handle_card_play(
                     // 触发卡牌效果
                     apply_card_effect(
                         &card.effect,
-                        &mut commands,
                         &mut player_query,
                         &mut enemy_query,
                         &mut hand_query,
                         &mut draw_pile_query,
                         &mut discard_pile_query,
+                        &mut effect_events,
                     );
 
                     // 从手牌移除卡牌
@@ -1365,18 +1392,25 @@ fn handle_card_play(
 /// 应用卡牌效果
 fn apply_card_effect(
     effect: &CardEffect,
-    _commands: &mut Commands,
     player_query: &mut Query<&mut Player>,
     enemy_query: &mut Query<&mut Enemy>,
     hand_query: &mut Query<&mut Hand>,
     draw_pile_query: &mut Query<&mut DrawPile>,
     discard_pile_query: &mut Query<&mut DiscardPile>,
+    effect_events: &mut EventWriter<SpawnEffectEvent>,
 ) {
     match effect {
         CardEffect::DealDamage { amount } => {
             if let Ok(mut enemy) = enemy_query.get_single_mut() {
                 enemy.take_damage(*amount);
                 info!("卡牌效果：对敌人造成 {} 点伤害，敌人剩余HP: {}", amount, enemy.hp);
+                // 触发火焰特效
+                effect_events.send(SpawnEffectEvent {
+                    effect_type: EffectType::Fire,
+                    position: Vec3::new(0.0, 100.0, 999.0),
+                    burst: true,
+                    count: 30,
+                });
             }
         }
         CardEffect::GainBlock { amount } => {
@@ -1384,6 +1418,13 @@ fn apply_card_effect(
                 let old_block = player.block;
                 player.gain_block(*amount);
                 info!("卡牌效果：获得 {} 点护甲，{} -> {}", amount, old_block, player.block);
+                // 触发冰霜特效（护甲）
+                effect_events.send(SpawnEffectEvent {
+                    effect_type: EffectType::Ice,
+                    position: Vec3::new(0.0, -200.0, 999.0),
+                    burst: true,
+                    count: 25,
+                });
             }
         }
         CardEffect::Heal { amount } => {
@@ -1391,6 +1432,13 @@ fn apply_card_effect(
                 let old_hp = player.hp;
                 player.hp = (player.hp + amount).min(player.max_hp);
                 info!("卡牌效果：回复 {} 点生命，{} -> {}", amount, old_hp, player.hp);
+                // 触发治疗特效
+                effect_events.send(SpawnEffectEvent {
+                    effect_type: EffectType::Heal,
+                    position: Vec3::new(0.0, -200.0, 999.0),
+                    burst: true,
+                    count: 20,
+                });
             }
         }
         CardEffect::DrawCards { amount } => {

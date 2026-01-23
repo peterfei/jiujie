@@ -5,6 +5,7 @@ pub mod combat;
 pub mod cards;
 pub mod animation;
 pub mod sprite;
+pub mod particle;
 
 pub use map::{MapNode, NodeType, MapConfig, generate_map_nodes};
 pub use combat::{Player, Enemy, EnemyIntent, CombatConfig, CombatState, TurnPhase};
@@ -20,4 +21,8 @@ pub use animation::{
 pub use sprite::{
     CharacterSprite, AnimationState, CharacterType, CharacterAssets,
     CharacterAnimationEvent, SpriteMarker, PlayerSpriteMarker, EnemySpriteMarker
+};
+pub use particle::{
+    Particle, ParticleEmitter, EmitterConfig, EffectType,
+    SpawnEffectEvent, ParticleMarker, EmitterMarker
 };

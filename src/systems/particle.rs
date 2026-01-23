@@ -1,0 +1,237 @@
+//! 粒子特效系统
+//!
+//! 处理粒子发射、更新和渲染
+
+use bevy::prelude::*;
+use crate::components::particle::{
+    Particle, ParticleEmitter, EmitterConfig, EffectType,
+    SpawnEffectEvent, ParticleMarker, EmitterMarker
+};
+use crate::states::GameState;
+
+/// 粒子特效插件
+pub struct ParticlePlugin;
+
+impl Plugin for ParticlePlugin {
+    fn build(&self, app: &mut App) {
+        app.add_event::<SpawnEffectEvent>();
+        app.add_systems(
+            Update,
+            (
+                handle_effect_events,
+                update_emitters,
+                update_particles,
+            ).run_if(in_state(GameState::Combat))
+        );
+    }
+}
+
+/// 处理特效事件
+fn handle_effect_events(
+    mut commands: Commands,
+    mut events: EventReader<SpawnEffectEvent>,
+) {
+    for event in events.read() {
+        let config = event.effect_type.config();
+
+        info!("收到特效事件: {:?} at ({}, {}, {}), 粒子数: {}",
+            event.effect_type, event.position.x, event.position.y, event.position.z, event.count);
+
+        if event.burst {
+            // 爆发模式：一次性生成所有粒子
+            spawn_particle_burst(&mut commands, event.position, &config, event.count);
+            info!("已生成 {} 个粒子", event.count);
+        } else {
+            // 持续模式：创建发射器
+            spawn_emitter(&mut commands, event.position, config);
+            info!("已创建发射器");
+        }
+    }
+}
+
+/// 爆发生成粒子
+fn spawn_particle_burst(
+    commands: &mut Commands,
+    position: Vec3,
+    config: &EmitterConfig,
+    count: usize,
+) {
+    for _ in 0..count {
+        let particle = config.spawn_particle(position);
+        spawn_particle_entity(commands, particle, position, config);
+    }
+}
+
+/// 创建发射器
+fn spawn_emitter(
+    commands: &mut Commands,
+    position: Vec3,
+    config: EmitterConfig,
+) {
+    commands
+        .spawn((
+            ParticleEmitter::new(30.0, config),
+            Transform::from_translation(position),
+            GlobalTransform::default(),
+            EmitterMarker,
+        ));
+}
+
+/// 创建单个粒子实体
+fn spawn_particle_entity(
+    commands: &mut Commands,
+    particle: Particle,
+    position: Vec3,
+    config: &EmitterConfig,
+) {
+    let size = particle.start_size;
+    let color = particle.start_color;
+
+    let sprite = match config.shape {
+        crate::components::particle::ParticleShape::Circle => Sprite {
+            color,
+            custom_size: Some(Vec2::new(size, size)),
+            ..default()
+        },
+        crate::components::particle::ParticleShape::Square => Sprite {
+            color,
+            custom_size: Some(Vec2::new(size, size)),
+            ..default()
+        },
+        crate::components::particle::ParticleShape::Line => Sprite {
+            color,
+            custom_size: Some(Vec2::new(size * 3.0, size * 0.5)),
+            ..default()
+        },
+        crate::components::particle::ParticleShape::Triangle => Sprite {
+            color,
+            custom_size: Some(Vec2::new(size, size)),
+            ..default()
+        },
+    };
+
+    // 使用更高的 Z 轴位置确保在 UI 之上显示
+    let mut transform = Transform::from_translation(position);
+    transform.translation.z = 999.0; // 高 Z 轴层级
+
+    commands
+        .spawn((
+            sprite,
+            transform,
+            GlobalTransform::default(),
+            particle,
+            ParticleMarker,
+        ));
+}
+
+/// 更新发射器
+fn update_emitters(
+    mut commands: Commands,
+    mut emitters_query: Query<(Entity, &mut ParticleEmitter, &GlobalTransform)>,
+    time: Res<Time>,
+) {
+    for (entity, mut emitter, transform) in emitters_query.iter_mut() {
+        emitter.elapsed += time.delta_secs();
+
+        // 检查是否应该停止发射
+        if emitter.duration > 0.0 && emitter.elapsed >= emitter.duration {
+            commands.entity(entity).despawn_recursive();
+            continue;
+        }
+
+        emitter.timer += time.delta_secs();
+        let interval = 1.0 / emitter.rate;
+
+        while emitter.timer >= interval {
+            emitter.timer -= interval;
+
+            // 检查粒子数量限制
+            if emitter.emitted_count >= emitter.max_particles {
+                if !emitter.looping {
+                    commands.entity(entity).despawn_recursive();
+                }
+                break;
+            }
+
+            // 生成新粒子
+            let particle = emitter.config.spawn_particle(transform.translation());
+            spawn_particle_entity(&mut commands, particle, transform.translation(), &emitter.config);
+            emitter.emitted_count += 1;
+        }
+    }
+}
+
+/// 更新粒子
+fn update_particles(
+    mut commands: Commands,
+    mut particles_query: Query<(Entity, &mut Particle, &mut Transform, &mut Sprite)>,
+    time: Res<Time>,
+) {
+    for (entity, mut particle, mut transform, mut sprite) in particles_query.iter_mut() {
+        particle.elapsed += time.delta_secs();
+
+        // 更新位置
+        transform.translation.x += particle.velocity.x * time.delta_secs();
+        transform.translation.y += particle.velocity.y * time.delta_secs();
+
+        // 应用重力
+        let gravity = particle.gravity;
+        particle.velocity += gravity * time.delta_secs();
+
+        // 更新旋转
+        particle.rotation += particle.rotation_speed * time.delta_secs();
+        transform.rotation = Quat::from_rotation_z(particle.rotation);
+
+        // 更新大小
+        let current_size = particle.current_size();
+        sprite.custom_size = Some(Vec2::new(current_size, current_size));
+
+        // 更新颜色
+        sprite.color = particle.current_color();
+
+        // 检查是否死亡
+        if particle.is_dead() {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+}
+
+/// 辅助函数：在指定位置生成预设特效
+pub fn spawn_effect(
+    commands: &mut Commands,
+    effect_type: EffectType,
+    position: Vec3,
+) {
+    let event = SpawnEffectEvent::new(effect_type, position).burst(30);
+    commands.trigger(event);
+}
+
+/// 辅助函数：生成火焰特效
+pub fn spawn_fire_effect(commands: &mut Commands, position: Vec3) {
+    spawn_effect(commands, EffectType::Fire, position);
+}
+
+/// 辅助函数：生成冰霜特效
+pub fn spawn_ice_effect(commands: &mut Commands, position: Vec3) {
+    spawn_effect(commands, EffectType::Ice, position);
+}
+
+/// 辅助函数：生成闪电特效
+pub fn spawn_lightning_effect(commands: &mut Commands, position: Vec3) {
+    spawn_effect(commands, EffectType::Lightning, position);
+}
+
+/// 辅助函数：生成治疗特效
+pub fn spawn_heal_effect(commands: &mut Commands, position: Vec3) {
+    spawn_effect(commands, EffectType::Heal, position);
+}
+
+/// 辅助函数：生成受击特效
+pub fn spawn_hit_effect(commands: &mut Commands, position: Vec3) {
+    spawn_effect(commands, EffectType::Hit, position);
+}
+
+/// 辅助函数：生成金币特效
+pub fn spawn_coin_effect(commands: &mut Commands, position: Vec3) {
+    spawn_effect(commands, EffectType::Coin, position);
+}
