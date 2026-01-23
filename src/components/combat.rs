@@ -35,6 +35,8 @@ pub struct Player {
     pub energy: i32,
     /// 最大能量
     pub max_energy: i32,
+    /// 当前护甲
+    pub block: i32,
     /// 当前金币
     pub gold: i32,
     /// 当前回合（从1开始）
@@ -48,6 +50,7 @@ impl Default for Player {
             max_hp: 80,
             energy: 3,
             max_energy: 3,
+            block: 0,
             gold: 0,
             turn: 1,
         }
@@ -55,14 +58,38 @@ impl Default for Player {
 }
 
 impl Player {
-    /// 受到伤害
+    /// 受到伤害（护甲优先抵消）
     pub fn take_damage(&mut self, amount: i32) {
-        self.hp = (self.hp - amount).max(0);
+        let mut remaining_damage = amount;
+
+        // 护甲优先抵消伤害
+        if self.block > 0 {
+            if self.block >= remaining_damage {
+                self.block -= remaining_damage;
+                remaining_damage = 0;
+            } else {
+                remaining_damage -= self.block;
+                self.block = 0;
+            }
+        }
+
+        // 剩余伤害扣除HP
+        self.hp = (self.hp - remaining_damage).max(0);
     }
 
     /// 恢复生命
     pub fn heal(&mut self, amount: i32) {
         self.hp = (self.hp + amount).min(self.max_hp);
+    }
+
+    /// 获得护甲
+    pub fn gain_block(&mut self, amount: i32) {
+        self.block += amount;
+    }
+
+    /// 清空护甲（回合结束时）
+    pub fn clear_block(&mut self) {
+        self.block = 0;
     }
 
     /// 消耗能量

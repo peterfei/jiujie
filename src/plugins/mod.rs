@@ -508,6 +508,9 @@ struct PlayerHpText;
 struct PlayerEnergyText;
 
 #[derive(Component)]
+struct PlayerBlockText;
+
+#[derive(Component)]
 struct TurnText;
 
 // 卡牌UI标记组件
@@ -674,6 +677,18 @@ fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                                 },
                                 TextColor(Color::srgb(0.3, 0.6, 1.0)),
                                 PlayerEnergyText,
+                            ));
+
+                            // 玩家护甲
+                            player_panel.spawn((
+                                Text::new("护甲: 0"),
+                                TextFont {
+                                    font: chinese_font.clone(),
+                                    font_size: 20.0,
+                                    ..default()
+                                },
+                                TextColor(Color::srgb(0.8, 0.5, 0.2)),
+                                PlayerBlockText,
                             ));
 
                             // 当前回合
@@ -929,6 +944,7 @@ fn handle_combat_button_clicks(
             // 新回合开始
             if let Ok(mut player) = player_query.get_single_mut() {
                 player.start_turn();
+                info!("回合开始：护甲清零");
             }
             // 重置抽牌标志，允许本回合抽牌
             combat_state.cards_drawn_this_turn = false;
@@ -962,6 +978,7 @@ fn update_combat_ui(
         Query<&mut Text, With<EnemyIntentText>>,
         Query<&mut Text, With<PlayerHpText>>,
         Query<&mut Text, With<PlayerEnergyText>>,
+        Query<&mut Text, With<PlayerBlockText>>,
         Query<&mut Text, With<TurnText>>,
     )>,
 ) {
@@ -986,7 +1003,13 @@ fn update_combat_ui(
 
             // 更新玩家HP
             if let Ok(mut hp_text) = text_queries.p2().get_single_mut() {
+                let old_text = hp_text.0.clone();
                 hp_text.0 = format!("HP: {}/{}", player.hp, player.max_hp);
+                if old_text != hp_text.0 {
+                    info!("玩家HP更新: {} -> {}", old_text, hp_text.0);
+                }
+            } else {
+                error!("严重错误: PlayerHpText 查询失败！UI可能没有正确创建");
             }
 
             // 更新玩家能量
@@ -994,8 +1017,13 @@ fn update_combat_ui(
                 energy_text.0 = format!("能量: {}/{}", player.energy, player.max_energy);
             }
 
+            // 更新玩家护甲
+            if let Ok(mut block_text) = text_queries.p4().get_single_mut() {
+                block_text.0 = format!("护甲: {}", player.block);
+            }
+
             // 更新回合数
-            if let Ok(mut turn_text) = text_queries.p4().get_single_mut() {
+            if let Ok(mut turn_text) = text_queries.p5().get_single_mut() {
                 turn_text.0 = format!("第 {} 回合", player.turn);
             }
         }
@@ -1240,7 +1268,7 @@ fn handle_card_play(
     mut hand_query: Query<&mut Hand>,
     mut discard_pile_query: Query<&mut DiscardPile>,
     mut enemy_query: Query<&mut Enemy>,
-    draw_pile_query: Query<&DrawPile>,
+    mut draw_pile_query: Query<&mut DrawPile>,
 ) {
     for (interaction, hand_card) in card_query.iter() {
         if matches!(interaction, Interaction::Pressed) {
@@ -1277,7 +1305,8 @@ fn handle_card_play(
                         &mut player_query,
                         &mut enemy_query,
                         &mut hand_query,
-                        &draw_pile_query,
+                        &mut draw_pile_query,
+                        &mut discard_pile_query,
                     );
 
                     // 从手牌移除卡牌
@@ -1305,7 +1334,8 @@ fn apply_card_effect(
     player_query: &mut Query<&mut Player>,
     enemy_query: &mut Query<&mut Enemy>,
     hand_query: &mut Query<&mut Hand>,
-    draw_pile_query: &Query<&DrawPile>,
+    draw_pile_query: &mut Query<&mut DrawPile>,
+    discard_pile_query: &mut Query<&mut DiscardPile>,
 ) {
     match effect {
         CardEffect::DealDamage { amount } => {
@@ -1315,8 +1345,11 @@ fn apply_card_effect(
             }
         }
         CardEffect::GainBlock { amount } => {
-            // TODO: 添加护甲系统
-            info!("卡牌效果：获得 {} 点护甲（待实现）", amount);
+            if let Ok(mut player) = player_query.get_single_mut() {
+                let old_block = player.block;
+                player.gain_block(*amount);
+                info!("卡牌效果：获得 {} 点护甲，{} -> {}", amount, old_block, player.block);
+            }
         }
         CardEffect::Heal { amount } => {
             if let Ok(mut player) = player_query.get_single_mut() {
@@ -1327,12 +1360,37 @@ fn apply_card_effect(
         }
         CardEffect::DrawCards { amount } => {
             // 从抽牌堆抽牌到手牌
-            if let Ok(_hand) = hand_query.get_single_mut() {
-                if let Ok(_draw_pile) = draw_pile_query.get_single() {
-                    // 需要获取mut borrow，但这里只有immutable borrow
-                    // 暂时记录日志，实际抽牌需要在其他地方处理
-                    info!("卡牌效果：抽 {} 张牌（待实现）", amount);
+            let mut drawn = 0;
+            let cards_to_draw = *amount;
+
+            // 如果抽牌堆为空，先将弃牌堆洗入抽牌堆
+            if let Ok(mut draw_pile) = draw_pile_query.get_single_mut() {
+                if draw_pile.count == 0 {
+                    if let Ok(mut discard_pile) = discard_pile_query.get_single_mut() {
+                        let cards = discard_pile.clear();
+                        if !cards.is_empty() {
+                            draw_pile.shuffle_from_discard(cards);
+                            info!("卡牌效果：抽牌堆为空，将弃牌堆洗入抽牌堆，共 {} 张牌", draw_pile.count);
+                        }
+                    }
                 }
+
+                // 抽牌
+                for _ in 0..cards_to_draw {
+                    if let Some(card) = draw_pile.draw_card() {
+                        if let Ok(mut hand) = hand_query.get_single_mut() {
+                            if hand.add_card(card) {
+                                drawn += 1;
+                            }
+                        }
+                    } else {
+                        break; // 抽牌堆空了，停止抽牌
+                    }
+                }
+            }
+
+            if drawn > 0 {
+                info!("卡牌效果：抽了 {} 张牌", drawn);
             }
         }
         CardEffect::GainEnergy { amount } => {
@@ -1347,7 +1405,37 @@ fn apply_card_effect(
                 enemy.take_damage(*damage);
                 info!("卡牌效果：造成 {} 点伤害，敌人剩余HP: {}", damage, enemy.hp);
             }
-            info!("卡牌效果：抽 {} 张牌（待实现）", cards);
+
+            // 抽牌效果
+            let mut drawn = 0;
+            if let Ok(mut draw_pile) = draw_pile_query.get_single_mut() {
+                // 如果抽牌堆为空，先将弃牌堆洗入抽牌堆
+                if draw_pile.count == 0 {
+                    if let Ok(mut discard_pile) = discard_pile_query.get_single_mut() {
+                        let cards = discard_pile.clear();
+                        if !cards.is_empty() {
+                            draw_pile.shuffle_from_discard(cards);
+                            info!("卡牌效果：抽牌堆为空，将弃牌堆洗入抽牌堆，共 {} 张牌", draw_pile.count);
+                        }
+                    }
+                }
+
+                for _ in 0..*cards {
+                    if let Some(card) = draw_pile.draw_card() {
+                        if let Ok(mut hand) = hand_query.get_single_mut() {
+                            if hand.add_card(card) {
+                                drawn += 1;
+                            }
+                        }
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            if drawn > 0 {
+                info!("卡牌效果：抽了 {} 张牌", drawn);
+            }
         }
         CardEffect::MultiAttack { damage, times } => {
             if let Ok(mut enemy) = enemy_query.get_single_mut() {
