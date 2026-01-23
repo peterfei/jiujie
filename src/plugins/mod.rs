@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use crate::states::GameState;
-use crate::components::{MapNode, NodeType, MapConfig, generate_map_nodes, Player, Enemy, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card};
+use crate::components::{MapNode, NodeType, MapConfig, generate_map_nodes, Player, Enemy, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent};
 
 /// 核心游戏插件
 pub struct CorePlugin;
@@ -586,7 +586,8 @@ fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                 .with_children(|enemy_area| {
                     // 敌人信息面板
                     enemy_area
-                        .spawn(Node {
+                        .spawn((
+                            Node {
                             width: Val::Px(200.0),
                             height: Val::Px(150.0),
                             justify_content: JustifyContent::Center,
@@ -594,7 +595,9 @@ fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                             flex_direction: FlexDirection::Column,
                             row_gap: Val::Px(10.0),
                             ..default()
-                        })
+                        },
+                        EnemyUiMarker,
+                    ))
                         .with_children(|enemy_panel| {
                             // 敌人名称
                             enemy_panel.spawn((
@@ -645,7 +648,8 @@ fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                 .with_children(|player_area| {
                     // 玩家信息面板
                     player_area
-                        .spawn(Node {
+                        .spawn((
+                            Node {
                             width: Val::Px(300.0),
                             height: Val::Px(150.0),
                             justify_content: JustifyContent::Center,
@@ -653,7 +657,9 @@ fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                             flex_direction: FlexDirection::Column,
                             row_gap: Val::Px(10.0),
                             ..default()
-                        })
+                        },
+                        PlayerUiMarker,
+                    ))
                         .with_children(|player_panel| {
                             // 玩家血量
                             player_panel.spawn((
@@ -914,6 +920,7 @@ fn handle_combat_button_clicks(
     mut combat_state: ResMut<CombatState>,
     mut player_query: Query<&mut Player>,
     _enemy_query: Query<&mut Enemy>,
+    mut attack_events: EventWriter<EnemyAttackEvent>,
     mut button_queries: ParamSet<(
         Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<EndTurnButton>)>,
         Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<ReturnToMapButton>)>,
@@ -929,8 +936,14 @@ fn handle_combat_button_clicks(
             // TODO: 敌人AI行动逻辑
             // 敌人攻击玩家
             if let Ok(mut player) = player_query.get_single_mut() {
+                // 检查是否破甲（护甲被完全击破）
+                let block_broken = player.block > 0 && 10 >= player.block;
+
                 player.take_damage(10);
                 info!("玩家受到10点伤害，剩余HP: {}", player.hp);
+
+                // 发送攻击事件，触发动画
+                attack_events.send(EnemyAttackEvent::new(10, block_broken));
             }
 
             // 检查战斗是否结束

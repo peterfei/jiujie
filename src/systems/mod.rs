@@ -1,3 +1,5 @@
 //! 游戏系统实现
 
-// 系统将在后续Sprint实现
+pub mod animation;
+
+pub use animation::AnimationPlugin;
