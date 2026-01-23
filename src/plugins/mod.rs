@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use crate::states::GameState;
-use crate::components::{MapNode, NodeType, MapConfig, generate_map_nodes, Player, Enemy, CombatState, TurnPhase};
+use crate::components::{MapNode, NodeType, MapConfig, generate_map_nodes, Player, Enemy, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card};
 
 /// 核心游戏插件
 pub struct CorePlugin;
@@ -36,12 +36,22 @@ impl Plugin for MenuPlugin {
 
         // 在进入Combat状态时设置战斗UI
         app.add_systems(OnEnter(GameState::Combat), setup_combat_ui);
+        // 在进入Combat状态时抽牌
+        app.add_systems(OnEnter(GameState::Combat), draw_cards_on_combat_start);
         // 在退出Combat状态时清理战斗UI
         app.add_systems(OnExit(GameState::Combat), cleanup_combat_ui);
         // 处理战斗界面按钮点击
         app.add_systems(Update, handle_combat_button_clicks.run_if(in_state(GameState::Combat)));
         // 更新战斗UI显示
         app.add_systems(Update, update_combat_ui.run_if(in_state(GameState::Combat)));
+        // 回合开始时抽牌
+        app.add_systems(Update, draw_cards_on_turn_start.run_if(in_state(GameState::Combat)));
+        // 更新手牌UI
+        app.add_systems(Update, update_hand_ui.run_if(in_state(GameState::Combat)));
+        // 处理出牌
+        app.add_systems(Update, handle_card_play.run_if(in_state(GameState::Combat)));
+        // 检查战斗结束
+        app.add_systems(Update, check_combat_end.run_if(in_state(GameState::Combat)));
     }
 }
 
@@ -500,6 +510,24 @@ struct PlayerEnergyText;
 #[derive(Component)]
 struct TurnText;
 
+// 卡牌UI标记组件
+#[derive(Component)]
+struct HandCard {
+    card_id: u32,
+}
+
+#[derive(Component)]
+struct DrawPileText;
+
+#[derive(Component)]
+struct DiscardPileText;
+
+#[derive(Component)]
+struct HandCountText;
+
+#[derive(Component)]
+struct HandArea;
+
 /// 设置战斗UI
 fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
@@ -510,6 +538,26 @@ fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
 
     // 初始化战斗状态
     commands.insert_resource(CombatState::default());
+
+    // 创建牌组
+    let deck_config = DeckConfig::default();
+    commands.insert_resource(deck_config.clone());
+
+    // 计算初始抽牌后剩余的卡牌
+    let initial_draw = 5.min(deck_config.starting_deck.len());
+    let drawn_cards: Vec<Card> = deck_config.starting_deck.iter().take(initial_draw).cloned().collect();
+    let remaining_deck: Vec<Card> = deck_config.starting_deck.iter().skip(initial_draw).cloned().collect();
+
+    commands.spawn(DrawPile::new(remaining_deck));
+    commands.spawn(DiscardPile::new());
+
+    // 创建手牌并添加初始卡牌
+    let mut hand = Hand::new(10);
+    for card in drawn_cards {
+        hand.add_card(card);
+    }
+    info!("战斗开始：初始抽了 {} 张牌到手牌", hand.cards.len());
+    commands.spawn(hand);
 
     // 创建战斗UI根容器
     commands
@@ -642,66 +690,161 @@ fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                         });
                 });
 
-            // 底部：控制按钮区域
+            // 底部：控制区域（左侧：牌组信息，右侧：控制按钮，下方：手牌区）
             parent
                 .spawn(Node {
                     width: Val::Percent(100.0),
-                    height: Val::Percent(20.0),
-                    justify_content: JustifyContent::Center,
+                    height: Val::Percent(40.0),
+                    flex_direction: FlexDirection::Column,
+                    justify_content: JustifyContent::SpaceBetween,
                     align_items: AlignItems::Center,
-                    column_gap: Val::Px(20.0),
+                    padding: UiRect::all(Val::Px(10.0)),
+                    row_gap: Val::Px(10.0),
                     ..default()
                 })
-                .with_children(|button_area| {
-                    // 结束回合按钮
-                    button_area
+                .with_children(|control_area| {
+                    // 上半部分：牌组信息 + 控制按钮
+                    control_area
+                        .spawn(Node {
+                            width: Val::Percent(100.0),
+                            height: Val::Px(50.0),
+                            flex_direction: FlexDirection::Row,
+                            justify_content: JustifyContent::SpaceBetween,
+                            align_items: AlignItems::Center,
+                            ..default()
+                        })
+                        .with_children(|top_row| {
+                            // 左侧：抽牌堆和弃牌堆信息
+                            top_row
+                                .spawn(Node {
+                                    width: Val::Px(200.0),
+                                    height: Val::Px(50.0),
+                                    justify_content: JustifyContent::Center,
+                                    align_items: AlignItems::Center,
+                                    column_gap: Val::Px(20.0),
+                                    ..default()
+                                })
+                                .with_children(|deck_info| {
+                                    // 抽牌堆
+                                    deck_info.spawn((
+                                        Text::new("抽牌堆: 10"),
+                                        TextFont {
+                                            font: chinese_font.clone(),
+                                            font_size: 14.0,
+                                            ..default()
+                                        },
+                                        TextColor(Color::srgb(0.7, 0.7, 0.7)),
+                                        DrawPileText,
+                                    ));
+
+                                    // 弃牌堆
+                                    deck_info.spawn((
+                                        Text::new("弃牌堆: 0"),
+                                        TextFont {
+                                            font: chinese_font.clone(),
+                                            font_size: 14.0,
+                                            ..default()
+                                        },
+                                        TextColor(Color::srgb(0.7, 0.7, 0.7)),
+                                        DiscardPileText,
+                                    ));
+                                });
+
+                            // 右侧：控制按钮
+                            top_row
+                                .spawn(Node {
+                                    width: Val::Px(280.0),
+                                    height: Val::Px(50.0),
+                                    justify_content: JustifyContent::Center,
+                                    align_items: AlignItems::Center,
+                                    column_gap: Val::Px(10.0),
+                                    ..default()
+                                })
+                                .with_children(|button_area| {
+                                    // 结束回合按钮
+                                    button_area
+                                        .spawn((
+                                            Node {
+                                                width: Val::Px(120.0),
+                                                height: Val::Px(40.0),
+                                                justify_content: JustifyContent::Center,
+                                                align_items: AlignItems::Center,
+                                                ..default()
+                                            },
+                                            BackgroundColor(Color::srgb(0.3, 0.5, 0.3)),
+                                            Button,
+                                            EndTurnButton,
+                                        ))
+                                        .with_children(|parent| {
+                                            parent.spawn((
+                                                Text::new("结束回合"),
+                                                TextFont {
+                                                    font: chinese_font.clone(),
+                                                    font_size: 16.0,
+                                                    ..default()
+                                                },
+                                                TextColor(Color::WHITE),
+                                            ));
+                                        });
+
+                                    // 返回地图按钮
+                                    button_area
+                                        .spawn((
+                                            Node {
+                                                width: Val::Px(120.0),
+                                                height: Val::Px(40.0),
+                                                justify_content: JustifyContent::Center,
+                                                align_items: AlignItems::Center,
+                                                ..default()
+                                            },
+                                            BackgroundColor(Color::srgb(0.3, 0.3, 0.3)),
+                                            Button,
+                                            ReturnToMapButton,
+                                        ))
+                                        .with_children(|parent| {
+                                            parent.spawn((
+                                                Text::new("返回地图"),
+                                                TextFont {
+                                                    font: chinese_font.clone(),
+                                                    font_size: 16.0,
+                                                    ..default()
+                                                },
+                                                TextColor(Color::WHITE),
+                                            ));
+                                        });
+                                });
+                        });
+
+                    // 下半部分：手牌区域
+                    control_area
                         .spawn((
                             Node {
-                                width: Val::Px(120.0),
-                                height: Val::Px(40.0),
+                                width: Val::Percent(100.0),
+                                height: Val::Auto,
+                                min_height: Val::Px(100.0),
                                 justify_content: JustifyContent::Center,
                                 align_items: AlignItems::Center,
+                                column_gap: Val::Px(10.0),
+                                flex_wrap: FlexWrap::Wrap,
                                 ..default()
                             },
-                            BackgroundColor(Color::srgb(0.3, 0.5, 0.3)),
-                            Button,
-                            EndTurnButton,
+                            HandArea,
                         ))
-                        .with_children(|parent| {
-                            parent.spawn((
-                                Text::new("结束回合"),
+                        .with_children(|hand_area| {
+                            // 手牌卡片容器（稍后动态添加）
+                            hand_area.spawn((
+                                Text::new("手牌: 0/10"),
                                 TextFont {
                                     font: chinese_font.clone(),
                                     font_size: 16.0,
                                     ..default()
                                 },
-                                TextColor(Color::WHITE),
-                            ));
-                        });
-
-                    // 返回地图按钮
-                    button_area
-                        .spawn((
-                            Node {
-                                width: Val::Px(120.0),
-                                height: Val::Px(40.0),
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                ..default()
-                            },
-                            BackgroundColor(Color::srgb(0.3, 0.3, 0.3)),
-                            Button,
-                            ReturnToMapButton,
-                        ))
-                        .with_children(|parent| {
-                            parent.spawn((
-                                Text::new("返回地图"),
-                                TextFont {
-                                    font: chinese_font,
-                                    font_size: 16.0,
+                                TextColor(Color::srgb(0.6, 0.6, 0.6)),
+                                Node {
+                                    margin: UiRect::top(Val::Px(5.0)),
                                     ..default()
                                 },
-                                TextColor(Color::WHITE),
+                                HandCountText,
                             ));
                         });
                 });
@@ -714,6 +857,10 @@ fn cleanup_combat_ui(
     ui_query: Query<Entity, With<CombatUiRoot>>,
     player_query: Query<Entity, With<Player>>,
     enemy_query: Query<Entity, With<Enemy>>,
+    draw_pile_query: Query<Entity, With<DrawPile>>,
+    discard_pile_query: Query<Entity, With<DiscardPile>>,
+    hand_query: Query<Entity, With<Hand>>,
+    hand_area_query: Query<Entity, With<HandArea>>,
 ) {
     // 清理UI
     for entity in ui_query.iter() {
@@ -727,8 +874,23 @@ fn cleanup_combat_ui(
     for entity in enemy_query.iter() {
         commands.entity(entity).despawn_recursive();
     }
+    // 清理牌组实体
+    for entity in draw_pile_query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+    for entity in discard_pile_query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+    for entity in hand_query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+    // 清理手牌区域标记实体
+    for entity in hand_area_query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
     // 移除战斗状态资源
     commands.remove_resource::<CombatState>();
+    commands.remove_resource::<DeckConfig>();
 }
 
 /// 处理战斗界面按钮点击
@@ -738,8 +900,8 @@ fn handle_combat_button_clicks(
     mut player_query: Query<&mut Player>,
     _enemy_query: Query<&mut Enemy>,
     mut button_queries: ParamSet<(
-        Query<(&Interaction, &mut BackgroundColor), With<EndTurnButton>>,
-        Query<(&Interaction, &mut BackgroundColor), With<ReturnToMapButton>>,
+        Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<EndTurnButton>)>,
+        Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<ReturnToMapButton>)>,
     )>,
 ) {
     // 处理结束回合按钮
@@ -768,6 +930,8 @@ fn handle_combat_button_clicks(
             if let Ok(mut player) = player_query.get_single_mut() {
                 player.start_turn();
             }
+            // 重置抽牌标志，允许本回合抽牌
+            combat_state.cards_drawn_this_turn = false;
             combat_state.phase = TurnPhase::PlayerAction;
         } else if matches!(interaction, Interaction::Hovered) {
             *color = BackgroundColor(Color::srgb(0.4, 0.6, 0.4));
@@ -834,6 +998,392 @@ fn update_combat_ui(
             if let Ok(mut turn_text) = text_queries.p4().get_single_mut() {
                 turn_text.0 = format!("第 {} 回合", player.turn);
             }
+        }
+    }
+}
+
+// ============================================================================
+// 抽牌系统
+// ============================================================================
+
+/// 战斗开始时抽牌
+fn draw_cards_on_combat_start(
+    mut draw_pile_query: Query<&mut DrawPile>,
+    mut hand_query: Query<&mut Hand>,
+) {
+    info!("draw_cards_on_combat_start 被调用");
+    match (draw_pile_query.get_single_mut(), hand_query.get_single_mut()) {
+        (Ok(mut draw_pile), Ok(mut hand)) => {
+            info!("抽牌堆卡牌数: {}, 手牌当前数量: {}", draw_pile.count, hand.cards.len());
+            // 初始抽5张牌
+            let cards_to_draw = 5;
+            for _ in 0..cards_to_draw {
+                if let Some(card) = draw_pile.draw_card() {
+                    hand.add_card(card);
+                }
+            }
+            info!("战斗开始：抽了 {} 张牌，手牌现在有 {} 张", cards_to_draw, hand.cards.len());
+        }
+        (Err(e), _) => {
+            info!("DrawPile 查询失败: {:?}", e);
+        }
+        (_, Err(e)) => {
+            info!("Hand 查询失败: {:?}", e);
+        }
+    }
+}
+
+/// 回合开始时抽牌
+fn draw_cards_on_turn_start(
+    mut draw_pile_query: Query<&mut DrawPile>,
+    mut hand_query: Query<&mut Hand>,
+    mut discard_pile_query: Query<&mut DiscardPile>,
+    player_query: Query<&Player>,
+    mut combat_state: ResMut<CombatState>,
+) {
+    // 只在玩家回合且回合数大于1时抽牌（避免战斗开始时重复抽牌）
+    let player_turn = if let Ok(player) = player_query.get_single() {
+        player.turn
+    } else {
+        return;
+    };
+
+    if player_turn <= 1 {
+        return;
+    }
+
+    // 检查是否已经在这个回合抽过牌
+    if combat_state.cards_drawn_this_turn {
+        return;
+    }
+
+    if let Ok(mut draw_pile) = draw_pile_query.get_single_mut() {
+        if let Ok(mut hand) = hand_query.get_single_mut() {
+            let cards_to_draw = 5; // 每回合抽5张牌
+
+            // 如果抽牌堆为空，将弃牌堆洗入抽牌堆
+            if draw_pile.count == 0 {
+                if let Ok(mut discard_pile) = discard_pile_query.get_single_mut() {
+                    let cards = discard_pile.clear();
+                    if !cards.is_empty() {
+                        draw_pile.shuffle_from_discard(cards);
+                        info!("抽牌堆为空，将弃牌堆洗入抽牌堆，共 {} 张牌", draw_pile.count);
+                    }
+                }
+            }
+
+            // 抽牌
+            let mut drawn = 0;
+            for _ in 0..cards_to_draw {
+                if let Some(card) = draw_pile.draw_card() {
+                    hand.add_card(card);
+                    drawn += 1;
+                }
+            }
+            if drawn > 0 {
+                info!("回合开始：抽了 {} 张牌", drawn);
+                combat_state.cards_drawn_this_turn = true;
+            }
+        }
+    }
+}
+
+/// 更新手牌区UI
+fn update_hand_ui(
+    hand_query: Query<&Hand>,
+    hand_changed_query: Query<&Hand, Changed<Hand>>,
+    draw_pile_query: Query<&DrawPile>,
+    discard_pile_query: Query<&DiscardPile>,
+    mut text_queries: ParamSet<(
+        Query<&mut Text, With<DrawPileText>>,
+        Query<&mut Text, With<DiscardPileText>>,
+        Query<&mut Text, With<HandCountText>>,
+    )>,
+    mut hand_area_query: Query<(Entity, &Children), With<HandArea>>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+) {
+    // 更新抽牌堆/弃牌堆文本（每帧更新，因为这些数字会变化）
+    if let Ok(draw_pile) = draw_pile_query.get_single() {
+        if let Ok(mut text) = text_queries.p0().get_single_mut() {
+            text.0 = format!("抽牌堆: {}", draw_pile.count);
+        }
+    }
+
+    if let Ok(discard_pile) = discard_pile_query.get_single() {
+        if let Ok(mut text) = text_queries.p1().get_single_mut() {
+            text.0 = format!("弃牌堆: {}", discard_pile.count);
+        }
+    }
+
+    // 每帧更新手牌计数文本
+    if let Ok(hand) = hand_query.get_single() {
+        match text_queries.p2().get_single_mut() {
+            Ok(mut text) => {
+                let new_text = format!("手牌: {}/{}", hand.cards.len(), hand.max_size);
+                if text.0 != new_text {
+                    info!("更新手牌计数文本: {}", new_text);
+                    text.0 = new_text;
+                }
+            }
+            Err(e) => {
+                // HandCountText 查询失败（可能还没有创建）
+                trace!("HandCountText 查询失败: {:?}", e);
+            }
+        }
+    }
+
+    // 只在手牌变化时更新卡牌UI
+    if let Ok(hand) = hand_changed_query.get_single() {
+        info!("更新手牌UI，手牌数量: {}", hand.cards.len());
+        if let Ok((hand_area_entity, children)) = hand_area_query.get_single_mut() {
+            let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
+
+            // 清空现有手牌显示（保留第一个子元素，即"手牌: X/Y"文本）
+            for (i, child) in children.iter().enumerate() {
+                if i > 0 {
+                    commands.entity(*child).despawn_recursive();
+                }
+            }
+
+            // 为每张手牌创建UI卡片
+            for (i, card) in hand.cards.iter().enumerate() {
+                info!("生成卡牌UI: {} (索引: {})", card.name, i);
+                let card_color = card.get_color();
+                let cost_text = if card.cost > 0 {
+                    format!("{}", card.cost)
+                } else {
+                    "0".to_string()
+                };
+
+                commands.entity(hand_area_entity).with_children(|parent| {
+                    // 卡牌容器
+                    parent
+                        .spawn((
+                            Node {
+                                width: Val::Px(80.0),
+                                height: Val::Px(110.0),
+                                flex_direction: FlexDirection::Column,
+                                justify_content: JustifyContent::SpaceBetween,
+                                align_items: AlignItems::Center,
+                                padding: UiRect::all(Val::Px(5.0)),
+                                margin: UiRect::horizontal(Val::Px(3.0)),
+                                border: UiRect::all(Val::Px(2.0)),
+                                ..default()
+                            },
+                            BackgroundColor(card_color),
+                            BorderColor(Color::BLACK),
+                            HandCard { card_id: card.id },
+                            Button,
+                        ))
+                        .with_children(|card_ui| {
+                            // 能量消耗
+                            card_ui.spawn((
+                                Text::new(cost_text),
+                                TextFont {
+                                    font: chinese_font.clone(),
+                                    font_size: 16.0,
+                                    ..default()
+                                },
+                                TextColor(Color::WHITE),
+                                Node {
+                                    margin: UiRect::top(Val::Px(2.0)),
+                                    ..default()
+                                },
+                            ));
+
+                            // 卡牌名称
+                            card_ui.spawn((
+                                Text::new(card.name.clone()),
+                                TextFont {
+                                    font: chinese_font.clone(),
+                                    font_size: 14.0,
+                                    ..default()
+                                },
+                                TextColor(Color::WHITE),
+                                Node {
+                                    margin: UiRect::top(Val::Px(5.0)),
+                                    ..default()
+                                },
+                            ));
+
+                            // 卡牌描述
+                            card_ui.spawn((
+                                Text::new(card.description.clone()),
+                                TextFont {
+                                    font: chinese_font.clone(),
+                                    font_size: 10.0,
+                                    ..default()
+                                },
+                                TextColor(Color::srgb(0.9, 0.9, 0.9)),
+                                Node {
+                                    margin: UiRect::bottom(Val::Px(2.0)),
+                                    ..default()
+                                },
+                            ));
+                        });
+                });
+            }
+        }
+    }
+}
+
+// ============================================================================
+// 出牌系统
+// ============================================================================
+
+/// 处理卡牌点击事件
+fn handle_card_play(
+    mut commands: Commands,
+    card_query: Query<(&Interaction, &HandCard), (Changed<Interaction>, With<HandCard>)>,
+    mut player_query: Query<&mut Player>,
+    mut hand_query: Query<&mut Hand>,
+    mut discard_pile_query: Query<&mut DiscardPile>,
+    mut enemy_query: Query<&mut Enemy>,
+    draw_pile_query: Query<&DrawPile>,
+) {
+    for (interaction, hand_card) in card_query.iter() {
+        if matches!(interaction, Interaction::Pressed) {
+            // 获取玩家信息
+            let (_can_play, player_energy) = if let Ok(player) = player_query.get_single() {
+                (player.energy > 0, player.energy)
+            } else {
+                (false, 0)
+            };
+
+            // 获取手牌信息
+            let (card_opt, hand_entity) = if let Ok(hand) = hand_query.get_single() {
+                // 找到对应的卡牌
+                let card_index = hand.cards.iter().position(|c| c.id == hand_card.card_id);
+                (card_index.map(|i| hand.cards[i].clone()), ())
+            } else {
+                (None, ())
+            };
+
+            if let (Some(card), _) = (card_opt, hand_entity) {
+                // 检查能量是否足够
+                if player_energy >= card.cost {
+                    info!("打出卡牌: {} (消耗: {})", card.name, card.cost);
+
+                    // 扣除能量
+                    if let Ok(mut player) = player_query.get_single_mut() {
+                        player.energy -= card.cost;
+                    }
+
+                    // 触发卡牌效果
+                    apply_card_effect(
+                        &card.effect,
+                        &mut commands,
+                        &mut player_query,
+                        &mut enemy_query,
+                        &mut hand_query,
+                        &draw_pile_query,
+                    );
+
+                    // 从手牌移除卡牌
+                    if let Ok(mut hand) = hand_query.get_single_mut() {
+                        if let Some(index) = hand.cards.iter().position(|c| c.id == card.id) {
+                            let played_card = hand.remove_card(index).unwrap();
+                            // 添加到弃牌堆
+                            if let Ok(mut discard_pile) = discard_pile_query.get_single_mut() {
+                                discard_pile.add_card(played_card);
+                            }
+                        }
+                    }
+                } else {
+                    info!("能量不足！需要: {}, 当前: {}", card.cost, player_energy);
+                }
+            }
+        }
+    }
+}
+
+/// 应用卡牌效果
+fn apply_card_effect(
+    effect: &CardEffect,
+    _commands: &mut Commands,
+    player_query: &mut Query<&mut Player>,
+    enemy_query: &mut Query<&mut Enemy>,
+    hand_query: &mut Query<&mut Hand>,
+    draw_pile_query: &Query<&DrawPile>,
+) {
+    match effect {
+        CardEffect::DealDamage { amount } => {
+            if let Ok(mut enemy) = enemy_query.get_single_mut() {
+                enemy.take_damage(*amount);
+                info!("卡牌效果：对敌人造成 {} 点伤害，敌人剩余HP: {}", amount, enemy.hp);
+            }
+        }
+        CardEffect::GainBlock { amount } => {
+            // TODO: 添加护甲系统
+            info!("卡牌效果：获得 {} 点护甲（待实现）", amount);
+        }
+        CardEffect::Heal { amount } => {
+            if let Ok(mut player) = player_query.get_single_mut() {
+                let old_hp = player.hp;
+                player.hp = (player.hp + amount).min(player.max_hp);
+                info!("卡牌效果：回复 {} 点生命，{} -> {}", amount, old_hp, player.hp);
+            }
+        }
+        CardEffect::DrawCards { amount } => {
+            // 从抽牌堆抽牌到手牌
+            if let Ok(_hand) = hand_query.get_single_mut() {
+                if let Ok(_draw_pile) = draw_pile_query.get_single() {
+                    // 需要获取mut borrow，但这里只有immutable borrow
+                    // 暂时记录日志，实际抽牌需要在其他地方处理
+                    info!("卡牌效果：抽 {} 张牌（待实现）", amount);
+                }
+            }
+        }
+        CardEffect::GainEnergy { amount } => {
+            if let Ok(mut player) = player_query.get_single_mut() {
+                let old_energy = player.energy;
+                player.energy = (player.energy + amount).min(player.max_energy);
+                info!("卡牌效果：获得 {} 点能量，{} -> {}", amount, old_energy, player.energy);
+            }
+        }
+        CardEffect::AttackAndDraw { damage, cards } => {
+            if let Ok(mut enemy) = enemy_query.get_single_mut() {
+                enemy.take_damage(*damage);
+                info!("卡牌效果：造成 {} 点伤害，敌人剩余HP: {}", damage, enemy.hp);
+            }
+            info!("卡牌效果：抽 {} 张牌（待实现）", cards);
+        }
+        CardEffect::MultiAttack { damage, times } => {
+            if let Ok(mut enemy) = enemy_query.get_single_mut() {
+                let total_damage = damage * times;
+                enemy.take_damage(total_damage);
+                info!("卡牌效果：{} 次攻击，每次 {} 点伤害，共 {} 点，敌人剩余HP: {}", times, damage, total_damage, enemy.hp);
+            }
+        }
+    }
+}
+
+/// 检查战斗是否结束
+fn check_combat_end(
+    player_query: Query<&Player>,
+    enemy_query: Query<&Enemy>,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    // 检查敌人是否死亡
+    if let Ok(enemy) = enemy_query.get_single() {
+        if enemy.is_dead() {
+            info!("敌人被击败！战斗胜利！");
+            // TODO: 显示胜利界面和奖励
+            // 暂时直接返回地图
+            next_state.set(GameState::Map);
+            return;
+        }
+    }
+
+    // 检查玩家是否死亡
+    if let Ok(player) = player_query.get_single() {
+        if player.hp <= 0 {
+            info!("玩家败北！");
+            // TODO: 显示失败界面
+            // 暂时直接返回地图
+            next_state.set(GameState::Map);
+            return;
         }
     }
 }

@@ -169,12 +169,15 @@ impl Default for CombatConfig {
 pub struct CombatState {
     /// 当前回合阶段
     pub phase: TurnPhase,
+    /// 本回合是否已抽牌
+    pub cards_drawn_this_turn: bool,
 }
 
 impl Default for CombatState {
     fn default() -> Self {
         Self {
             phase: TurnPhase::PlayerStart,
+            cards_drawn_this_turn: false,
         }
     }
 }
