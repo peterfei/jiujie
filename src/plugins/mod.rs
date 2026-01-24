@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use crate::states::GameState;
-use crate::components::{MapNode, NodeType, MapConfig, generate_map_nodes, Player, Enemy, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, CardType, CardRarity, CardPool, PlayerDeck, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent, CharacterType, SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, ScreenEffectEvent, ScreenEffectMarker};
+use crate::components::{MapNode, NodeType, MapProgress, Player, Enemy, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, CardType, CardRarity, CardPool, PlayerDeck, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent, CharacterType, SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, ScreenEffectEvent, ScreenEffectMarker};
 use crate::systems::sprite::spawn_character_sprite;
 
 /// 核心游戏插件
@@ -217,8 +217,16 @@ fn handle_button_clicks(
         if matches!(interaction, Interaction::Pressed) {
             // 点击开始游戏按钮
             info!("开始游戏按钮被点击");
-            // 初始化玩家牌组
+
+            // 初始化玩家牌组（如果不存在）
             commands.init_resource::<PlayerDeck>();
+
+            // 初始化地图进度（如果不存在）
+            // 注意：使用 init_resource 而不是 insert_resource，这样不会覆盖现有进度
+            commands.init_resource::<MapProgress>();
+
+            info!("开始游戏 - 玩家牌组和地图进度已初始化");
+
             next_state.set(GameState::Map);
         } else if matches!(interaction, Interaction::Hovered) {
             // 悬停效果
@@ -233,6 +241,7 @@ fn handle_button_clicks(
 /// 处理地图界面按钮点击
 fn handle_map_button_clicks(
     mut next_state: ResMut<NextState<GameState>>,
+    mut map_progress: Option<ResMut<MapProgress>>,
     mut button_queries: ParamSet<(
         Query<(&Interaction, &MapNodeButton, &mut BackgroundColor)>,
         Query<(&Interaction, &mut BackgroundColor), With<BackToMenuButton>>,
@@ -241,8 +250,11 @@ fn handle_map_button_clicks(
     // 处理地图节点点击
     for (interaction, node_btn, mut color) in button_queries.p0().iter_mut() {
         if matches!(interaction, Interaction::Pressed) {
-            // 点击地图节点 - 进入战斗
+            // 点击地图节点 - 设置当前节点并进入战斗
             info!("地图节点 {} 被点击，进入战斗", node_btn.node_id);
+            if let Some(ref mut progress) = map_progress {
+                progress.set_current_node(node_btn.node_id);
+            }
             next_state.set(GameState::Combat);
         } else if matches!(interaction, Interaction::Hovered) {
             // 悬停效果（稍微变亮）
@@ -277,15 +289,19 @@ fn handle_map_button_clicks(
 // ============================================================================
 
 /// 设置地图UI
-fn setup_map_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup_map_ui(mut commands: Commands, asset_server: Res<AssetServer>, map_progress: Option<Res<MapProgress>>) {
     // 加载中文字体
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
 
-    // 创建地图配置
-    let config = MapConfig::default();
+    // 如果没有地图进度，创建新的
+    let progress = if let Some(p) = map_progress {
+        p.clone()
+    } else {
+        info!("创建新地图进度");
+        MapProgress::default()
+    };
 
-    // 生成地图节点
-    let nodes = generate_map_nodes(&config, 0);
+    let nodes = progress.nodes.clone();
 
     // 创建地图UI根容器
     commands
@@ -327,8 +343,11 @@ fn setup_map_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                     ..default()
                 })
                 .with_children(|map_parent| {
+                    // 计算最大层数
+                    let max_layer = nodes.iter().map(|n| n.position.0).max().unwrap_or(0);
+
                     // 按层显示节点
-                    for layer in 0..config.layers {
+                    for layer in 0..=max_layer {
                         // 创建层容器
                         map_parent
                             .spawn(Node {
@@ -343,12 +362,12 @@ fn setup_map_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                             .with_children(|layer_parent| {
                                 // 在该层中添加节点
                                 for node in &nodes {
-                                    if node.position.0 == layer as i32 {
+                                    if node.position.0 == layer {
                                         spawn_map_node(
                                             layer_parent,
                                             node,
                                             &chinese_font,
-                                            &config,
+                                            &progress,
                                         );
                                     }
                                 }
@@ -390,8 +409,11 @@ fn spawn_map_node(
     parent: &mut ChildBuilder,
     node: &MapNode,
     font: &Handle<Font>,
-    _config: &MapConfig,
+    map_progress: &MapProgress,
 ) {
+    // 检查是否是当前节点
+    let is_current = map_progress.current_node_id == Some(node.id);
+
     // 根据节点类型选择颜色
     let node_color = match node.node_type {
         NodeType::Normal => Color::srgb(0.3, 0.5, 0.3),  // 绿色
@@ -414,11 +436,18 @@ fn spawn_map_node(
         NodeType::Unknown => "未知",
     };
 
-    // 节点未解锁时的颜色（变暗）
-    let display_color = if node.unlocked {
+    // 根据节点状态计算显示颜色
+    let display_color = if node.completed {
+        // 已完成：灰色
+        Color::srgb(0.3, 0.3, 0.3)
+    } else if is_current {
+        // 当前节点：高亮（黄色发光效果）
+        Color::srgb(1.0, 0.9, 0.3)
+    } else if node.unlocked {
+        // 已解锁但未访问：正常颜色
         node_color
     } else {
-        // 创建暗色版本
+        // 未解锁：暗色
         match node.node_type {
             NodeType::Normal => Color::srgb(0.12, 0.2, 0.12),
             NodeType::Elite => Color::srgb(0.24, 0.12, 0.04),
@@ -443,17 +472,59 @@ fn spawn_map_node(
         MapNodeButton { node_id: node.id },
     ));
 
+    // 边框效果
+    if is_current {
+        entity.insert(BorderColor(Color::srgb(1.0, 1.0, 0.0)));
+        entity.insert(Node {
+            border: UiRect::all(Val::Px(4.0)),
+            ..default()
+        });
+    } else if node.completed {
+        entity.insert(BorderColor(Color::srgb(0.5, 0.5, 0.5)));
+        entity.insert(Node {
+            border: UiRect::all(Val::Px(2.0)),
+            ..default()
+        });
+    }
+
     // 如果节点已解锁，添加按钮组件
-    if node.unlocked {
+    if node.unlocked && !node.completed {
         entity.insert(Button);
     }
 
+    // 显示状态标记
+    let status_mark = if node.completed {
+        "✓"
+    } else if is_current {
+        "→"
+    } else {
+        ""
+    };
+
     entity.with_children(|node_parent| {
+            // 状态标记
+            if !status_mark.is_empty() {
+                node_parent.spawn((
+                    Text::new(status_mark),
+                    TextFont {
+                        font_size: 24.0,
+                        ..default()
+                    },
+                    TextColor(Color::WHITE),
+                    Node {
+                        position_type: PositionType::Absolute,
+                        top: Val::Px(5.0),
+                        right: Val::Px(5.0),
+                        ..default()
+                    },
+                ));
+            }
+
             // 节点类型图标（用文字表示）
             node_parent.spawn((
                 Text::new(get_node_icon(node.node_type)),
                 TextFont {
-                    font_size: 32.0,
+                    font_size: 28.0,
                     ..default()
                 },
                 TextColor(Color::WHITE),
@@ -461,15 +532,15 @@ fn spawn_map_node(
 
             // 节点名称
             node_parent.spawn((
-                Text::new(node_name),
+                Text::new(format!("{}{}", node_name, if node.completed { "(已完成)" } else { "" })),
                 TextFont {
                     font: font.clone(),
-                    font_size: 14.0,
+                    font_size: 12.0,
                     ..default()
                 },
                 TextColor(Color::WHITE),
                 Node {
-                    margin: UiRect::top(Val::Px(5.0)),
+                    margin: UiRect::top(Val::Px(3.0)),
                     ..default()
                 },
             ));
@@ -1685,8 +1756,11 @@ fn setup_reward_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                         TextColor(Color::WHITE),
                     ));
                 })
-                .observe(|_entity: Trigger<Pointer<Click>>, mut next_state: ResMut<NextState<GameState>>| {
+                .observe(|_entity: Trigger<Pointer<Click>>, mut next_state: ResMut<NextState<GameState>>, mut map_progress: ResMut<MapProgress>| {
                     info!("跳过奖励");
+                    // 标记当前节点为完成，解锁下一层
+                    map_progress.complete_current_node();
+                    info!("节点已完成，已解锁下一层");
                     next_state.set(GameState::Map);
                 });
         });
@@ -1800,6 +1874,7 @@ fn handle_reward_clicks(
     >,
     mut next_state: ResMut<NextState<GameState>>,
     mut player_deck: ResMut<PlayerDeck>,
+    mut map_progress: ResMut<MapProgress>,
 ) {
     for (interaction, reward_btn) in interactions.iter() {
         if matches!(interaction, Interaction::Pressed) {
@@ -1815,6 +1890,10 @@ fn handle_reward_clicks(
                 player_deck.add_card(new_card);
                 info!("卡牌「{}」已加入牌组，当前牌组大小: {}", card_name, player_deck.len());
             }
+
+            // 标记当前节点为完成，解锁下一层
+            map_progress.complete_current_node();
+            info!("节点已完成，已解锁下一层");
 
             // 返回地图
             next_state.set(GameState::Map);

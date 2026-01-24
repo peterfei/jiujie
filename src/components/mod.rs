@@ -8,7 +8,7 @@ pub mod sprite;
 pub mod particle;
 pub mod screen_effect;
 
-pub use map::{MapNode, NodeType, MapConfig, generate_map_nodes};
+pub use map::{MapNode, NodeType, MapConfig, generate_map_nodes, MapProgress};
 pub use combat::{Player, Enemy, EnemyIntent, CombatConfig, CombatState, TurnPhase, PlayerDeck};
 pub use cards::{
     Card, CardType, CardEffect, CardRarity,

@@ -41,6 +41,91 @@ pub enum NodeType {
 }
 
 // ============================================================================
+// 地图进度系统
+// ============================================================================
+
+/// 地图进度资源（持久化）
+#[derive(Resource, Debug, Clone)]
+pub struct MapProgress {
+    /// 所有地图节点
+    pub nodes: Vec<MapNode>,
+    /// 当前所在的节点ID
+    pub current_node_id: Option<u32>,
+    /// 当前层数
+    pub current_layer: u32,
+    /// 游戏是否完成
+    pub game_completed: bool,
+}
+
+impl MapProgress {
+    /// 创建新地图进度
+    pub fn new(config: &MapConfig) -> Self {
+        let nodes = generate_map_nodes(config, 0);
+        Self {
+            nodes,
+            current_node_id: None,
+            current_layer: 0,
+            game_completed: false,
+        }
+    }
+
+    /// 获取当前节点
+    pub fn get_current_node(&self) -> Option<&MapNode> {
+        self.current_node_id.and_then(|id| self.nodes.iter().find(|n| n.id == id))
+    }
+
+    /// 设置当前节点
+    pub fn set_current_node(&mut self, node_id: u32) {
+        self.current_node_id = Some(node_id);
+        if let Some(node) = self.nodes.iter().find(|n| n.id == node_id) {
+            self.current_layer = node.position.0 as u32;
+        }
+    }
+
+    /// 完成当前节点
+    pub fn complete_current_node(&mut self) {
+        if let Some(node_id) = self.current_node_id {
+            if let Some(node) = self.nodes.iter_mut().find(|n| n.id == node_id) {
+                node.completed = true;
+            }
+            // 解锁下一层的所有节点
+            self.unlock_next_layer();
+        }
+    }
+
+    /// 解锁下一层节点
+    fn unlock_next_layer(&mut self) {
+        let current_layer = self.current_layer;
+        for node in &mut self.nodes {
+            // 解锁下一层的所有节点
+            if node.position.0 as u32 == current_layer + 1 {
+                node.unlocked = true;
+            }
+        }
+    }
+
+    /// 检查是否到达Boss
+    pub fn is_at_boss(&self) -> bool {
+        self.get_current_node()
+            .map(|n| n.node_type == NodeType::Boss)
+            .unwrap_or(false)
+    }
+
+    /// 检查Boss是否被击败
+    pub fn is_boss_defeated(&self) -> bool {
+        self.nodes.iter().any(|n| n.node_type == NodeType::Boss && n.completed)
+    }
+}
+
+impl Default for MapProgress {
+    fn default() -> Self {
+        // 创建默认配置并生成初始地图
+        let config = MapConfig::default();
+        Self::new(&config)
+    }
+}
+
+// ============================================================================
 // 地图配置
 // ============================================================================
 
