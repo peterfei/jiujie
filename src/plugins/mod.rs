@@ -640,7 +640,13 @@ struct HandCountText;
 struct HandArea;
 
 /// 设置战斗UI
-fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>, player_deck: Res<PlayerDeck>) {
+fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>, player_deck: Res<PlayerDeck>, mut victory_delay: ResMut<VictoryDelay>) {
+    // 进入战斗时确保胜利延迟被重置（防止上一场战斗的状态泄漏）
+    if victory_delay.active {
+        info!("进入战斗时检测到胜利延迟仍然激活，强制重置");
+        victory_delay.active = false;
+        victory_delay.elapsed = 0.0;
+    }
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
 
     // 创建玩家和敌人实体
@@ -1082,7 +1088,11 @@ fn handle_combat_button_clicks(
 
             // 敌人AI行动逻辑
             if let Ok(mut enemy) = enemy_query.get_single_mut() {
-                // 执行敌人意图
+                // 先让敌人选择新意图（清空护甲并选择新行动）
+                enemy.start_turn();
+                info!("敌人意图: {:?}", enemy.intent);
+
+                // 然后执行意图
                 let executed_intent = enemy.execute_intent();
 
                 match executed_intent {
@@ -1160,12 +1170,6 @@ fn handle_combat_button_clicks(
             if let Ok(mut player) = player_query.get_single_mut() {
                 player.start_turn();
                 info!("玩家新回合：护甲清零");
-            }
-
-            // 敌人选择新意图
-            if let Ok(mut enemy) = enemy_query.get_single_mut() {
-                enemy.start_turn();
-                info!("敌人新意图: {:?}", enemy.intent);
             }
 
             // 重置抽牌标志，允许本回合抽牌
@@ -1703,6 +1707,7 @@ fn apply_card_effect(
 
 /// 检查战斗是否结束
 fn check_combat_end(
+    state: Res<State<GameState>>,
     player_query: Query<&Player>,
     enemy_query: Query<&Enemy>,
     _sprite_query: Query<(Entity, &Sprite, &Children)>,
@@ -1714,12 +1719,18 @@ fn check_combat_end(
     mut victory_events: EventWriter<VictoryEvent>,
     mut victory_delay: ResMut<VictoryDelay>,
 ) {
+    // 额外检查：确保当前确实是Combat状态
+    // 防止在同一帧内状态切换后仍执行此系统
+    if **state != GameState::Combat {
+        return;
+    }
+
     // 检查敌人是否死亡
     if let Ok(enemy) = enemy_query.get_single() {
         if enemy.is_dead() {
             // 检查是否已经触发过胜利（防止重复触发）
             if victory_delay.active {
-                info!("胜利流程已触发，等待延迟结束...");
+                // 已经触发，等待延迟结束（每帧都会到这里，不打印日志）
                 return;
             }
 
@@ -1820,23 +1831,22 @@ fn update_victory_delay(
     ui_query: Query<Entity, With<CombatUiRoot>>,
     _sprite_query: Query<Entity, With<SpriteMarker>>,
 ) {
-    // 在函数最开始添加日志
-    info!("[VICTORY_DELAY] 系统被调用! active={}", victory_delay.active);
-
     if !victory_delay.active {
         return;
     }
 
     victory_delay.elapsed += time.delta_secs();
 
-    // 每帧输出日志
+    // 只在激活时输出日志
     info!("胜利延迟进行中: {:.2}/{:.2}", victory_delay.elapsed, victory_delay.duration);
 
     if victory_delay.elapsed >= victory_delay.duration {
         // 延迟结束，切换到奖励界面
+        info!("胜利延迟结束，进入奖励界面！");
+
+        // 先设置 active = false，防止 check_combat_end 再次触发
         victory_delay.active = false;
         victory_delay.elapsed = 0.0;
-        info!("胜利延迟结束，进入奖励界面！");
 
         // 清理战斗UI，避免遮挡
         let ui_count = ui_query.iter().count();
@@ -1846,6 +1856,7 @@ fn update_victory_delay(
             commands.entity(entity).despawn_recursive();
         }
 
+        // 最后切换状态
         next_state.set(GameState::Reward);
         info!("已切换到 Reward 状态");
     }

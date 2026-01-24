@@ -303,13 +303,10 @@ impl Enemy {
             // 防御
             let block = rng.gen_range(self.ai_pattern.block_range.0..=self.ai_pattern.block_range.1);
             EnemyIntent::Defend { block }
-        } else if roll < self.ai_pattern.attack_chance + self.ai_pattern.defend_chance + self.ai_pattern.buff_chance {
-            // 强化
+        } else {
+            // 强化（移除Wait，确保总是选择一种行动）
             let strength = rng.gen_range(self.ai_pattern.buff_range.0..=self.ai_pattern.buff_range.1);
             EnemyIntent::Buff { strength }
-        } else {
-            // 等待
-            EnemyIntent::Wait
         };
 
         self.intent = intent;
