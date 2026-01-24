@@ -1,6 +1,7 @@
 //! 卡牌组件和系统
 
 use bevy::prelude::*;
+use rand::prelude::SliceRandom;
 
 // ============================================================================
 // 卡牌组件
@@ -245,7 +246,7 @@ impl Default for DeckConfig {
 }
 
 /// 初始牌组
-fn create_starting_deck() -> Vec<Card> {
+pub fn create_starting_deck() -> Vec<Card> {
     vec![
         // 5张攻击卡
         Card::new(
@@ -363,4 +364,84 @@ fn create_starting_deck() -> Vec<Card> {
             CardRarity::Uncommon,
         ),
     ]
+}
+
+// ============================================================================
+// 卡牌池和奖励系统
+// ============================================================================
+
+/// 卡牌池 - 包含所有可获得的卡牌
+pub struct CardPool;
+
+impl CardPool {
+    /// 获取所有可获得的卡牌
+    pub fn all_cards() -> Vec<Card> {
+        vec![
+            // === 普通卡牌 ===
+            Card::new(100, "重击", "造成12点伤害", CardType::Attack, 2, CardEffect::DealDamage { amount: 12 }, CardRarity::Common),
+            Card::new(101, "铁壁", "获得8点护甲", CardType::Defense, 1, CardEffect::GainBlock { amount: 8 }, CardRarity::Common),
+            Card::new(102, "快速打击", "造成4点伤害", CardType::Attack, 0, CardEffect::DealDamage { amount: 4 }, CardRarity::Common),
+            // === 稀有卡牌 ===
+            Card::new(200, "旋风斩", "造成8点伤害，抽2张牌", CardType::Attack, 2, CardEffect::AttackAndDraw { damage: 8, cards: 2 }, CardRarity::Uncommon),
+            Card::new(201, "完美格挡", "获得12点护甲", CardType::Defense, 2, CardEffect::GainBlock { amount: 12 }, CardRarity::Uncommon),
+            Card::new(202, "圣光治疗", "恢复10点生命", CardType::Skill, 2, CardEffect::Heal { amount: 10 }, CardRarity::Uncommon),
+            Card::new(203, "强力突刺", "造成6点伤害，抽1张牌", CardType::Attack, 1, CardEffect::AttackAndDraw { damage: 6, cards: 1 }, CardRarity::Uncommon),
+            Card::new(204, "战斗专注", "抽3张牌，获得2点能量", CardType::Skill, 1, CardEffect::DrawCards { amount: 3 }, CardRarity::Uncommon),
+            // === 稀有卡牌（更强）===
+            Card::new(300, "雷霆一击", "造成20点伤害", CardType::Attack, 3, CardEffect::DealDamage { amount: 20 }, CardRarity::Rare),
+            Card::new(301, "不屈意志", "获得15点护甲，恢复5点生命", CardType::Defense, 2, CardEffect::GainBlock { amount: 15 }, CardRarity::Rare),
+            Card::new(302, "生命涌动", "恢复15点生命", CardType::Skill, 2, CardEffect::Heal { amount: 15 }, CardRarity::Rare),
+        ]
+    }
+
+    /// 根据稀有度获取卡牌
+    pub fn get_by_rarity(rarity: CardRarity) -> Vec<Card> {
+        Self::all_cards().into_iter().filter(|c| c.rarity == rarity).collect()
+    }
+
+    /// 随机获取指定数量的卡牌（用于奖励）
+    pub fn random_cards(count: usize) -> Vec<Card> {
+        let all = Self::all_cards();
+        use rand::seq::SliceRandom;
+        let mut rng = rand::thread_rng();
+        all.choose_multiple(&mut rng, count).cloned().collect()
+    }
+
+    /// 随机获取卡牌（偏向稀有度）
+    pub fn random_rewards(count: usize) -> Vec<Card> {
+        let mut rewards = Vec::new();
+        use rand::Rng;
+
+        for i in 0..count {
+            let mut rng = rand::thread_rng();
+            // 奖励概率：50%普通，40%稀有，10%罕见
+            let rarity_roll = rng.gen::<f32>();
+            let rarity = if rarity_roll < 0.5 {
+                CardRarity::Common
+            } else if rarity_roll < 0.9 {
+                CardRarity::Uncommon
+            } else {
+                CardRarity::Rare
+            };
+
+            let cards = Self::get_by_rarity(rarity);
+            if let Some(card) = cards.choose(&mut rng) {
+                // 为每张卡创建唯一ID
+                let mut card = card.clone();
+                card.id = 1000 + i as u32;
+                rewards.push(card);
+            }
+        }
+
+        rewards
+    }
+}
+
+/// 奖励选项组件
+#[derive(Component, Clone)]
+pub struct RewardCard {
+    /// 卡牌数据
+    pub card: Card,
+    /// 是否被选中
+    pub selected: bool,
 }

@@ -208,3 +208,43 @@ impl Default for CombatState {
         }
     }
 }
+
+/// 玩家持久化牌组资源（跨战斗保存）
+#[derive(Resource, Debug, Clone)]
+pub struct PlayerDeck {
+    /// 牌组中的所有卡牌
+    pub cards: Vec<Card>,
+}
+
+impl PlayerDeck {
+    /// 创建新牌组
+    pub fn new() -> Self {
+        Self {
+            cards: create_starting_deck(),
+        }
+    }
+
+    /// 添加卡牌到牌组
+    pub fn add_card(&mut self, card: Card) {
+        self.cards.push(card);
+    }
+
+    /// 获取牌组大小
+    pub fn len(&self) -> usize {
+        self.cards.len()
+    }
+
+    /// 检查是否为空
+    pub fn is_empty(&self) -> bool {
+        self.cards.is_empty()
+    }
+}
+
+impl Default for PlayerDeck {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// 需要导入 Card 类型
+use crate::components::cards::{Card, create_starting_deck};

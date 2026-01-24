@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use crate::states::GameState;
-use crate::components::{MapNode, NodeType, MapConfig, generate_map_nodes, Player, Enemy, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent, CharacterType, SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, ScreenEffectEvent, ScreenEffectMarker};
+use crate::components::{MapNode, NodeType, MapConfig, generate_map_nodes, Player, Enemy, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, CardType, CardRarity, CardPool, PlayerDeck, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent, CharacterType, SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, ScreenEffectEvent, ScreenEffectMarker};
 use crate::systems::sprite::spawn_character_sprite;
 
 /// 核心游戏插件
@@ -53,6 +53,13 @@ impl Plugin for MenuPlugin {
         app.add_systems(Update, handle_card_play.run_if(in_state(GameState::Combat)));
         // 检查战斗结束
         app.add_systems(Update, check_combat_end.run_if(in_state(GameState::Combat)));
+
+        // 在进入Reward状态时设置奖励UI
+        app.add_systems(OnEnter(GameState::Reward), setup_reward_ui);
+        // 在退出Reward状态时清理奖励UI
+        app.add_systems(OnExit(GameState::Reward), cleanup_reward_ui);
+        // 处理奖励界面点击
+        app.add_systems(Update, handle_reward_clicks.run_if(in_state(GameState::Reward)));
     }
 }
 
@@ -199,6 +206,7 @@ struct BackToMenuButton;
 
 /// 处理按钮点击事件
 fn handle_button_clicks(
+    mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
     mut interaction_query: Query<
         (&Interaction, &mut BackgroundColor),
@@ -209,6 +217,8 @@ fn handle_button_clicks(
         if matches!(interaction, Interaction::Pressed) {
             // 点击开始游戏按钮
             info!("开始游戏按钮被点击");
+            // 初始化玩家牌组
+            commands.init_resource::<PlayerDeck>();
             next_state.set(GameState::Map);
         } else if matches!(interaction, Interaction::Hovered) {
             // 悬停效果
@@ -495,6 +505,16 @@ struct EndTurnButton;
 #[derive(Component)]
 struct ReturnToMapButton;
 
+/// 奖励UI根节点标记
+#[derive(Component)]
+struct RewardUiRoot;
+
+/// 奖励卡牌按钮标记
+#[derive(Component)]
+struct RewardCardButton {
+    card_id: u32,
+}
+
 // 战斗UI文本标记组件
 #[derive(Component)]
 struct EnemyHpText;
@@ -533,7 +553,7 @@ struct HandCountText;
 struct HandArea;
 
 /// 设置战斗UI
-fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>, player_deck: Res<PlayerDeck>) {
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
 
     // 创建玩家和敌人实体
@@ -559,14 +579,14 @@ fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
     // 初始化战斗状态
     commands.insert_resource(CombatState::default());
 
-    // 创建牌组
-    let deck_config = DeckConfig::default();
-    commands.insert_resource(deck_config.clone());
+    // 创建牌组（使用持久化的玩家牌组）
+    let deck_cards = player_deck.cards.clone();
+    commands.insert_resource(DeckConfig { starting_deck: deck_cards.clone(), ..default() });
 
     // 计算初始抽牌后剩余的卡牌
-    let initial_draw = 5.min(deck_config.starting_deck.len());
-    let drawn_cards: Vec<Card> = deck_config.starting_deck.iter().take(initial_draw).cloned().collect();
-    let remaining_deck: Vec<Card> = deck_config.starting_deck.iter().skip(initial_draw).cloned().collect();
+    let initial_draw = 5.min(deck_cards.len());
+    let drawn_cards: Vec<Card> = deck_cards.iter().take(initial_draw).cloned().collect();
+    let remaining_deck: Vec<Card> = deck_cards.iter().skip(initial_draw).cloned().collect();
 
     commands.spawn(DrawPile::new(remaining_deck));
     commands.spawn(DiscardPile::new());
@@ -1567,9 +1587,8 @@ fn check_combat_end(
     if let Ok(enemy) = enemy_query.get_single() {
         if enemy.is_dead() {
             info!("敌人被击败！战斗胜利！");
-            // TODO: 显示胜利界面和奖励
-            // 暂时直接返回地图
-            next_state.set(GameState::Map);
+            // 进入奖励界面
+            next_state.set(GameState::Reward);
             return;
         }
     }
@@ -1582,6 +1601,223 @@ fn check_combat_end(
             // 暂时直接返回地图
             next_state.set(GameState::Map);
             return;
+        }
+    }
+}
+
+// ============================================================================
+// 奖励系统
+// ============================================================================
+
+/// 设置奖励界面
+fn setup_reward_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
+    info!("设置奖励界面");
+
+    // 生成随机奖励卡牌（3张）
+    let reward_cards = CardPool::random_rewards(3);
+
+    commands
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                row_gap: Val::Px(30.0),
+                ..default()
+            },
+            BackgroundColor(Color::srgb(0.1, 0.1, 0.15)),
+            RewardUiRoot,
+        ))
+        .with_children(|parent| {
+            // 标题
+            parent.spawn((
+                Text::new("战斗胜利！选择一张卡牌"),
+                TextFont {
+                    font: asset_server.load("fonts/Arial Unicode.ttf"),
+                    font_size: 48.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(1.0, 0.9, 0.3)),
+                TextLayout::new_with_justify(JustifyText::Center),
+            ));
+
+            // 卡牌容器
+            parent
+                .spawn(Node {
+                    width: Val::Percent(80.0),
+                    height: Val::Auto,
+                    flex_direction: FlexDirection::Row,
+                    justify_content: JustifyContent::Center,
+                    column_gap: Val::Px(30.0),
+                    ..default()
+                })
+                .with_children(|parent| {
+                    // 为每张奖励卡创建UI
+                    for (index, card) in reward_cards.iter().enumerate() {
+                        create_reward_card(parent, card, index, &asset_server);
+                    }
+                });
+
+            // 跳过按钮
+            parent
+                .spawn((
+                    Button,
+                    BackgroundColor(Color::srgb(0.3, 0.3, 0.4)),
+                    BorderColor(Color::srgb(0.5, 0.5, 0.6)),
+                    Node {
+                        width: Val::Px(200.0),
+                        height: Val::Px(50.0),
+                        align_items: AlignItems::Center,
+                        justify_content: JustifyContent::Center,
+                        ..default()
+                    },
+                ))
+                .with_children(|parent| {
+                    parent.spawn((
+                        Text::new("跳过奖励"),
+                        TextFont {
+                            font: asset_server.load("fonts/Arial Unicode.ttf"),
+                            font_size: 20.0,
+                            ..default()
+                        },
+                        TextColor(Color::WHITE),
+                    ));
+                })
+                .observe(|_entity: Trigger<Pointer<Click>>, mut next_state: ResMut<NextState<GameState>>| {
+                    info!("跳过奖励");
+                    next_state.set(GameState::Map);
+                });
+        });
+}
+
+/// 创建单张奖励卡UI
+fn create_reward_card(parent: &mut ChildBuilder, card: &Card, _index: usize, asset_server: &AssetServer) {
+    let card_color = match card.card_type {
+        CardType::Attack => Color::srgb(0.8, 0.2, 0.2),
+        CardType::Defense => Color::srgb(0.2, 0.5, 0.8),
+        CardType::Skill => Color::srgb(0.2, 0.7, 0.3),
+        CardType::Power => Color::srgb(0.7, 0.3, 0.8),
+    };
+
+    let rarity_color = match card.rarity {
+        CardRarity::Common => Color::srgb(0.7, 0.7, 0.7),
+        CardRarity::Uncommon => Color::srgb(0.3, 0.8, 0.9),
+        CardRarity::Rare => Color::srgb(0.9, 0.7, 0.2),
+        CardRarity::Special => Color::srgb(0.9, 0.4, 0.9),
+    };
+
+    parent
+        .spawn((
+            Button,
+            BackgroundColor(card_color),
+            BorderColor(rarity_color),
+            Node {
+                width: Val::Px(180.0),
+                height: Val::Px(260.0),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                padding: UiRect::all(Val::Px(12.0)),
+                row_gap: Val::Px(8.0),
+                border: UiRect::all(Val::Px(4.0)),
+                ..default()
+            },
+            RewardCardButton { card_id: card.id },
+        ))
+        .with_children(|parent| {
+            // 稀有度标签
+            parent.spawn((
+                Text::new(format!("{:?}", card.rarity)),
+                TextFont {
+                    font: asset_server.load("fonts/Arial Unicode.ttf"),
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(rarity_color),
+            ));
+
+            // 卡牌名称
+            parent.spawn((
+                Text::new(card.name.clone()),
+                TextFont {
+                    font: asset_server.load("fonts/Arial Unicode.ttf"),
+                    font_size: 20.0,
+                    ..default()
+                },
+                TextColor(Color::WHITE),
+                TextLayout::new_with_justify(JustifyText::Center),
+            ));
+
+            // 能量消耗
+            parent.spawn((
+                Text::new(format!("能量: {}", card.cost)),
+                TextFont {
+                    font: asset_server.load("fonts/Arial Unicode.ttf"),
+                    font_size: 16.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(1.0, 0.9, 0.3)),
+            ));
+
+            // 卡牌描述
+            parent.spawn((
+                Text::new(card.description.clone()),
+                TextFont {
+                    font: asset_server.load("fonts/Arial Unicode.ttf"),
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.9)),
+                TextLayout::new_with_justify(JustifyText::Center),
+            ));
+
+            // 类型标签
+            parent.spawn((
+                Text::new(format!("{:?}", card.card_type)),
+                TextFont {
+                    font: asset_server.load("fonts/Arial Unicode.ttf"),
+                    font_size: 12.0,
+                    ..default()
+                },
+                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.7)),
+            ));
+        });
+}
+
+/// 清理奖励界面
+fn cleanup_reward_ui(mut commands: Commands, query: Query<Entity, With<RewardUiRoot>>) {
+    for entity in query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+}
+
+/// 处理奖励卡牌点击
+fn handle_reward_clicks(
+    interactions: Query<
+        (&Interaction, &RewardCardButton),
+        (Changed<Interaction>, With<RewardCardButton>),
+    >,
+    mut next_state: ResMut<NextState<GameState>>,
+    mut player_deck: ResMut<PlayerDeck>,
+) {
+    for (interaction, reward_btn) in interactions.iter() {
+        if matches!(interaction, Interaction::Pressed) {
+            info!("选择了奖励卡牌 ID: {}", reward_btn.card_id);
+
+            // 从卡牌池找到对应的卡牌
+            let all_cards = CardPool::all_cards();
+            if let Some(card) = all_cards.iter().find(|c| c.id == reward_btn.card_id) {
+                let card_name = card.name.clone();
+                // 添加到玩家牌组
+                let mut new_card = card.clone();
+                new_card.id = 1000 + player_deck.cards.len() as u32;
+                player_deck.add_card(new_card);
+                info!("卡牌「{}」已加入牌组，当前牌组大小: {}", card_name, player_deck.len());
+            }
+
+            // 返回地图
+            next_state.set(GameState::Map);
         }
     }
 }
