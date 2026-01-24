@@ -1668,10 +1668,10 @@ fn apply_card_effect(
 fn check_combat_end(
     player_query: Query<&Player>,
     enemy_query: Query<&Enemy>,
-    mut sprite_query: Query<(Entity, &Sprite, &Children)>,
-    enemy_sprite_marker_query: Query<&EnemySpriteMarker>,
+    _sprite_query: Query<(Entity, &Sprite, &Children)>,
+    _enemy_sprite_marker_query: Query<&EnemySpriteMarker>,
     mut next_state: ResMut<NextState<GameState>>,
-    mut commands: Commands,
+    _commands: Commands,
     mut effect_events: EventWriter<SpawnEffectEvent>,
     mut screen_events: EventWriter<ScreenEffectEvent>,
     mut victory_events: EventWriter<VictoryEvent>,
