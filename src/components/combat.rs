@@ -457,3 +457,15 @@ impl Default for PlayerDeck {
 
 // 需要导入 Card 类型
 use crate::components::cards::{Card, create_starting_deck};
+
+// ============================================================================
+// UI 悬停面板标记组件
+// ============================================================================
+
+/// 卡牌悬停详情面板标记
+#[derive(Component)]
+pub struct CardHoverPanelMarker;
+
+/// 遗物悬停详情面板标记
+#[derive(Component)]
+pub struct RelicHoverPanelMarker;

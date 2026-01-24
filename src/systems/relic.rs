@@ -16,18 +16,22 @@ impl Plugin for RelicPlugin {
         app.add_event::<RelicObtainedEvent>();
         app.add_event::<RelicTriggeredEvent>();
 
-        // 初始化遗物背包
+        // 初始化遗物背包（带初始遗物）
         app.init_resource::<RelicCollection>();
+        app.add_systems(Startup, initialize_starting_relics);
         app.init_resource::<CombatStartProcessed>();
+        app.init_resource::<PreviousTurnPhase>();
 
         // 遗物效果系统
         app.add_systems(Update, (
             trigger_relics_on_combat_start.run_if(in_state(GameState::Combat)),
-            trigger_relics_on_turn_start.run_if(in_state(GameState::Combat)),
-            trigger_relics_on_turn_end.run_if(in_state(GameState::Combat)),
+            trigger_relics_on_phase_change.run_if(in_state(GameState::Combat)),
             trigger_relics_on_draw.run_if(in_state(GameState::Combat)),
             trigger_relics_on_card_played.run_if(in_state(GameState::Combat)),
         ));
+
+        // 在退出战斗状态时重置遗物触发标志
+        app.add_systems(OnExit(GameState::Combat), reset_relic_triggers);
     }
 }
 
@@ -35,10 +39,36 @@ impl Plugin for RelicPlugin {
 // 遗物效果触发系统
 // ============================================================================
 
+/// 跟踪前一个回合阶段（用于检测阶段变化）
+#[derive(Resource, Default)]
+struct PreviousTurnPhase {
+    phase: Option<TurnPhase>,
+}
+
 /// 标记战斗开始时是否已处理过遗物
 #[derive(Resource, Default)]
 pub struct CombatStartProcessed {
     pub processed: bool,
+}
+
+/// 初始化玩家起始遗物
+fn initialize_starting_relics(mut relic_collection: ResMut<RelicCollection>) {
+    info!("【遗物系统】初始化起始遗物");
+
+    // 添加燃烧之血作为初始遗物（方便测试和游戏体验）
+    let burning_blood = Relic::burning_blood();
+    relic_collection.add_relic(burning_blood);
+
+    info!("【遗物系统】已添加初始遗物: 燃烧之血（战斗开始时对所有敌人造成3点伤害）");
+    info!("【遗物系统】当前遗物数量: {}", relic_collection.count());
+}
+
+/// 退出战斗时重置遗物触发标志
+fn reset_relic_triggers(mut combat_start_processed: ResMut<CombatStartProcessed>) {
+    if combat_start_processed.processed {
+        info!("【遗物系统】退出战斗，重置遗物触发标志");
+        combat_start_processed.processed = false;
+    }
 }
 
 /// 战斗开始时触发遗物效果
@@ -109,41 +139,67 @@ fn trigger_relics_on_combat_start(
     }
 }
 
-/// 回合开始时触发遗物效果
-fn trigger_relics_on_turn_start(
+/// 监听回合阶段变化，在适当时机触发遗物效果
+fn trigger_relics_on_phase_change(
     relic_collection: Res<RelicCollection>,
     mut player_query: Query<&mut Player>,
-) {
-    for relic in &relic_collection.relic {
-        match &relic.effect {
-            RelicEffect::OnTurnStart { energy, .. } => {
-                // 获得能量
-                if *energy > 0 {
-                    if let Ok(mut player) = player_query.get_single_mut() {
-                        player.gain_energy(*energy);
-                        info!("  遗物 [{}] 回合开始：获得 {} 点能量", relic.name, energy);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-/// 回合结束时触发遗物效果（如锚）
-fn trigger_relics_on_turn_end(
-    relic_collection: Res<RelicCollection>,
     hand_query: Query<&Hand>,
+    combat_state: Res<CombatState>,
+    mut prev_phase: ResMut<PreviousTurnPhase>,
 ) {
-    for relic in &relic_collection.relic {
-        match &relic.effect {
-            RelicEffect::OnTurnEnd { keep_cards } => {
-                let hand = hand_query.get_single().unwrap();
-                if hand.cards.len() > *keep_cards as usize {
-                    info!("  遗物 [{}] 回合结束：保留最多 {} 张牌", relic.name, keep_cards);
+    let current_phase = combat_state.phase;
+
+    // 检查阶段是否发生变化
+    if prev_phase.phase == Some(current_phase) {
+        return; // 阶段没变，不处理
+    }
+
+    let old_phase = prev_phase.phase;
+    prev_phase.phase = Some(current_phase);
+
+    // 检测特定的阶段转换
+    match (old_phase, current_phase) {
+        // 敌人回合 → 玩家行动：新回合开始
+        (Some(TurnPhase::EnemyTurn), TurnPhase::PlayerAction) => {
+            info!("【遗物系统】新回合开始，触发回合开始遗物");
+            for relic in &relic_collection.relic {
+                match &relic.effect {
+                    RelicEffect::OnTurnStart { energy, .. } => {
+                        if *energy > 0 {
+                            if let Ok(mut player) = player_query.get_single_mut() {
+                                player.gain_energy(*energy);
+                                info!("  遗物 [{}] 触发：获得 {} 点能量", relic.name, energy);
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
-            _ => {}
+        }
+        // 玩家行动 → 敌人回合：回合结束
+        (Some(TurnPhase::PlayerAction), TurnPhase::EnemyTurn) => {
+            info!("【遗物系统】回合结束，触发回合结束遗物");
+            for relic in &relic_collection.relic {
+                match &relic.effect {
+                    RelicEffect::OnTurnEnd { keep_cards } => {
+                        if let Ok(hand) = hand_query.get_single() {
+                            if hand.cards.len() > *keep_cards as usize {
+                                info!("  遗物 [{}] 触发：保留最多 {} 张牌（当前手牌: {} 张）",
+                                    relic.name, keep_cards, hand.cards.len());
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        // 战斗开始：PlayerStart → PlayerAction
+        (Some(TurnPhase::PlayerStart), TurnPhase::PlayerAction) => {
+            info!("【遗物系统】战斗开始后的首次行动");
+            // 这里可以处理战斗开始后的额外逻辑
+        }
+        _ => {
+            // 其他阶段转换，不需要处理
         }
     }
 }

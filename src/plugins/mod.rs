@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use crate::states::GameState;
-use crate::components::{MapNode, NodeType, MapProgress, Player, Enemy, EnemyIntent, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, CardType, CardRarity, CardPool, PlayerDeck, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent, CharacterType, SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation, EnemySpriteMarker, VictoryDelay, RelicCollection, Relic};
+use crate::components::{MapNode, NodeType, MapProgress, Player, Enemy, EnemyIntent, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, CardType, CardRarity, CardPool, PlayerDeck, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent, CharacterType, SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation, EnemySpriteMarker, VictoryDelay, RelicCollection, Relic, RelicId};
 use crate::systems::sprite::spawn_character_sprite;
 
 /// 核心游戏插件
@@ -25,6 +25,13 @@ impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
         // 注册胜利事件
         app.add_event::<VictoryEvent>();
+
+        // 初始化悬停状态资源
+        app.init_resource::<HoveredCard>();
+        app.init_resource::<HoveredRelic>();
+        app.init_resource::<CurrentRewardCards>();
+        app.init_resource::<CurrentRewardRelic>();
+        app.init_resource::<MousePosition>();
 
         // 在进入MainMenu状态时设置主菜单
         app.add_systems(OnEnter(GameState::MainMenu), setup_main_menu);
@@ -69,6 +76,13 @@ impl Plugin for MenuPlugin {
         app.add_systems(OnExit(GameState::Reward), cleanup_reward_ui);
         // 处理奖励界面点击
         app.add_systems(Update, handle_reward_clicks.run_if(in_state(GameState::Reward)));
+        // 处理卡牌/遗物悬停显示详情
+        app.add_systems(Update, handle_card_hover.run_if(in_state(GameState::Reward)));
+        app.add_systems(Update, handle_relic_hover.run_if(in_state(GameState::Reward)));
+        // 更新鼠标位置
+        app.add_systems(Update, update_mouse_position.run_if(in_state(GameState::Reward)));
+        // 清理悬停面板（鼠标移开时）
+        app.add_systems(Update, cleanup_hover_panels.run_if(in_state(GameState::Reward)));
 
         // 在进入GameOver状态时设置游戏结束UI
         app.add_systems(OnEnter(GameState::GameOver), setup_game_over_ui);
@@ -598,9 +612,23 @@ struct RewardUiRoot;
 
 /// 奖励卡牌按钮标记
 #[derive(Component)]
-struct RewardCardButton {
-    card_id: u32,
+pub struct RewardCardButton {
+    pub card_id: u32,
 }
+
+/// 奖励遗物按钮标记
+#[derive(Component)]
+pub struct RewardRelicButton {
+    pub relic_id: RelicId,
+}
+
+/// 卡牌悬停详情面板标记
+#[derive(Component)]
+struct CardHoverPanelMarker;
+
+/// 遗物悬停详情面板标记
+#[derive(Component)]
+struct RelicHoverPanelMarker;
 
 // 战斗UI文本标记组件
 #[derive(Component)]
@@ -1867,15 +1895,21 @@ fn update_victory_delay(
 // ============================================================================
 
 /// 设置奖励界面
-fn setup_reward_ui(mut commands: Commands, asset_server: Res<AssetServer>, relic_collection: Res<RelicCollection>) {
+fn setup_reward_ui(mut commands: Commands, asset_server: Res<AssetServer>, relic_collection: Res<RelicCollection>, mut reward_cards_resource: ResMut<CurrentRewardCards>, mut reward_relic_resource: ResMut<CurrentRewardRelic>) {
     info!("设置奖励界面");
 
     // 生成随机奖励卡牌（3张）
     let reward_cards = CardPool::random_rewards(3);
 
+    // 存储奖励卡牌到资源中（供悬停系统使用）
+    reward_cards_resource.cards = reward_cards.clone();
+
     // 生成随机遗物奖励
     let relic_reward = generate_relic_reward(&relic_collection);
     let show_relic = relic_reward.is_some();
+
+    // 存储遗物奖励到资源中（供悬停系统使用）
+    reward_relic_resource.relic = relic_reward.clone();
 
     commands
         .spawn((
@@ -2085,7 +2119,11 @@ fn cleanup_reward_ui(
     particle_query: Query<Entity, With<ParticleMarker>>,
     emitter_query: Query<Entity, With<EmitterMarker>>,
     screen_effect_query: Query<Entity, With<ScreenEffectMarker>>,
+    card_hover_query: Query<Entity, With<CardHoverPanelMarker>>,
+    relic_hover_query: Query<Entity, With<RelicHoverPanelMarker>>,
 ) {
+    info!("【清理奖励界面】清理所有奖励相关UI");
+
     // 清理奖励UI
     for entity in ui_query.iter() {
         commands.entity(entity).despawn_recursive();
@@ -2100,6 +2138,16 @@ fn cleanup_reward_ui(
     }
     // 清理屏幕特效实体
     for entity in screen_effect_query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+
+    // 清理悬停面板（重要：防止悬停面板在状态切换后残留）
+    for entity in card_hover_query.iter() {
+        info!("【清理奖励界面】清理卡牌悬停面板");
+        commands.entity(entity).despawn_recursive();
+    }
+    for entity in relic_hover_query.iter() {
+        info!("【清理奖励界面】清理遗物悬停面板");
         commands.entity(entity).despawn_recursive();
     }
 }
@@ -2341,6 +2389,7 @@ fn create_relic_reward_option(parent: &mut ChildBuilder, relic: Relic, asset_ser
             BackgroundColor(rarity_color),
             BorderRadius::all(Val::Px(8.0)),
             BorderColor(Color::srgb(0.3, 0.3, 0.3)),
+            RewardRelicButton { relic_id: relic.id },
         ))
         .with_children(|parent| {
             // 稀有度标签
@@ -2419,4 +2468,431 @@ fn handle_game_over_clicks(
             next_state.set(GameState::Map);
         }
     }
+}
+
+// ============================================================================
+// 悬停详情系统
+// ============================================================================
+
+/// 当前奖励的卡牌列表
+#[derive(Resource, Default)]
+struct CurrentRewardCards {
+    cards: Vec<Card>,
+}
+
+/// 当前奖励的遗物
+#[derive(Resource, Default)]
+struct CurrentRewardRelic {
+    relic: Option<Relic>,
+}
+
+/// 当前悬停的卡牌数据
+#[derive(Resource, Default)]
+pub struct HoveredCard {
+    pub card_id: Option<u32>,
+}
+
+/// 当前悬停的遗物数据
+#[derive(Resource, Default)]
+pub struct HoveredRelic {
+    pub relic_id: Option<RelicId>,
+}
+
+/// 鼠标位置（用于悬停面板定位）
+#[derive(Resource, Default)]
+struct MousePosition {
+    x: f32,
+    y: f32,
+}
+
+/// 处理卡牌悬停
+fn handle_card_hover(
+    interactions: Query<(&Interaction, &RewardCardButton), Changed<Interaction>>,
+    mut hovered_card: ResMut<HoveredCard>,
+    mut commands: Commands,
+    reward_cards: Res<CurrentRewardCards>,
+    asset_server: Res<AssetServer>,
+    mouse_position: Res<MousePosition>,
+    existing_panels: Query<Entity, With<CardHoverPanelMarker>>,
+) {
+    for (interaction, card_button) in interactions.iter() {
+        match interaction {
+            Interaction::Hovered => {
+                info!("【悬停】卡牌 ID: {}", card_button.card_id);
+
+                // 更新悬停状态
+                hovered_card.card_id = Some(card_button.card_id);
+
+                // 清除旧面板
+                for panel in existing_panels.iter() {
+                    commands.entity(panel).despawn_recursive();
+                }
+
+                // 从当前奖励卡牌中查找对应的卡牌
+                if let Some(card) = reward_cards.cards.iter().find(|c| c.id == card_button.card_id) {
+                    spawn_card_hover_panel(&mut commands, card, &asset_server, &mouse_position);
+                }
+            }
+            Interaction::None => {
+                // 鼠标移开，直接清理面板
+                if hovered_card.card_id == Some(card_button.card_id) {
+                    info!("【悬停】鼠标从卡牌 {} 移开，开始清理", card_button.card_id);
+                    hovered_card.card_id = None;
+
+                    // 立即清理所有卡牌面板
+                    for panel in existing_panels.iter() {
+                        info!("【悬停】清理卡牌面板");
+                        commands.entity(panel).despawn_recursive();
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// 处理遗物悬停
+fn handle_relic_hover(
+    interactions: Query<(&Interaction, &RewardRelicButton), Changed<Interaction>>,
+    mut hovered_relic: ResMut<HoveredRelic>,
+    mut commands: Commands,
+    reward_relic: Res<CurrentRewardRelic>,
+    asset_server: Res<AssetServer>,
+    mouse_position: Res<MousePosition>,
+    existing_panels: Query<Entity, With<RelicHoverPanelMarker>>,
+) {
+    for (interaction, relic_button) in interactions.iter() {
+        match interaction {
+            Interaction::Hovered => {
+                info!("【悬停】遗物 ID: {:?}", relic_button.relic_id);
+
+                // 更新悬停状态
+                hovered_relic.relic_id = Some(relic_button.relic_id);
+
+                // 清除旧面板
+                for panel in existing_panels.iter() {
+                    commands.entity(panel).despawn_recursive();
+                }
+
+                // 从当前奖励遗物中获取数据
+                if let Some(relic) = &reward_relic.relic {
+                    if relic.id == relic_button.relic_id {
+                        spawn_relic_hover_panel(&mut commands, relic, &asset_server, &mouse_position);
+                    }
+                }
+            }
+            Interaction::None => {
+                // 鼠标移开，直接清理面板
+                if hovered_relic.relic_id == Some(relic_button.relic_id) {
+                    info!("【悬停】鼠标从遗物 {:?} 移开，开始清理", relic_button.relic_id);
+                    hovered_relic.relic_id = None;
+
+                    // 立即清理所有遗物面板
+                    for panel in existing_panels.iter() {
+                        info!("【悬停】清理遗物面板");
+                        commands.entity(panel).despawn_recursive();
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// 更新鼠标位置
+fn update_mouse_position(
+    mut mouse_position: ResMut<MousePosition>,
+    q_windows: Query<&Window>,
+) {
+    if let Ok(window) = q_windows.get_single() {
+        if let Some(position) = window.cursor_position() {
+            mouse_position.x = position.x;
+            mouse_position.y = position.y;
+        }
+    }
+}
+
+/// 清理悬停面板
+fn cleanup_hover_panels(
+    hovered_card: Res<HoveredCard>,
+    hovered_relic: Res<HoveredRelic>,
+    mut commands: Commands,
+    card_panels: Query<Entity, With<CardHoverPanelMarker>>,
+    relic_panels: Query<Entity, With<RelicHoverPanelMarker>>,
+) {
+    // 记录当前状态
+    let card_panel_count = card_panels.iter().count();
+    let relic_panel_count = relic_panels.iter().count();
+
+    if card_panel_count > 0 || relic_panel_count > 0 {
+        info!("【清理系统】检查清理 - 卡牌悬停: {:?}, 遗物悬停: {:?}, 卡牌面板: {}, 遗物面板: {}",
+            hovered_card.card_id, hovered_relic.relic_id, card_panel_count, relic_panel_count);
+    }
+
+    // 如果没有悬停的卡牌，清理卡牌面板
+    if hovered_card.card_id.is_none() {
+        if card_panel_count > 0 {
+            info!("【清理系统】清理 {} 个卡牌面板", card_panel_count);
+        }
+        for panel in card_panels.iter() {
+            commands.entity(panel).despawn_recursive();
+        }
+    }
+
+    // 如果没有悬停的遗物，清理遗物面板
+    if hovered_relic.relic_id.is_none() {
+        if relic_panel_count > 0 {
+            info!("【清理系统】清理 {} 个遗物面板", relic_panel_count);
+        }
+        for panel in relic_panels.iter() {
+            commands.entity(panel).despawn_recursive();
+        }
+    }
+}
+
+/// 创建卡牌悬停详情面板
+fn spawn_card_hover_panel(commands: &mut Commands, card: &Card, asset_server: &AssetServer, mouse_pos: &MousePosition) {
+    let card_color = match card.card_type {
+        CardType::Attack => Color::srgb(0.8, 0.2, 0.2),
+        CardType::Defense => Color::srgb(0.2, 0.5, 0.8),
+        CardType::Skill => Color::srgb(0.2, 0.7, 0.3),
+        CardType::Power => Color::srgb(0.7, 0.3, 0.8),
+    };
+
+    let rarity_color = match card.rarity {
+        CardRarity::Common => Color::srgb(0.7, 0.7, 0.7),
+        CardRarity::Uncommon => Color::srgb(0.3, 0.8, 0.9),
+        CardRarity::Rare => Color::srgb(0.9, 0.7, 0.2),
+        CardRarity::Special => Color::srgb(0.9, 0.4, 0.9),
+    };
+
+    // 计算面板位置（跟随鼠标，但避免超出屏幕）
+    const PANEL_WIDTH: f32 = 300.0;
+    const OFFSET_X: f32 = 20.0;
+    const OFFSET_Y: f32 = 20.0;
+    const WINDOW_WIDTH: f32 = 1280.0;
+    const WINDOW_HEIGHT: f32 = 720.0;
+
+    let mut x = mouse_pos.x + OFFSET_X;
+    let mut y = mouse_pos.y + OFFSET_Y;
+
+    // 如果面板超出右边界，从左侧显示
+    if x + PANEL_WIDTH > WINDOW_WIDTH {
+        x = mouse_pos.x - PANEL_WIDTH - OFFSET_X;
+    }
+
+    // 如果面板超出底部，从上方显示
+    if y + 200.0 > WINDOW_HEIGHT {  // 假设面板高度约200px
+        y = mouse_pos.y - 200.0 - OFFSET_Y;
+    }
+
+    let (position_left, position_right) = if x + PANEL_WIDTH > WINDOW_WIDTH {
+        (None, Some(Val::Px(WINDOW_WIDTH - x)))
+    } else {
+        (Some(Val::Px(x)), None)
+    };
+
+    let (position_top, position_bottom) = if y + 200.0 > WINDOW_HEIGHT {
+        (Some(Val::Px(WINDOW_HEIGHT - y)), None)
+    } else {
+        (Some(Val::Px(y)), None)
+    };
+
+    let mut node = Node {
+        position_type: PositionType::Absolute,
+        width: Val::Px(PANEL_WIDTH),
+        height: Val::Auto,
+        flex_direction: FlexDirection::Column,
+        padding: UiRect::all(Val::Px(15.0)),
+        row_gap: Val::Px(8.0),
+        border: UiRect::all(Val::Px(2.0)),
+        ..default()
+    };
+
+    if let Some(left) = position_left {
+        node.left = left;
+    }
+    if let Some(right) = position_right {
+        node.right = right;
+    }
+    if let Some(top) = position_top {
+        node.top = top;
+    }
+    if let Some(bottom) = position_bottom {
+        node.bottom = bottom;
+    }
+
+    commands
+        .spawn((
+            node,
+            BackgroundColor(Color::srgba(0.15, 0.15, 0.2, 0.95)),
+            BorderColor(rarity_color),
+            CardHoverPanelMarker,
+        ))
+        .with_children(|parent| {
+            // 稀有度标签
+            parent.spawn((
+                Text::new(format!("{:?}", card.rarity)),
+                TextFont {
+                    font: asset_server.load("fonts/Arial Unicode.ttf"),
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(rarity_color),
+            ));
+
+            // 卡牌名称
+            parent.spawn((
+                Text::new(card.name.clone()),
+                TextFont {
+                    font: asset_server.load("fonts/Arial Unicode.ttf"),
+                    font_size: 24.0,
+                    ..default()
+                },
+                TextColor(card_color),
+                TextLayout::new_with_justify(JustifyText::Center),
+            ));
+
+            // 能量消耗
+            parent.spawn((
+                Text::new(format!("能量: {}", card.cost)),
+                TextFont {
+                    font: asset_server.load("fonts/Arial Unicode.ttf"),
+                    font_size: 16.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(1.0, 0.9, 0.3)),
+            ));
+
+            // 卡牌类型
+            parent.spawn((
+                Text::new(format!("{:?}", card.card_type)),
+                TextFont {
+                    font: asset_server.load("fonts/Arial Unicode.ttf"),
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.8)),
+            ));
+
+            // 卡牌描述
+            parent.spawn((
+                Text::new(card.description.clone()),
+                TextFont {
+                    font: asset_server.load("fonts/Arial Unicode.ttf"),
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.9)),
+                TextLayout::new_with_justify(JustifyText::Center),
+            ));
+        });
+
+    info!("【悬停面板】已创建卡牌详情面板: {}", card.name);
+}
+
+/// 创建遗物悬停详情面板
+fn spawn_relic_hover_panel(commands: &mut Commands, relic: &Relic, asset_server: &AssetServer, mouse_pos: &MousePosition) {
+    let rarity_color = relic.rarity.color();
+    let text_color = relic.rarity.text_color();
+
+    // 计算面板位置（与卡牌相同逻辑）
+    const PANEL_WIDTH: f32 = 300.0;
+    const OFFSET_X: f32 = 20.0;
+    const OFFSET_Y: f32 = 20.0;
+    const WINDOW_WIDTH: f32 = 1280.0;
+    const WINDOW_HEIGHT: f32 = 720.0;
+
+    let mut x = mouse_pos.x + OFFSET_X;
+    let mut y = mouse_pos.y + OFFSET_Y;
+
+    if x + PANEL_WIDTH > WINDOW_WIDTH {
+        x = mouse_pos.x - PANEL_WIDTH - OFFSET_X;
+    }
+
+    if y + 200.0 > WINDOW_HEIGHT {
+        y = mouse_pos.y - 200.0 - OFFSET_Y;
+    }
+
+    let (position_left, position_right) = if x + PANEL_WIDTH > WINDOW_WIDTH {
+        (None, Some(Val::Px(WINDOW_WIDTH - x)))
+    } else {
+        (Some(Val::Px(x)), None)
+    };
+
+    let (position_top, position_bottom) = if y + 200.0 > WINDOW_HEIGHT {
+        (Some(Val::Px(WINDOW_HEIGHT - y)), None)
+    } else {
+        (Some(Val::Px(y)), None)
+    };
+
+    let mut node = Node {
+        position_type: PositionType::Absolute,
+        width: Val::Px(PANEL_WIDTH),
+        height: Val::Auto,
+        flex_direction: FlexDirection::Column,
+        padding: UiRect::all(Val::Px(15.0)),
+        row_gap: Val::Px(8.0),
+        border: UiRect::all(Val::Px(2.0)),
+        ..default()
+    };
+
+    if let Some(left) = position_left {
+        node.left = left;
+    }
+    if let Some(right) = position_right {
+        node.right = right;
+    }
+    if let Some(top) = position_top {
+        node.top = top;
+    }
+    if let Some(bottom) = position_bottom {
+        node.bottom = bottom;
+    }
+
+    commands
+        .spawn((
+            node,
+            BackgroundColor(Color::srgba(0.15, 0.15, 0.2, 0.95)),
+            BorderColor(rarity_color),
+            RelicHoverPanelMarker,
+        ))
+        .with_children(|parent| {
+            // 稀有度标签
+            parent.spawn((
+                Text::new(format!("{:?}", relic.rarity)),
+                TextFont {
+                    font: asset_server.load("fonts/Arial Unicode.ttf"),
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(rarity_color),
+            ));
+
+            // 遗物名称
+            parent.spawn((
+                Text::new(relic.name.clone()),
+                TextFont {
+                    font: asset_server.load("fonts/Arial Unicode.ttf"),
+                    font_size: 24.0,
+                    ..default()
+                },
+                TextColor(text_color),
+                TextLayout::new_with_justify(JustifyText::Center),
+            ));
+
+            // 遗物描述
+            parent.spawn((
+                Text::new(relic.description.clone()),
+                TextFont {
+                    font: asset_server.load("fonts/Arial Unicode.ttf"),
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.9)),
+                TextLayout::new_with_justify(JustifyText::Center),
+            ));
+        });
+
+    info!("【悬停面板】已创建遗物详情面板: {}", relic.name);
 }
