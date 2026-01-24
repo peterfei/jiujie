@@ -120,12 +120,20 @@ pub struct Enemy {
     pub id: u32,
     /// 敌人名称
     pub name: String,
+    /// 敌人类型
+    pub enemy_type: EnemyType,
     /// 当前生命值
     pub hp: i32,
     /// 最大生命值
     pub max_hp: i32,
     /// 当前意图（下次行动）
     pub intent: EnemyIntent,
+    /// AI模式配置
+    pub ai_pattern: AiPattern,
+    /// 当前攻击力加成（来自Buff）
+    pub strength: i32,
+    /// 当前护甲
+    pub block: i32,
 }
 
 /// 敌人意图
@@ -135,21 +143,133 @@ pub enum EnemyIntent {
     Attack { damage: i32 },
     /// 防御
     Defend { block: i32 },
-    /// 强化
+    /// 强化（给自身攻击力增益）
     Buff { strength: i32 },
     /// 等待
     Wait,
 }
 
+/// 敌人类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EnemyType {
+    /// 哥布林 - 攻击型，高攻击概率
+    Goblin,
+    /// 骷髅 - 均衡型
+    Skeleton,
+    /// 史莱姆 - 防御型，高防御概率
+    Slime,
+    /// Boss - 强力型，多种攻击模式
+    Boss,
+}
+
+/// AI模式配置 - 定义敌人选择意图的概率
+#[derive(Debug, Clone)]
+pub struct AiPattern {
+    /// 攻击概率 (0.0-1.0)
+    pub attack_chance: f32,
+    /// 防御概率 (0.0-1.0)
+    pub defend_chance: f32,
+    /// 强化概率 (0.0-1.0)
+    pub buff_chance: f32,
+    /// 伤害范围
+    pub damage_range: (i32, i32),
+    /// 防御范围
+    pub block_range: (i32, i32),
+    /// 强化范围
+    pub buff_range: (i32, i32),
+}
+
+impl AiPattern {
+    /// 哥布林模式 - 激进攻击型
+    pub fn goblin() -> Self {
+        Self {
+            attack_chance: 0.7,
+            defend_chance: 0.1,
+            buff_chance: 0.2,
+            damage_range: (8, 12),
+            block_range: (3, 5),
+            buff_range: (1, 2),
+        }
+    }
+
+    /// 骷髅模式 - 均衡型
+    pub fn skeleton() -> Self {
+        Self {
+            attack_chance: 0.5,
+            defend_chance: 0.3,
+            buff_chance: 0.2,
+            damage_range: (6, 10),
+            block_range: (5, 8),
+            buff_range: (2, 3),
+        }
+    }
+
+    /// 史莱姆模式 - 防御型
+    pub fn slime() -> Self {
+        Self {
+            attack_chance: 0.3,
+            defend_chance: 0.5,
+            buff_chance: 0.2,
+            damage_range: (4, 7),
+            block_range: (8, 12),
+            buff_range: (1, 2),
+        }
+    }
+
+    /// Boss模式 - 强力型
+    pub fn boss() -> Self {
+        Self {
+            attack_chance: 0.6,
+            defend_chance: 0.2,
+            buff_chance: 0.2,
+            damage_range: (12, 18),
+            block_range: (6, 10),
+            buff_range: (3, 5),
+        }
+    }
+
+    /// 根据敌人类型获取AI模式
+    pub fn from_enemy_type(enemy_type: EnemyType) -> Self {
+        match enemy_type {
+            EnemyType::Goblin => Self::goblin(),
+            EnemyType::Skeleton => Self::skeleton(),
+            EnemyType::Slime => Self::slime(),
+            EnemyType::Boss => Self::boss(),
+        }
+    }
+}
+
 impl Enemy {
-    /// 创建新敌人
+    /// 创建新敌人（默认哥布林类型）
     pub fn new(id: u32, name: impl Into<String>, hp: i32) -> Self {
+        let enemy_type = EnemyType::Goblin;
+        let ai_pattern = AiPattern::from_enemy_type(enemy_type);
         Self {
             id,
             name: name.into(),
+            enemy_type,
             hp,
             max_hp: hp,
-            intent: EnemyIntent::Attack { damage: 10 },
+            intent: EnemyIntent::Wait,
+            ai_pattern,
+            strength: 0,
+            block: 0,
+        }
+    }
+
+    /// 创建指定类型的敌人
+    pub fn with_type(id: u32, name: impl Into<String>, hp: i32, enemy_type: EnemyType) -> Self {
+        let ai_pattern = AiPattern::from_enemy_type(enemy_type);
+        Self {
+            id,
+            name: name.into(),
+            enemy_type,
+            hp,
+            max_hp: hp,
+            intent: EnemyIntent::Wait,
+            ai_pattern,
+            strength: 0,
+            block: 0,
         }
     }
 
@@ -166,6 +286,67 @@ impl Enemy {
     /// 检查是否死亡
     pub fn is_dead(&self) -> bool {
         self.hp <= 0
+    }
+
+    /// 使用AI选择新的意图
+    pub fn choose_new_intent(&mut self) {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
+        let roll: f32 = rng.gen();
+        let intent = if roll < self.ai_pattern.attack_chance {
+            // 攻击
+            let base_damage = rng.gen_range(self.ai_pattern.damage_range.0..=self.ai_pattern.damage_range.1);
+            let total_damage = base_damage + self.strength;
+            EnemyIntent::Attack { damage: total_damage }
+        } else if roll < self.ai_pattern.attack_chance + self.ai_pattern.defend_chance {
+            // 防御
+            let block = rng.gen_range(self.ai_pattern.block_range.0..=self.ai_pattern.block_range.1);
+            EnemyIntent::Defend { block }
+        } else if roll < self.ai_pattern.attack_chance + self.ai_pattern.defend_chance + self.ai_pattern.buff_chance {
+            // 强化
+            let strength = rng.gen_range(self.ai_pattern.buff_range.0..=self.ai_pattern.buff_range.1);
+            EnemyIntent::Buff { strength }
+        } else {
+            // 等待
+            EnemyIntent::Wait
+        };
+
+        self.intent = intent;
+    }
+
+    /// 执行意图（敌人回合行动）
+    pub fn execute_intent(&mut self) -> EnemyIntent {
+        match self.intent {
+            EnemyIntent::Attack { damage } => {
+                // 攻击意图直接返回，由系统处理
+                EnemyIntent::Attack { damage }
+            }
+            EnemyIntent::Defend { block } => {
+                // 获得护甲
+                self.block += block;
+                info!("{} 获得了 {} 点护甲", self.name, block);
+                EnemyIntent::Defend { block }
+            }
+            EnemyIntent::Buff { strength } => {
+                // 获得攻击力加成
+                self.strength += strength;
+                info!("{} 获得了 {} 点攻击力", self.name, strength);
+                EnemyIntent::Buff { strength }
+            }
+            EnemyIntent::Wait => {
+                info!("{} 等待中", self.name);
+                EnemyIntent::Wait
+            }
+        }
+    }
+
+    /// 回合开始时清理临时效果
+    pub fn start_turn(&mut self) {
+        // 清空护甲
+        self.block = 0;
+        // 选择新的意图
+        self.choose_new_intent();
     }
 }
 

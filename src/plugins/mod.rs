@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use crate::states::GameState;
-use crate::components::{MapNode, NodeType, MapProgress, Player, Enemy, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, CardType, CardRarity, CardPool, PlayerDeck, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent, CharacterType, SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation, EnemySpriteMarker, VictoryDelay};
+use crate::components::{MapNode, NodeType, MapProgress, Player, Enemy, EnemyIntent, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, CardType, CardRarity, CardPool, PlayerDeck, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent, CharacterType, SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation, EnemySpriteMarker, VictoryDelay};
 use crate::systems::sprite::spawn_character_sprite;
 
 /// 核心游戏插件
@@ -1064,7 +1064,7 @@ fn handle_combat_button_clicks(
     mut next_state: ResMut<NextState<GameState>>,
     mut combat_state: ResMut<CombatState>,
     mut player_query: Query<&mut Player>,
-    _enemy_query: Query<&mut Enemy>,
+    mut enemy_query: Query<&mut Enemy>,
     mut attack_events: EventWriter<EnemyAttackEvent>,
     mut effect_events: EventWriter<SpawnEffectEvent>,
     mut screen_events: EventWriter<ScreenEffectEvent>,
@@ -1080,57 +1080,94 @@ fn handle_combat_button_clicks(
             // 简单实现：切换到敌人回合
             combat_state.phase = TurnPhase::EnemyTurn;
 
-            // TODO: 敌人AI行动逻辑
-            // 敌人攻击玩家
-            if let Ok(mut player) = player_query.get_single_mut() {
-                // 检查是否破甲（护甲被完全击破）
-                let block_broken = player.block > 0 && 10 >= player.block;
+            // 敌人AI行动逻辑
+            if let Ok(mut enemy) = enemy_query.get_single_mut() {
+                // 执行敌人意图
+                let executed_intent = enemy.execute_intent();
 
-                player.take_damage(10);
-                info!("玩家受到10点伤害，剩余HP: {}", player.hp);
+                match executed_intent {
+                    EnemyIntent::Attack { damage } => {
+                        if let Ok(mut player) = player_query.get_single_mut() {
+                            // 检查是否破甲（护甲被完全击破）
+                            let block_broken = player.block > 0 && damage >= player.block;
 
-                // 发送攻击事件，触发动画
-                attack_events.send(EnemyAttackEvent::new(10, block_broken));
+                            player.take_damage(damage);
+                            info!("玩家受到{}点伤害，剩余HP: {}", damage, player.hp);
 
-                // 触发粒子特效（火焰+受击）
-                effect_events.send(SpawnEffectEvent {
-                    effect_type: EffectType::Fire,
-                    position: Vec3::new(0.0, 100.0, 999.0),
-                    burst: true,
-                    count: 30,
-                });
-                effect_events.send(SpawnEffectEvent {
-                    effect_type: EffectType::Hit,
-                    position: Vec3::new(0.0, -200.0, 999.0),
-                    burst: true,
-                    count: 20,
-                });
+                            // 发送攻击事件，触发动画
+                            attack_events.send(EnemyAttackEvent::new(damage, block_broken));
 
-                // 触发屏幕特效（震动+红色闪光）
-                // 触发屏幕特效（震动+红色闪光）
-                screen_events.send(ScreenEffectEvent::Shake {
-                    trauma: 0.4,
-                    decay: 4.0,
-                });
-                screen_events.send(ScreenEffectEvent::Flash {
-                    color: Color::srgba(1.0, 0.0, 0.0, 0.6),
-                    duration: 0.15,
-                });
-            }
+                            // 触发粒子特效（火焰+受击）
+                            effect_events.send(SpawnEffectEvent {
+                                effect_type: EffectType::Fire,
+                                position: Vec3::new(0.0, 100.0, 999.0),
+                                burst: true,
+                                count: 30,
+                            });
+                            effect_events.send(SpawnEffectEvent {
+                                effect_type: EffectType::Hit,
+                                position: Vec3::new(0.0, -200.0, 999.0),
+                                burst: true,
+                                count: 20,
+                            });
 
-            // 检查战斗是否结束
-            if let Ok(player) = player_query.get_single() {
-                if player.hp <= 0 {
-                    info!("玩家败北！");
-                    // TODO: 游戏结束逻辑
+                            // 触发屏幕特效（震动+红色闪光）
+                            screen_events.send(ScreenEffectEvent::Shake {
+                                trauma: 0.4,
+                                decay: 4.0,
+                            });
+                            screen_events.send(ScreenEffectEvent::Flash {
+                                color: Color::srgba(1.0, 0.0, 0.0, 0.6),
+                                duration: 0.15,
+                            });
+                        }
+                    }
+                    EnemyIntent::Defend { block } => {
+                        info!("{} 获得了 {} 点护甲", enemy.name, block);
+                        // 触发冰霜特效
+                        effect_events.send(SpawnEffectEvent {
+                            effect_type: EffectType::Ice,
+                            position: Vec3::new(0.0, 100.0, 999.0),
+                            burst: true,
+                            count: 25,
+                        });
+                    }
+                    EnemyIntent::Buff { strength } => {
+                        info!("{} 获得了 {} 点攻击力", enemy.name, strength);
+                        // 触发强化特效（紫色）
+                        effect_events.send(SpawnEffectEvent {
+                            effect_type: EffectType::Victory,
+                            position: Vec3::new(0.0, 100.0, 999.0),
+                            burst: true,
+                            count: 20,
+                        });
+                    }
+                    EnemyIntent::Wait => {
+                        info!("{} 等待中", enemy.name);
+                    }
+                }
+
+                // 检查战斗是否结束
+                if let Ok(player) = player_query.get_single() {
+                    if player.hp <= 0 {
+                        info!("玩家败北！");
+                        // TODO: 游戏结束逻辑
+                    }
                 }
             }
 
             // 新回合开始
             if let Ok(mut player) = player_query.get_single_mut() {
                 player.start_turn();
-                info!("回合开始：护甲清零");
+                info!("玩家新回合：护甲清零");
             }
+
+            // 敌人选择新意图
+            if let Ok(mut enemy) = enemy_query.get_single_mut() {
+                enemy.start_turn();
+                info!("敌人新意图: {:?}", enemy.intent);
+            }
+
             // 重置抽牌标志，允许本回合抽牌
             combat_state.cards_drawn_this_turn = false;
             combat_state.phase = TurnPhase::PlayerAction;

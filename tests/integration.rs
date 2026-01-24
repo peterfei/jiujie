@@ -11,5 +11,8 @@ mod victory_flow_integration;
 // 调试测试
 mod test_debug;
 
+// 敌人AI场景测试
+mod enemy_ai_scenario;
+
 // 重新导出测试工具，供其他测试使用
 pub use test_utils::*;
