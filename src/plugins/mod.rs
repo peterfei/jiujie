@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use crate::states::GameState;
-use crate::components::{MapNode, NodeType, MapProgress, Player, Enemy, EnemyIntent, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, CardType, CardRarity, CardPool, PlayerDeck, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent, CharacterType, SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation, EnemySpriteMarker, VictoryDelay};
+use crate::components::{MapNode, NodeType, MapProgress, Player, Enemy, EnemyIntent, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, CardType, CardRarity, CardPool, PlayerDeck, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent, CharacterType, SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation, EnemySpriteMarker, VictoryDelay, RelicCollection, Relic};
 use crate::systems::sprite::spawn_character_sprite;
 
 /// 核心游戏插件
@@ -1867,11 +1867,15 @@ fn update_victory_delay(
 // ============================================================================
 
 /// 设置奖励界面
-fn setup_reward_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup_reward_ui(mut commands: Commands, asset_server: Res<AssetServer>, relic_collection: Res<RelicCollection>) {
     info!("设置奖励界面");
 
     // 生成随机奖励卡牌（3张）
     let reward_cards = CardPool::random_rewards(3);
+
+    // 生成随机遗物奖励
+    let relic_reward = generate_relic_reward(&relic_collection);
+    let show_relic = relic_reward.is_some();
 
     commands
         .spawn((
@@ -1890,7 +1894,7 @@ fn setup_reward_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
         .with_children(|parent| {
             // 标题
             parent.spawn((
-                Text::new("战斗胜利！选择一张卡牌"),
+                Text::new("战斗胜利！选择奖励"),
                 TextFont {
                     font: asset_server.load("fonts/Arial Unicode.ttf"),
                     font_size: 48.0,
@@ -1900,20 +1904,49 @@ fn setup_reward_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                 TextLayout::new_with_justify(JustifyText::Center),
             ));
 
-            // 卡牌容器
+            // 奖励选项容器
             parent
                 .spawn(Node {
                     width: Val::Percent(80.0),
                     height: Val::Auto,
-                    flex_direction: FlexDirection::Row,
-                    justify_content: JustifyContent::Center,
-                    column_gap: Val::Px(30.0),
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    row_gap: Val::Px(20.0),
                     ..default()
                 })
                 .with_children(|parent| {
-                    // 为每张奖励卡创建UI
-                    for (index, card) in reward_cards.iter().enumerate() {
-                        create_reward_card(parent, card, index, &asset_server);
+                    // 卡牌容器
+                    parent
+                        .spawn(Node {
+                            width: Val::Percent(100.0),
+                            height: Val::Auto,
+                            flex_direction: FlexDirection::Row,
+                            justify_content: JustifyContent::Center,
+                            column_gap: Val::Px(30.0),
+                            ..default()
+                        })
+                        .with_children(|parent| {
+                            // 为每张奖励卡创建UI
+                            for (index, card) in reward_cards.iter().enumerate() {
+                                create_reward_card(parent, card, index, &asset_server);
+                            }
+                        });
+
+                    // 遗物选项（如果可用）
+                    if show_relic {
+                        if let Some(relic) = relic_reward {
+                            parent.spawn(Node {
+                                width: Val::Percent(100.0),
+                                height: Val::Auto,
+                                align_items: AlignItems::Center,
+                                justify_content: JustifyContent::Center,
+                                margin: UiRect::top(Val::Px(20.0)),
+                                ..default()
+                            })
+                            .with_children(|parent| {
+                                create_relic_reward_option(parent, relic, &asset_server);
+                            });
+                        }
                     }
                 });
 
@@ -1939,7 +1972,7 @@ fn setup_reward_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                             font_size: 20.0,
                             ..default()
                         },
-                        TextColor(Color::WHITE),
+                        TextColor(Color::srgb(1.0, 1.0, 1.0)),
                     ));
                 })
                 .observe(|_entity: Trigger<Pointer<Click>>, mut next_state: ResMut<NextState<GameState>>, mut map_progress: ResMut<MapProgress>| {
@@ -1949,8 +1982,8 @@ fn setup_reward_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                     info!("节点已完成，已解锁下一层");
                     next_state.set(GameState::Map);
                 });
-        });
-}
+        }); // commands.with_children
+} // setup_reward_ui 函数结束
 
 /// 创建单张奖励卡UI
 fn create_reward_card(parent: &mut ChildBuilder, card: &Card, _index: usize, asset_server: &AssetServer) {
@@ -2253,6 +2286,111 @@ fn cleanup_game_over_ui(mut commands: Commands, query: Query<Entity, With<GameOv
     for entity in query.iter() {
         commands.entity(entity).despawn_recursive();
     }
+}
+
+// ============================================================================
+// 遗物奖励辅助函数
+// ============================================================================
+
+/// 生成遗物奖励（基于当前拥有的遗物，避免重复）
+fn generate_relic_reward(relic_collection: &RelicCollection) -> Option<Relic> {
+    use rand::Rng;
+
+    // 获取所有未拥有的遗物
+    let all_relics = vec![
+        Relic::burning_blood(),
+        Relic::bag_of_preparation(),
+        Relic::anchor(),
+        Relic::strange_spoon(),
+    ];
+
+    let available_relics: Vec<_> = all_relics
+        .into_iter()
+        .filter(|r| !relic_collection.has(r.id))
+        .collect();
+
+    if available_relics.is_empty() {
+        info!("没有可用的遗物奖励");
+        return None;
+    }
+
+    // 随机选择一个可用遗物
+    let mut rng = rand::thread_rng();
+    let index = rng.gen_range(0..available_relics.len());
+    Some(available_relics[index].clone())
+}
+
+/// 创建遗物奖励选项UI
+fn create_relic_reward_option(parent: &mut ChildBuilder, relic: Relic, asset_server: &AssetServer) {
+
+    let rarity_color = relic.rarity.color();
+    let text_color = relic.rarity.text_color();
+
+    parent
+        .spawn((
+            Button,
+            Node {
+                width: Val::Px(280.0),
+                height: Val::Auto,
+                flex_direction: FlexDirection::Column,
+                padding: UiRect::all(Val::Px(15.0)),
+                align_items: AlignItems::Center,
+                row_gap: Val::Px(8.0),
+                ..default()
+            },
+            BackgroundColor(rarity_color),
+            BorderRadius::all(Val::Px(8.0)),
+            BorderColor(Color::srgb(0.3, 0.3, 0.3)),
+        ))
+        .with_children(|parent| {
+            // 稀有度标签
+            parent.spawn((
+                Text::new(format!("{:?}", relic.rarity)),
+                TextFont {
+                    font: asset_server.load("fonts/Arial Unicode.ttf"),
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(text_color),
+            ));
+
+            // 遗物名称
+            parent.spawn((
+                Text::new(relic.name.clone()),
+                TextFont {
+                    font: asset_server.load("fonts/Arial Unicode.ttf"),
+                    font_size: 24.0,
+                    ..default()
+                },
+                TextColor(text_color),
+                TextLayout::new_with_justify(JustifyText::Center),
+            ));
+
+            // 遗物描述
+            parent.spawn((
+                Text::new(relic.description.clone()),
+                TextFont {
+                    font: asset_server.load("fonts/Arial Unicode.ttf"),
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(text_color),
+                TextLayout::new_with_justify(JustifyText::Center),
+            ));
+        })
+        .observe(move |_entity: Trigger<Pointer<Click>>, mut relic_collection: ResMut<RelicCollection>, mut next_state: ResMut<NextState<GameState>>, mut map_progress: ResMut<MapProgress>| {
+            // 添加遗物到背包
+            let added = relic_collection.add_relic(relic.clone());
+            if added {
+                info!("【遗物奖励】获得了遗物: {}", relic.name);
+            } else {
+                warn!("【遗物奖励】遗物已存在，未能添加: {}", relic.name);
+            }
+
+            // 标记当前节点为完成，解锁下一层
+            map_progress.complete_current_node();
+            next_state.set(GameState::Map);
+        });
 }
 
 /// 处理游戏结束界面按钮点击

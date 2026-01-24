@@ -9,7 +9,7 @@ use bevy::prelude::*;
 // ============================================================================
 
 /// 遗物组件
-#[derive(Component, Debug, Clone)]
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
 pub struct Relic {
     /// 遗物ID
     pub id: RelicId,
