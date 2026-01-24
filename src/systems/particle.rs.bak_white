@@ -34,19 +34,36 @@ impl Plugin for ParticlePlugin {
     }
 }
 
+
+/// 创建粒子白色纹理
+
+
 /// 创建粒子白色纹理
 fn setup_particle_texture(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
-    // 使用默认白色纹理
-    let image = Image::default();
+    // 创建8x8白色图像
+    use bevy::prelude::*;
+    let pixel_data = vec
+![255u8, 255, 255, 255]
+    .repeat(8 * 8);
+
+    let image = Image::new(
+        Extent3d {
+            width: 8,
+            height: 8,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        pixel_data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    );
 
     let handle = images.add(image);
     commands.insert_resource(ParticleTexture { handle });
-    info!("粒子白色纹理已创建");
+    info!("粒子白色纹理已创建 (8x8)");
 }
 
-/// 处理特效事件
-fn handle_effect_events(
-    mut commands: Commands,
+
     texture: Res<ParticleTexture>,
     mut events: EventReader<SpawnEffectEvent>,
 ) {

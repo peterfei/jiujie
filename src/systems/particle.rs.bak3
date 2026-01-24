@@ -3,6 +3,7 @@
 //! 处理粒子发射、更新和渲染
 
 use bevy::prelude::*;
+use bevy::render::render_asset::RenderAssetUsages;
 use crate::components::particle::{
     Particle, ParticleEmitter, EmitterConfig, EffectType,
     SpawnEffectEvent, ParticleMarker, EmitterMarker
@@ -34,9 +35,10 @@ impl Plugin for ParticlePlugin {
     }
 }
 
+
 /// 创建粒子白色纹理
 fn setup_particle_texture(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
-    // 使用默认白色纹理
+    // 使用默认图像作为白色纹理
     let image = Image::default();
 
     let handle = images.add(image);

@@ -115,6 +115,11 @@ impl MapProgress {
     pub fn is_boss_defeated(&self) -> bool {
         self.nodes.iter().any(|n| n.node_type == NodeType::Boss && n.completed)
     }
+
+    /// 重置地图进度（用于重新开始游戏）
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
 }
 
 impl Default for MapProgress {

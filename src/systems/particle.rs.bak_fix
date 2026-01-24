@@ -3,6 +3,8 @@
 //! 处理粒子发射、更新和渲染
 
 use bevy::prelude::*;
+use bevy::render::render_asset::RenderAssetUsages;
+use bevy::render::texture::ImageTextureFormat;
 use crate::components::particle::{
     Particle, ParticleEmitter, EmitterConfig, EffectType,
     SpawnEffectEvent, ParticleMarker, EmitterMarker
@@ -36,12 +38,27 @@ impl Plugin for ParticlePlugin {
 
 /// 创建粒子白色纹理
 fn setup_particle_texture(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
-    // 使用默认白色纹理
-    let image = Image::default();
+    // 创建一个8x8的白色图像
+    let mut pixel_data = Vec::with_capacity(8 * 8 * 4);
+    for _ in 0..(8 * 8) {
+        pixel_data.extend_from_slice(&[255u8, 255, 255, 255]); // 白色 RGBA
+    }
+
+    let image = Image::new(
+        bevy::render::texture::Extent3d {
+            width: 8,
+            height: 8,
+            depth_or_array_layers: 1,
+        },
+        bevy::render::texture::TextureDimension::D2,
+        pixel_data,
+        bevy::render::texture::TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    );
 
     let handle = images.add(image);
     commands.insert_resource(ParticleTexture { handle });
-    info!("粒子白色纹理已创建");
+    info!("粒子白色纹理已创建 (8x8)");
 }
 
 /// 处理特效事件

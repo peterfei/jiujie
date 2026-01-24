@@ -242,6 +242,21 @@ impl EmitterConfig {
         }
     }
 
+    /// 胜利特效配置（金色圆形粒子，向上飘动）
+    pub fn victory() -> Self {
+        Self {
+            lifetime: (1.0, 2.0),
+            size: (15.0, 30.0),
+            start_color: Color::srgb(1.0, 0.9, 0.3),
+            end_color: Color::srgba(1.0, 0.7, 0.0, 0.0),
+            speed: (80.0, 150.0),
+            angle: (-std::f32::consts::PI / 2.0 - 1.0, -std::f32::consts::PI / 2.0 + 1.0),
+            gravity: Vec2::new(0.0, 50.0),
+            rotation_speed: (-3.0, 3.0),
+            shape: ParticleShape::Circle,
+        }
+    }
+
     /// 生成随机粒子
     pub fn spawn_particle(&self, _position: Vec3) -> Particle {
         use rand::Rng;
@@ -281,6 +296,8 @@ pub enum ParticleShape {
     Line,
     /// 三角形
     Triangle,
+    /// 星形
+    Star,
 }
 
 /// 特效类型
@@ -298,6 +315,8 @@ pub enum EffectType {
     Hit,
     /// 金币
     Coin,
+    /// 胜利（金色粒子）
+    Victory,
 }
 
 impl EffectType {
@@ -310,6 +329,7 @@ impl EffectType {
             EffectType::Heal => EmitterConfig::heal(),
             EffectType::Hit => EmitterConfig::hit(),
             EffectType::Coin => EmitterConfig::coin(),
+            EffectType::Victory => EmitterConfig::victory(),
         }
     }
 }
@@ -360,3 +380,28 @@ pub struct ParticleMarker;
 /// 发射器标记组件
 #[derive(Component)]
 pub struct EmitterMarker;
+
+/// 敌人死亡动画组件
+#[derive(Component)]
+pub struct EnemyDeathAnimation {
+    /// 动画进度 (0.0 到 1.0)
+    pub progress: f32,
+    /// 淡出持续时间（秒）
+    pub duration: f32,
+    /// 已经过的时间
+    pub elapsed: f32,
+}
+
+impl EnemyDeathAnimation {
+    pub fn new(duration: f32) -> Self {
+        Self {
+            progress: 0.0,
+            duration,
+            elapsed: 0.0,
+        }
+    }
+}
+
+/// 胜利事件（敌人被击败时触发）
+#[derive(Event, Debug)]
+pub struct VictoryEvent;

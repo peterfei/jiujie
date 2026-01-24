@@ -200,6 +200,27 @@ pub struct CombatState {
     pub cards_drawn_this_turn: bool,
 }
 
+/// 胜利延迟计时器（用于延迟进入奖励界面，让粒子特效播放）
+#[derive(Resource, Debug, Clone)]
+pub struct VictoryDelay {
+    /// 是否正在延迟
+    pub active: bool,
+    /// 已经过的时间
+    pub elapsed: f32,
+    /// 延迟时长（秒）
+    pub duration: f32,
+}
+
+impl VictoryDelay {
+    pub fn new(duration: f32) -> Self {
+        Self {
+            active: false,
+            elapsed: 0.0,
+            duration,
+        }
+    }
+}
+
 impl Default for CombatState {
     fn default() -> Self {
         Self {
@@ -237,6 +258,11 @@ impl PlayerDeck {
     /// 检查是否为空
     pub fn is_empty(&self) -> bool {
         self.cards.is_empty()
+    }
+
+    /// 重置牌组为初始状态（用于重新开始游戏）
+    pub fn reset(&mut self) {
+        self.cards = create_starting_deck();
     }
 }
 

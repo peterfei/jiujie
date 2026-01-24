@@ -9,7 +9,7 @@ pub mod particle;
 pub mod screen_effect;
 
 pub use map::{MapNode, NodeType, MapConfig, generate_map_nodes, MapProgress};
-pub use combat::{Player, Enemy, EnemyIntent, CombatConfig, CombatState, TurnPhase, PlayerDeck};
+pub use combat::{Player, Enemy, EnemyIntent, CombatConfig, CombatState, TurnPhase, PlayerDeck, VictoryDelay};
 pub use cards::{
     Card, CardType, CardEffect, CardRarity,
     DrawPile, DiscardPile, Hand,
@@ -25,7 +25,8 @@ pub use sprite::{
 };
 pub use particle::{
     Particle, ParticleEmitter, EmitterConfig, EffectType,
-    SpawnEffectEvent, ParticleMarker, EmitterMarker
+    SpawnEffectEvent, ParticleMarker, EmitterMarker,
+    EnemyDeathAnimation, VictoryEvent
 };
 pub use screen_effect::{
     CameraShake, ScreenFlash, ScreenEffectEvent, ScreenEffectMarker
