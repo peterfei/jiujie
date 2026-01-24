@@ -6,7 +6,7 @@
 //! 3. 启动游戏循环
 
 use bevy_card_battler::plugins::{CorePlugin, MenuPlugin};
-use bevy_card_battler::systems::{AnimationPlugin, SpritePlugin, ParticlePlugin, ScreenEffectPlugin};
+use bevy_card_battler::systems::{AnimationPlugin, SpritePlugin, ParticlePlugin, ScreenEffectPlugin, RelicPlugin, RelicUiPlugin};
 use bevy_card_battler::states::GameState;
 use bevy::prelude::*;
 
@@ -42,6 +42,10 @@ fn main() {
         .add_plugins(ParticlePlugin)
         // 注册屏幕特效插件
         .add_plugins(ScreenEffectPlugin)
+        // 注册遗物插件
+        .add_plugins(RelicPlugin)
+        // 注册遗物UI插件
+        .add_plugins(RelicUiPlugin)
         // 运行应用
         .run();
 }

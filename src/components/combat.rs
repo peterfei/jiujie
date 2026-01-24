@@ -92,6 +92,11 @@ impl Player {
         self.block = 0;
     }
 
+    /// 获得能量
+    pub fn gain_energy(&mut self, amount: i32) {
+        self.energy += amount;
+    }
+
     /// 消耗能量
     pub fn use_energy(&mut self, amount: i32) -> bool {
         if self.energy >= amount {

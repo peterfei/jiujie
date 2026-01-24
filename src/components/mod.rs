@@ -7,6 +7,7 @@ pub mod animation;
 pub mod sprite;
 pub mod particle;
 pub mod screen_effect;
+pub mod relic;
 
 pub use map::{MapNode, NodeType, MapConfig, generate_map_nodes, MapProgress};
 pub use combat::{Player, Enemy, EnemyIntent, EnemyType, AiPattern, CombatConfig, CombatState, TurnPhase, PlayerDeck, VictoryDelay};
@@ -30,4 +31,8 @@ pub use particle::{
 };
 pub use screen_effect::{
     CameraShake, ScreenFlash, ScreenEffectEvent, ScreenEffectMarker
+};
+pub use relic::{
+    Relic, RelicId, RelicRarity, RelicEffect,
+    RelicCollection, RelicObtainedEvent, RelicTriggeredEvent
 };
