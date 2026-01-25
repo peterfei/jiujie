@@ -2,7 +2,15 @@
 
 use bevy::prelude::*;
 use crate::states::GameState;
-use crate::components::{MapNode, NodeType, MapProgress, Player, Enemy, EnemyIntent, CombatState, TurnPhase, Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, CardType, CardRarity, CardPool, PlayerDeck, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent, CharacterType, SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation, EnemySpriteMarker, VictoryDelay, RelicCollection, Relic, RelicId};
+use crate::components::{
+    MapNode, NodeType, MapProgress, Player, Enemy, EnemyIntent, CombatState, TurnPhase, 
+    Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, CardType, CardRarity, 
+    CardPool, PlayerDeck, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent, CharacterType, 
+    SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, 
+    ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation, 
+    EnemySpriteMarker, VictoryDelay, RelicCollection, Relic, RelicId,
+    RelicObtainedEvent, RelicTriggeredEvent
+};
 use crate::systems::sprite::spawn_character_sprite;
 
 /// 核心游戏插件
@@ -34,14 +42,23 @@ impl Plugin for CorePlugin {
 /// 这确保玩家实体在当前帧立即可用，避免重复创建
 fn init_player(mut commands: Commands) {
     // 使用 Deferred 视图访问 World 进行立即 spawn
-    // 在 OnEnter 系统中，我们可以通过 Commands 间接实现立即创建
     commands.queue(move |world: &mut World| {
-        let mut player_query = world.query::<&Player>();
-        if player_query.iter(world).next().is_none() {
-            world.spawn(Player { gold: 100, ..Default::default() });
-            info!("init_player: 创建玩家实体（立即生效）");
+        let mut player_query = world.query_filtered::<Entity, With<Player>>();
+        let player_entity = player_query.iter(world).next();
+
+        if let Some(entity) = player_entity {
+            // 玩家已存在，检查是否缺少 Cultivation 组件
+            if world.get::<crate::components::Cultivation>(entity).is_none() {
+                info!("init_player: 玩家实体已存在，但缺少修为，正在补全...");
+                world.entity_mut(entity).insert(crate::components::Cultivation::new());
+            }
         } else {
-            info!("init_player: 玩家实体已存在，跳过创建");
+            // 玩家不存在，创建全新修仙者
+            world.spawn((
+                Player { gold: 100, ..Default::default() },
+                crate::components::Cultivation::new(),
+            ));
+            info!("init_player: 创建全新修仙者实体（初始境界：炼气）");
         }
     });
 }
@@ -70,7 +87,7 @@ impl Plugin for MenuPlugin {
         app.add_systems(Update, handle_button_clicks.run_if(in_state(GameState::MainMenu)));
 
         // 在进入Map状态时设置地图UI
-        app.add_systems(OnEnter(GameState::Map), setup_map_ui);
+        app.add_systems(OnEnter(GameState::Map), (setup_map_ui, setup_breakthrough_button, setup_cultivation_status_ui));
         // 在退出Map状态时清理地图UI
         app.add_systems(OnExit(GameState::Map), cleanup_map_ui);
         // 处理地图界面按钮点击
@@ -124,6 +141,49 @@ impl Plugin for MenuPlugin {
 
         // 注意：商店和休息系统现在由独立的 ShopPlugin 和 RestPlugin 管理
         // 不要在这里重复注册，否则会导致系统重复注册错误
+    }
+}
+
+/// 渡劫计时器
+#[derive(Resource)]
+struct TribulationTimer {
+    /// 渡劫总时长
+    total_timer: Timer,
+    /// 天雷间隔
+    strike_timer: Timer,
+    /// 已降下天雷次数
+    strikes_count: u32,
+}
+
+pub struct GamePlugin;
+
+impl Plugin for GamePlugin {
+    fn build(&self, app: &mut App) {
+        app.add_plugins((
+            crate::systems::animation::AnimationPlugin,
+            crate::systems::particle::ParticlePlugin,
+            crate::systems::screen_effect::ScreenEffectPlugin,
+            crate::systems::sprite::SpritePlugin,
+        ))
+        .init_state::<GameState>()
+        .insert_resource(VictoryDelay::new(2.0))
+        .init_resource::<CurrentRewardCards>()
+        .init_resource::<CurrentRewardRelic>()
+        .init_resource::<HoveredCard>()
+        .init_resource::<HoveredRelic>()
+        .init_resource::<MousePosition>()
+        .insert_resource(TribulationTimer {
+            total_timer: Timer::from_seconds(10.0, TimerMode::Once),
+            strike_timer: Timer::from_seconds(1.5, TimerMode::Repeating),
+            strikes_count: 0,
+        })
+        .add_event::<EnemyAttackEvent>()
+        .add_event::<RelicObtainedEvent>()
+        .add_event::<RelicTriggeredEvent>()
+        // ... (其他系统注册)
+        .add_systems(OnEnter(GameState::Tribulation), setup_tribulation)
+        .add_systems(Update, update_tribulation.run_if(in_state(GameState::Tribulation)))
+        .add_systems(OnExit(GameState::Tribulation), teardown_tribulation);
     }
 }
 
@@ -215,6 +275,124 @@ fn cleanup_main_menu(mut commands: Commands, query: Query<Entity, (With<Node>, W
 fn cleanup_map_ui(mut commands: Commands, query: Query<Entity, With<MapUiRoot>>) {
     for entity in query.iter() {
         commands.entity(entity).despawn_recursive();
+    }
+}
+
+/// 标记渡劫按钮，便于清理
+#[derive(Component)]
+struct BreakthroughButtonMarker;
+
+/// 设置修为状态显示（左上角）
+fn setup_cultivation_status_ui(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    player_query: Query<(&Player, &crate::components::Cultivation)>,
+) {
+    let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
+
+    if let Ok((player, cultivation)) = player_query.get_single() {
+        let realm_name = match cultivation.realm {
+            crate::components::cultivation::Realm::QiRefining => "炼气期",
+            crate::components::cultivation::Realm::FoundationEstablishment => "筑基期",
+            crate::components::cultivation::Realm::GoldenCore => "金丹期",
+            crate::components::cultivation::Realm::NascentSoul => "元婴期",
+        };
+
+        commands
+            .spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: Val::Px(20.0),
+                    left: Val::Px(20.0),
+                    padding: UiRect::all(Val::Px(10.0)),
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)),
+                MapUiRoot,
+            ))
+            .with_children(|parent| {
+                // 境界显示
+                parent.spawn((
+                    Text::new(format!("当前境界: {}", realm_name)),
+                    TextFont {
+                        font: chinese_font.clone(),
+                        font_size: 24.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.4, 1.0, 0.4)),
+                ));
+
+                // 感悟进度
+                parent.spawn((
+                    Text::new(format!("感悟进度: {} / {}", cultivation.insight, cultivation.get_threshold())),
+                    TextFont {
+                        font: chinese_font.clone(),
+                        font_size: 18.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.8, 0.8, 1.0)),
+                ));
+
+                // 道行（HP）显示
+                parent.spawn((
+                    Text::new(format!("当前道行: {} / {}", player.hp, player.max_hp)),
+                    TextFont {
+                        font: chinese_font.clone(),
+                        font_size: 18.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(1.0, 0.6, 0.6)),
+                ));
+            });
+    }
+}
+
+/// 设置渡劫按钮（仅在可突破时显示）
+fn setup_breakthrough_button(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    cultivation_query: Query<&crate::components::Cultivation>,
+) {
+    if let Ok(cultivation) = cultivation_query.get_single() {
+        if cultivation.can_breakthrough() {
+            info!("【UI】检测到可突破，创建引动雷劫按钮");
+            
+            commands
+                .spawn((
+                    Button,
+                    Node {
+                        position_type: PositionType::Absolute,
+                        bottom: Val::Px(40.0),
+                        right: Val::Px(40.0),
+                        width: Val::Px(240.0),
+                        height: Val::Px(90.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(5.0)),
+                        ..default()
+                    },
+                    BorderColor(Color::srgb(1.0, 0.8, 0.2)),
+                    BackgroundColor(Color::srgba(0.1, 0.05, 0.2, 0.95)),
+                    BreakthroughButtonMarker,
+                    MapUiRoot, // 借用MapUiRoot标记，这样原有的清理逻辑能顺便清理掉它
+                ))
+                .with_children(|parent| {
+                    parent.spawn((
+                        Text::new("引动雷劫"),
+                        TextFont {
+                            font: asset_server.load("fonts/Arial Unicode.ttf"),
+                            font_size: 36.0,
+                            ..default()
+                        },
+                        TextColor(Color::srgb(1.0, 0.9, 0.5)),
+                    ));
+                })
+                .observe(|_entity: Trigger<Pointer<Click>>, mut next_state: ResMut<NextState<GameState>>| {
+                    info!("🌩️ 玩家引动九天雷劫！");
+                    next_state.set(GameState::Tribulation);
+                });
+        }
     }
 }
 
@@ -743,7 +921,7 @@ struct DiscardPileText;
 struct HandCountText;
 
 #[derive(Component)]
-struct HandArea;
+pub struct HandArea;
 
 /// 设置战斗UI
 fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>, player_deck: Res<PlayerDeck>, mut victory_delay: ResMut<VictoryDelay>) {
@@ -1109,7 +1287,7 @@ fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>, playe
 }
 
 /// 清理战斗UI
-fn cleanup_combat_ui(
+pub fn cleanup_combat_ui(
     mut commands: Commands,
     ui_query: Query<Entity, With<CombatUiRoot>>,
     player_query: Query<Entity, With<Player>>,
@@ -1127,10 +1305,8 @@ fn cleanup_combat_ui(
     for entity in ui_query.iter() {
         commands.entity(entity).despawn_recursive();
     }
-    // 清理玩家实体
-    for entity in player_query.iter() {
-        commands.entity(entity).despawn_recursive();
-    }
+    // 注意：不再在这里清理玩家实体，玩家需要持久化以保留修仙境界
+    
     // 清理敌人实体
     for entity in enemy_query.iter() {
         commands.entity(entity).despawn_recursive();
@@ -1832,7 +2008,7 @@ fn apply_card_effect(
 /// 检查战斗是否结束
 fn check_combat_end(
     state: Res<State<GameState>>,
-    player_query: Query<&Player>,
+    mut player_query: Query<(&mut Player, &mut crate::components::Cultivation)>,
     enemy_query: Query<&Enemy>,
     _sprite_query: Query<(Entity, &Sprite, &Children)>,
     _enemy_sprite_marker_query: Query<&EnemySpriteMarker>,
@@ -1860,16 +2036,18 @@ fn check_combat_end(
 
             info!("敌人被击败！战斗胜利！");
 
-            // TODO: 敌人死亡动画（暂时禁用，修复实体查找问题）
-            // // 查找敌人精灵实体（有 EnemySpriteMarker 子组件的 SpriteMarker 实体）
-            // for (sprite_entity, _sprite, children) in sprite_query.iter_mut() {
-            //     for child in children.iter() {
-            //         if enemy_sprite_marker_query.get(*child).is_ok() {
-            //             commands.entity(sprite_entity).insert(EnemyDeathAnimation::new(0.8));
-            //             break;
-            //         }
-            //     }
-            // }
+            // 获得感悟（移除自动突破）
+            if let Ok((_player, mut cultivation)) = player_query.get_single_mut() {
+                let insight_gain = 50; // 基础获得50感悟
+                cultivation.gain_insight(insight_gain);
+                info!("【修仙】获得 {} 点感悟，当前总感悟: {}/{}", insight_gain, cultivation.insight, cultivation.get_threshold());
+                
+                if cultivation.can_breakthrough() {
+                    info!("✨【机缘已至】感悟已满，可在地图界面开启“渡劫”！");
+                }
+            } else {
+                warn!("⚠️【警告】战斗胜利但未能获取玩家修为数据！请检查 Player 是否正确绑定了 Cultivation 组件。");
+            }
 
             // 触发胜利粒子特效（金色星形）
             effect_events.send(SpawnEffectEvent {
@@ -1910,12 +2088,10 @@ fn check_combat_end(
     }
 
     // 检查玩家是否死亡
-    if let Ok(player) = player_query.get_single() {
-        if player.hp <= 0 {
-            info!("玩家败北！HP: {}", player.hp);
-            // 进入游戏结束界面
+    if let Ok(player_data) = player_query.get_single() {
+        if player_data.0.hp <= 0 {
+            info!("玩家败北！身陨道消...");
             next_state.set(GameState::GameOver);
-            return;
         }
     }
 }
@@ -2567,8 +2743,106 @@ fn handle_game_over_clicks(
 }
 
 // ============================================================================
-// 悬停详情系统
+// 渡劫系统 (Tribulation)
 // ============================================================================
+
+fn setup_tribulation(
+    mut timer: ResMut<TribulationTimer>,
+    mut screen_events: EventWriter<ScreenEffectEvent>,
+) {
+    info!("🌩️ 天地震动，雷劫将至！");
+    timer.total_timer.reset();
+    timer.strike_timer.reset();
+    timer.strikes_count = 0;
+
+    // 初始屏幕变暗特效
+    screen_events.send(ScreenEffectEvent::Flash { 
+        color: Color::srgba(0.0, 0.0, 0.0, 0.8), 
+        duration: 1.0 
+    });
+}
+
+fn update_tribulation(
+    time: Res<Time>,
+    mut timer: ResMut<TribulationTimer>,
+    mut player_query: Query<&mut Player>,
+    mut next_state: ResMut<NextState<GameState>>,
+    mut screen_events: EventWriter<ScreenEffectEvent>,
+    mut effect_events: EventWriter<SpawnEffectEvent>,
+) {
+    // 推进总进度
+    timer.total_timer.tick(time.delta());
+    if timer.total_timer.finished() {
+        info!("🌩️ 雷云散去，渡劫成功！");
+        next_state.set(GameState::Map);
+        return;
+    }
+
+    // 推进天雷间隔
+    timer.strike_timer.tick(time.delta());
+    if timer.strike_timer.just_finished() {
+        timer.strikes_count += 1;
+        
+        if let Ok(mut player) = player_query.get_single_mut() {
+            // 天雷伤害：固定伤害或百分比
+            let damage = (player.max_hp as f32 * 0.12).max(10.0) as i32;
+            player.hp -= damage;
+            
+            info!("⚡ 第 {} 道天雷落下！造成 {} 点伤害，剩余道行: {}", timer.strikes_count, damage, player.hp);
+
+            // 视觉特效：白光闪烁 + 剧烈震动
+            screen_events.send(ScreenEffectEvent::Flash { 
+                color: Color::WHITE, 
+                duration: 0.2 
+            });
+            screen_events.send(ScreenEffectEvent::Shake { 
+                trauma: 10.0, 
+                decay: 0.3 
+            });
+            
+            // 粒子特效：电光火石
+            effect_events.send(SpawnEffectEvent {
+                effect_type: EffectType::Hit,
+                position: Vec3::new(0.0, 0.0, 100.0),
+                burst: true,
+                count: 30,
+            });
+
+            // 检查陨落
+            if player.hp <= 0 {
+                info!("💀 渡劫失败，身陨道消...");
+                next_state.set(GameState::GameOver);
+            }
+        }
+    }
+}
+
+fn teardown_tribulation(
+    mut player_query: Query<(&mut Player, &mut crate::components::Cultivation)>,
+    mut effect_events: EventWriter<SpawnEffectEvent>,
+) {
+    if let Ok((mut player, mut cultivation)) = player_query.get_single_mut() {
+        // 只有在没死的情况下才进入这里（由于 GameOver 也会触发出状态，这里加个判断）
+        if player.hp > 0 {
+            let old_realm = cultivation.realm;
+            if cultivation.breakthrough() {
+                let hp_bonus = cultivation.get_hp_bonus();
+                player.max_hp += hp_bonus;
+                player.hp += hp_bonus;
+                
+                info!("✨【破境成功】成功晋升至 {:?}！道行大进，上限增加 {} 点", cultivation.realm, hp_bonus);
+                
+                // 成功的金色光辉
+                effect_events.send(SpawnEffectEvent {
+                    effect_type: EffectType::Victory,
+                    position: Vec3::ZERO,
+                    burst: true,
+                    count: 150,
+                });
+            }
+        }
+    }
+}
 
 /// 当前奖励的卡牌列表
 #[derive(Resource, Default)]

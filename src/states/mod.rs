@@ -13,4 +13,6 @@ pub enum GameState {
     Shop,
     Rest,
     GameOver,
+    /// 渡劫：面临天雷考验
+    Tribulation,
 }
