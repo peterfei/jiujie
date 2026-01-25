@@ -21,7 +21,10 @@ impl Plugin for ScreenEffectPlugin {
                 handle_screen_effects,
                 update_camera_shake,
                 update_screen_flash,
-            ).run_if(in_state(GameState::Combat).or(in_state(GameState::Reward)))
+            ).run_if(in_state(GameState::Combat)
+                .or(in_state(GameState::Reward))
+                .or(in_state(GameState::Tribulation))
+            )
         );
     }
 }

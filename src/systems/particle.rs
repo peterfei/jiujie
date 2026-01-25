@@ -29,7 +29,10 @@ impl Plugin for ParticlePlugin {
                 handle_effect_events,
                 update_emitters,
                 update_particles,
-            ).run_if(in_state(GameState::Combat).or(in_state(GameState::Reward)))
+            ).run_if(in_state(GameState::Combat)
+                .or(in_state(GameState::Reward))
+                .or(in_state(GameState::Tribulation))
+            )
         );
     }
 }

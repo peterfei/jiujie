@@ -372,10 +372,11 @@ fn setup_breakthrough_button(
                         border: UiRect::all(Val::Px(5.0)),
                         ..default()
                     },
+                    ZIndex(100), // 确保在最顶层，防止被地图节点遮挡
                     BorderColor(Color::srgb(1.0, 0.8, 0.2)),
                     BackgroundColor(Color::srgba(0.1, 0.05, 0.2, 0.95)),
                     BreakthroughButtonMarker,
-                    MapUiRoot, // 借用MapUiRoot标记，这样原有的清理逻辑能顺便清理掉它
+                    MapUiRoot,
                 ))
                 .with_children(|parent| {
                     parent.spawn((
@@ -389,7 +390,7 @@ fn setup_breakthrough_button(
                     ));
                 })
                 .observe(|_entity: Trigger<Pointer<Click>>, mut next_state: ResMut<NextState<GameState>>| {
-                    info!("🌩️ 玩家引动九天雷劫！");
+                    info!("【点击测试】点击了引动雷劫按钮！尝试进入 Tribulation 状态");
                     next_state.set(GameState::Tribulation);
                 });
         }
@@ -2746,7 +2747,12 @@ fn handle_game_over_clicks(
 // 渡劫系统 (Tribulation)
 // ============================================================================
 
+#[derive(Component)]
+struct TribulationUiMarker;
+
 fn setup_tribulation(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
     mut timer: ResMut<TribulationTimer>,
     mut screen_events: EventWriter<ScreenEffectEvent>,
 ) {
@@ -2755,10 +2761,59 @@ fn setup_tribulation(
     timer.strike_timer.reset();
     timer.strikes_count = 0;
 
-    // 初始屏幕变暗特效
+    let chinese_font = asset_server.load("fonts/Arial Unicode.ttf");
+
+    // 创建渡劫背景（深紫色）
+    commands.spawn((
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.02, 0.01, 0.05, 0.95)),
+        ZIndex(-10), // 置于底层，确保粒子和闪光在上面
+        TribulationUiMarker,
+    ));
+
+    // 渡劫标题与倒计时容器
+    commands.spawn((
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            flex_direction: FlexDirection::Column,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            position_type: PositionType::Absolute,
+            ..default()
+        },
+        ZIndex(50), // 文字悬浮
+        TribulationUiMarker,
+    )).with_children(|parent| {
+        parent.spawn((
+            Text::new("正在渡劫..."),
+            TextFont {
+                font: chinese_font.clone(),
+                font_size: 72.0,
+                ..default()
+            },
+            TextColor(Color::srgb(0.8, 0.8, 1.0)),
+        ));
+
+        parent.spawn((
+            Text::new("承受九天雷霆洗礼，存活即成大道"),
+            TextFont {
+                font: chinese_font.clone(),
+                font_size: 24.0,
+                ..default()
+            },
+            TextColor(Color::srgb(0.6, 0.6, 0.8)),
+        ));
+    });
+
+    // 初始屏幕闪光（紫色）
     screen_events.send(ScreenEffectEvent::Flash { 
-        color: Color::srgba(0.0, 0.0, 0.0, 0.8), 
-        duration: 1.0 
+        color: Color::srgba(0.5, 0.2, 0.8, 0.5), 
+        duration: 0.5 
     });
 }
 
@@ -2783,30 +2838,37 @@ fn update_tribulation(
     if timer.strike_timer.just_finished() {
         timer.strikes_count += 1;
         
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        
         if let Ok(mut player) = player_query.get_single_mut() {
-            // 天雷伤害：固定伤害或百分比
+            // 天雷伤害
             let damage = (player.max_hp as f32 * 0.12).max(10.0) as i32;
             player.hp -= damage;
             
             info!("⚡ 第 {} 道天雷落下！造成 {} 点伤害，剩余道行: {}", timer.strikes_count, damage, player.hp);
 
-            // 视觉特效：白光闪烁 + 剧烈震动
+            // 视觉特效：强力白光闪烁 + 剧烈震动
             screen_events.send(ScreenEffectEvent::Flash { 
-                color: Color::WHITE, 
-                duration: 0.2 
+                color: Color::srgba(1.0, 1.0, 1.0, 0.8), // 提高不透明度
+                duration: 0.15 
             });
             screen_events.send(ScreenEffectEvent::Shake { 
-                trauma: 10.0, 
-                decay: 0.3 
+                trauma: 25.0, // 显著增加震动强度
+                decay: 0.5 
             });
             
-            // 粒子特效：电光火石
-            effect_events.send(SpawnEffectEvent {
-                effect_type: EffectType::Hit,
-                position: Vec3::new(0.0, 0.0, 100.0),
-                burst: true,
-                count: 30,
-            });
+            // 在随机位置生成天雷粒子（大幅提高Z轴）
+            for i in 0..3 {
+                let x = rng.gen_range(-450.0..450.0);
+                let y = rng.gen_range(-350.0..350.0);
+                effect_events.send(SpawnEffectEvent {
+                    effect_type: EffectType::Lightning,
+                    position: Vec3::new(x, y, 950.0 + (i as f32)), // 极高图层
+                    burst: true,
+                    count: 60, // 增加粒子数量
+                });
+            }
 
             // 检查陨落
             if player.hp <= 0 {
@@ -2818,9 +2880,16 @@ fn update_tribulation(
 }
 
 fn teardown_tribulation(
+    mut commands: Commands,
+    ui_query: Query<Entity, With<TribulationUiMarker>>,
     mut player_query: Query<(&mut Player, &mut crate::components::Cultivation)>,
     mut effect_events: EventWriter<SpawnEffectEvent>,
 ) {
+    // 清理渡劫专用UI
+    for entity in ui_query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+
     if let Ok((mut player, mut cultivation)) = player_query.get_single_mut() {
         // 只有在没死的情况下才进入这里（由于 GameOver 也会触发出状态，这里加个判断）
         if player.hp > 0 {
