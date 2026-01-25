@@ -15,7 +15,35 @@ impl Plugin for CorePlugin {
         app.add_systems(Startup, setup_camera);
         // 初始化胜利延迟计时器
         app.insert_resource(VictoryDelay::new(0.8)); // 延迟1.5秒让粒子特效播放
+
+        // 玩家实体初始化系统 - 在所有OnEnter系统之前运行
+        // 使用world_mut().spawn()确保实体立即可用，避免重复创建
+        app.add_systems(OnEnter(GameState::MainMenu), init_player);
+        app.add_systems(OnEnter(GameState::Map), init_player);
+        app.add_systems(OnEnter(GameState::Combat), init_player);
+        app.add_systems(OnEnter(GameState::Shop), init_player);
+        app.add_systems(OnEnter(GameState::Rest), init_player);
+        app.add_systems(OnEnter(GameState::Reward), init_player);
     }
+}
+
+/// 初始化玩家实体（如果不存在）
+///
+/// 此函数使用 world_mut().spawn() 而不是 commands.spawn()
+/// 在 Bevy 0.15 中，world_mut().spawn() 是立即生效的，而 commands.spawn() 是延迟的
+/// 这确保玩家实体在当前帧立即可用，避免重复创建
+fn init_player(mut commands: Commands) {
+    // 使用 Deferred 视图访问 World 进行立即 spawn
+    // 在 OnEnter 系统中，我们可以通过 Commands 间接实现立即创建
+    commands.queue(move |world: &mut World| {
+        let mut player_query = world.query::<&Player>();
+        if player_query.iter(world).next().is_none() {
+            world.spawn(Player { gold: 100, ..Default::default() });
+            info!("init_player: 创建玩家实体（立即生效）");
+        } else {
+            info!("init_player: 玩家实体已存在，跳过创建");
+        }
+    });
 }
 
 /// 主菜单UI插件
@@ -738,7 +766,7 @@ struct HandCountText;
 struct HandArea;
 
 /// 设置战斗UI
-fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>, player_deck: Res<PlayerDeck>, mut victory_delay: ResMut<VictoryDelay>, player_query: Query<&Player>) {
+fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>, player_deck: Res<PlayerDeck>, mut victory_delay: ResMut<VictoryDelay>) {
     // 进入战斗时确保胜利延迟被重置（防止上一场战斗的状态泄漏）
     if victory_delay.active {
         info!("进入战斗时检测到胜利延迟仍然激活，强制重置");
@@ -747,12 +775,7 @@ fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>, playe
     }
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
 
-    // 创建玩家和敌人实体
-    // 创建玩家实体（只在不存时）
-    if player_query.get_single().is_err() {
-        commands.spawn(Player::default());
-        info!("setup_combat_ui: 创建新玩家实体");
-    }
+    // 注意：玩家实体由 init_player 系统统一管理，不再在此创建
 
     commands.spawn(Enemy::new(0, "哥布林", 30));
 

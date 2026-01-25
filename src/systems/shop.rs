@@ -43,24 +43,18 @@ pub fn setup_shop_ui(
 ) {
     info!("【商店系统】设置商店UI");
 
-    // 确保Player实体存在并获取当前金币
-    // 注意：commands.spawn 的实体在当前帧不会立即可见
-    let current_gold = if player_query.get_single().is_err() {
-        // 没有玩家实体，创建一个
-        commands.spawn(Player { gold: 100, ..Default::default() });
-        info!("【商店系统】创建玩家实体，初始金币: 100");
-        100 // 新玩家100金币
-    } else {
-        // 玩家已存在，检查并更新金币
-        if let Ok(mut player) = player_query.get_single_mut() {
-            if player.gold == 0 {
-                player.gold = 100;
-                info!("【商店系统】玩家获得初始金币: 100");
-            }
-            player.gold
-        } else {
-            100 // 不应该到达这里
+    // 玩家实体由 init_player 系统统一管理
+    // 如果玩家金币为0，给予初始金币
+    let current_gold = if let Ok(mut player) = player_query.get_single_mut() {
+        if player.gold == 0 {
+            player.gold = 100;
+            info!("【商店系统】玩家获得初始金币: 100");
         }
+        player.gold
+    } else {
+        // 理论上不应该到达这里，因为 init_player 应该已经创建了 Player
+        warn!("【商店系统】未找到玩家实体！init_player 应该已经创建了");
+        100
     };
 
     current_items.items = generate_shop_items(&player_deck, &relic_collection);
