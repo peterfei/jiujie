@@ -1,0 +1,593 @@
+{
+  "player": {
+    "hp": 80,
+    "max_hp": 80,
+    "energy": 3,
+    "max_energy": 3,
+    "block": 0,
+    "gold": 0,
+    "turn": 17
+  },
+  "cultivation": {
+    "realm": "QiRefining",
+    "insight": 0
+  },
+  "deck": [
+    {
+      "id": 0,
+      "name": "御剑术",
+      "description": "造成6点伤害",
+      "card_type": "Attack",
+      "cost": 1,
+      "effect": {
+        "DealDamage": {
+          "amount": 6
+        }
+      },
+      "rarity": "Common"
+    },
+    {
+      "id": 1,
+      "name": "御剑术",
+      "description": "造成6点伤害",
+      "card_type": "Attack",
+      "cost": 1,
+      "effect": {
+        "DealDamage": {
+          "amount": 6
+        }
+      },
+      "rarity": "Common"
+    },
+    {
+      "id": 2,
+      "name": "御剑术",
+      "description": "造成6点伤害",
+      "card_type": "Attack",
+      "cost": 1,
+      "effect": {
+        "DealDamage": {
+          "amount": 6
+        }
+      },
+      "rarity": "Common"
+    },
+    {
+      "id": 3,
+      "name": "御剑术",
+      "description": "造成6点伤害",
+      "card_type": "Attack",
+      "cost": 1,
+      "effect": {
+        "DealDamage": {
+          "amount": 6
+        }
+      },
+      "rarity": "Common"
+    },
+    {
+      "id": 4,
+      "name": "御剑术",
+      "description": "造成6点伤害",
+      "card_type": "Attack",
+      "cost": 1,
+      "effect": {
+        "DealDamage": {
+          "amount": 6
+        }
+      },
+      "rarity": "Common"
+    },
+    {
+      "id": 5,
+      "name": "金光咒",
+      "description": "获得5点护盾",
+      "card_type": "Defense",
+      "cost": 1,
+      "effect": {
+        "GainBlock": {
+          "amount": 5
+        }
+      },
+      "rarity": "Common"
+    },
+    {
+      "id": 6,
+      "name": "金光咒",
+      "description": "获得5点护盾",
+      "card_type": "Defense",
+      "cost": 1,
+      "effect": {
+        "GainBlock": {
+          "amount": 5
+        }
+      },
+      "rarity": "Common"
+    },
+    {
+      "id": 7,
+      "name": "金光咒",
+      "description": "获得5点护盾",
+      "card_type": "Defense",
+      "cost": 1,
+      "effect": {
+        "GainBlock": {
+          "amount": 5
+        }
+      },
+      "rarity": "Common"
+    },
+    {
+      "id": 8,
+      "name": "金光咒",
+      "description": "获得5点护盾",
+      "card_type": "Defense",
+      "cost": 1,
+      "effect": {
+        "GainBlock": {
+          "amount": 5
+        }
+      },
+      "rarity": "Common"
+    },
+    {
+      "id": 9,
+      "name": "剑气斩",
+      "description": "造成3点伤害，抽1张牌",
+      "card_type": "Attack",
+      "cost": 1,
+      "effect": {
+        "AttackAndDraw": {
+          "damage": 3,
+          "cards": 1
+        }
+      },
+      "rarity": "Uncommon"
+    },
+    {
+      "id": 10,
+      "name": "回春术",
+      "description": "恢复5点道行",
+      "card_type": "Skill",
+      "cost": 1,
+      "effect": {
+        "Heal": {
+          "amount": 5
+        }
+      },
+      "rarity": "Uncommon"
+    },
+    {
+      "id": 11,
+      "name": "回春术",
+      "description": "恢复5点道行",
+      "card_type": "Skill",
+      "cost": 1,
+      "effect": {
+        "Heal": {
+          "amount": 5
+        }
+      },
+      "rarity": "Uncommon"
+    }
+  ],
+  "relics": [
+    {
+      "id": "BurningBlood",
+      "name": "飞剑符",
+      "description": "每场战斗开始时，对所有敌人造成 3 点剑气伤害",
+      "rarity": "Common",
+      "effect": {
+        "OnCombatStart": {
+          "damage": 3,
+          "block": 0,
+          "draw_cards": 0
+        }
+      }
+    }
+  ],
+  "map_nodes": [
+    {
+      "id": 0,
+      "node_type": "Shop",
+      "position": [
+        0,
+        0
+      ],
+      "unlocked": true,
+      "completed": false
+    },
+    {
+      "id": 1,
+      "node_type": "Normal",
+      "position": [
+        0,
+        1
+      ],
+      "unlocked": true,
+      "completed": false
+    },
+    {
+      "id": 2,
+      "node_type": "Normal",
+      "position": [
+        0,
+        2
+      ],
+      "unlocked": true,
+      "completed": false
+    },
+    {
+      "id": 3,
+      "node_type": "Rest",
+      "position": [
+        0,
+        3
+      ],
+      "unlocked": true,
+      "completed": false
+    },
+    {
+      "id": 4,
+      "node_type": "Shop",
+      "position": [
+        1,
+        0
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 5,
+      "node_type": "Normal",
+      "position": [
+        1,
+        1
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 6,
+      "node_type": "Normal",
+      "position": [
+        1,
+        2
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 7,
+      "node_type": "Rest",
+      "position": [
+        1,
+        3
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 8,
+      "node_type": "Shop",
+      "position": [
+        2,
+        0
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 9,
+      "node_type": "Normal",
+      "position": [
+        2,
+        1
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 10,
+      "node_type": "Normal",
+      "position": [
+        2,
+        2
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 11,
+      "node_type": "Rest",
+      "position": [
+        2,
+        3
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 12,
+      "node_type": "Shop",
+      "position": [
+        3,
+        0
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 13,
+      "node_type": "Normal",
+      "position": [
+        3,
+        1
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 14,
+      "node_type": "Normal",
+      "position": [
+        3,
+        2
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 15,
+      "node_type": "Rest",
+      "position": [
+        3,
+        3
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 16,
+      "node_type": "Shop",
+      "position": [
+        4,
+        0
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 17,
+      "node_type": "Normal",
+      "position": [
+        4,
+        1
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 18,
+      "node_type": "Normal",
+      "position": [
+        4,
+        2
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 19,
+      "node_type": "Rest",
+      "position": [
+        4,
+        3
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 20,
+      "node_type": "Shop",
+      "position": [
+        5,
+        0
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 21,
+      "node_type": "Normal",
+      "position": [
+        5,
+        1
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 22,
+      "node_type": "Normal",
+      "position": [
+        5,
+        2
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 23,
+      "node_type": "Rest",
+      "position": [
+        5,
+        3
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 24,
+      "node_type": "Shop",
+      "position": [
+        6,
+        0
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 25,
+      "node_type": "Normal",
+      "position": [
+        6,
+        1
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 26,
+      "node_type": "Normal",
+      "position": [
+        6,
+        2
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 27,
+      "node_type": "Rest",
+      "position": [
+        6,
+        3
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 28,
+      "node_type": "Shop",
+      "position": [
+        7,
+        0
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 29,
+      "node_type": "Normal",
+      "position": [
+        7,
+        1
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 30,
+      "node_type": "Normal",
+      "position": [
+        7,
+        2
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 31,
+      "node_type": "Rest",
+      "position": [
+        7,
+        3
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 32,
+      "node_type": "Shop",
+      "position": [
+        8,
+        0
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 33,
+      "node_type": "Normal",
+      "position": [
+        8,
+        1
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 34,
+      "node_type": "Normal",
+      "position": [
+        8,
+        2
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 35,
+      "node_type": "Rest",
+      "position": [
+        8,
+        3
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 36,
+      "node_type": "Boss",
+      "position": [
+        9,
+        0
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 37,
+      "node_type": "Elite",
+      "position": [
+        9,
+        1
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 38,
+      "node_type": "Elite",
+      "position": [
+        9,
+        2
+      ],
+      "unlocked": false,
+      "completed": false
+    },
+    {
+      "id": 39,
+      "node_type": "Elite",
+      "position": [
+        9,
+        3
+      ],
+      "unlocked": false,
+      "completed": false
+    }
+  ],
+  "current_map_node_id": 1,
+  "current_map_layer": 0
+}

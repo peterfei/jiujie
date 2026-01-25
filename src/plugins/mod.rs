@@ -48,7 +48,13 @@ fn init_player(mut commands: Commands) {
         let player_entity = player_query.iter(world).next();
 
         if let Some(entity) = player_entity {
-            // 玩家已存在，检查是否缺少 Cultivation 组件
+            // 玩家已存在，确保状态健康（尤其是 HP）
+            let mut player = world.get_mut::<Player>(entity).unwrap();
+            if player.hp <= 0 {
+                info!("init_player: 发现残血玩家，正在重塑肉身（恢复至最大道行）...");
+                player.hp = player.max_hp;
+            }
+
             if world.get::<crate::components::Cultivation>(entity).is_none() {
                 info!("init_player: 玩家实体已存在，但缺少修为，正在补全...");
                 world.entity_mut(entity).insert(crate::components::Cultivation::new());
@@ -88,7 +94,11 @@ impl Plugin for MenuPlugin {
         app.add_systems(Update, handle_button_clicks.run_if(in_state(GameState::MainMenu)));
 
         // 在进入Map状态时设置地图UI
-        app.add_systems(OnEnter(GameState::Map), (setup_map_ui, setup_breakthrough_button, setup_cultivation_status_ui));
+        app.add_systems(OnEnter(GameState::Map), (
+            setup_map_ui, 
+            setup_breakthrough_button, 
+            setup_cultivation_status_ui
+        ).after(init_player));
         // 在退出Map状态时清理地图UI
         app.add_systems(OnExit(GameState::Map), cleanup_map_ui);
         // 处理地图界面按钮点击
@@ -170,6 +180,8 @@ impl Plugin for GamePlugin {
         ))
         .init_state::<GameState>()
         .insert_resource(VictoryDelay::new(2.0))
+        .init_resource::<PlayerDeck>() // 初始化玩家持久化牌组
+        .init_resource::<RelicCollection>() // 初始化遗物背包
         .init_resource::<CurrentRewardCards>()
         .init_resource::<CurrentRewardRelic>()
         .init_resource::<HoveredCard>()
@@ -208,11 +220,10 @@ fn setup_camera(mut commands: Commands) {
 
 /// 设置主菜单UI
 fn setup_main_menu(mut commands: Commands, asset_server: Res<AssetServer>) {
-    // 加载中文字体和Logo图片
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
     let logo_handle: Handle<Image> = asset_server.load("textures/logo.png");
+    let has_save = crate::resources::save::GameStateSave::exists();
 
-    // 创建根节点（全屏容器）
     commands
         .spawn((
             Node {
@@ -226,7 +237,7 @@ fn setup_main_menu(mut commands: Commands, asset_server: Res<AssetServer>) {
             BackgroundColor(Color::srgb(0.05, 0.05, 0.05)),
         ))
         .with_children(|parent| {
-            // 游戏 Logo 背景图片 - 铺满全屏
+            // 背景 Logo
             parent.spawn((
                 ImageNode::new(logo_handle),
                 Node {
@@ -235,37 +246,50 @@ fn setup_main_menu(mut commands: Commands, asset_server: Res<AssetServer>) {
                     position_type: PositionType::Absolute,
                     ..default()
                 },
-                ZIndex(-1), // 确保在最底层
+                ZIndex(-1),
             ));
 
-            // 开始游戏按钮 - 绝对定位在屏幕中下方
-            parent.spawn((
-                Node {
-                    width: Val::Px(220.0),
-                    height: Val::Px(60.0),
-                    position_type: PositionType::Absolute,
-                    bottom: Val::Percent(15.0), // 距离底部 15%
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    border: UiRect::all(Val::Px(2.0)),
-                    ..default()
-                },
-                ZIndex(1), // 确保在最顶层
-                BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.3)),
-                BackgroundColor(Color::srgba(0.1, 0.2, 0.1, 0.85)), // 墨绿色半透明
-                Button,
-                StartGameButton,
-            ))
-            .with_children(|parent| {
-                parent.spawn((
-                    Text::new("进入九界"),
-                    TextFont {
-                        font: chinese_font.clone(),
-                        font_size: 32.0,
-                        ..default()
+            // 按钮容器
+            parent.spawn(Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(25.0),
+                align_items: AlignItems::Center,
+                position_type: PositionType::Absolute,
+                bottom: Val::Percent(15.0),
+                ..default()
+            }).with_children(|btn_parent| {
+                if has_save {
+                    // 继续修行按钮
+                    btn_parent.spawn((
+                        Node {
+                            width: Val::Px(240.0), height: Val::Px(60.0),
+                            justify_content: JustifyContent::Center, align_items: AlignItems::Center,
+                            border: UiRect::all(Val::Px(2.0)), ..default()
+                        },
+                        BorderColor(Color::srgba(0.4, 1.0, 0.4, 0.5)),
+                        BackgroundColor(Color::srgba(0.1, 0.3, 0.1, 0.9)),
+                        Button,
+                        ContinueGameButton,
+                    )).with_children(|p| {
+                        p.spawn((Text::new("继 续 修 行"), TextFont { font: chinese_font.clone(), font_size: 32.0, ..default() }, TextColor(Color::WHITE)));
+                    });
+                }
+
+                // 开始修行按钮 (或重塑道基)
+                btn_parent.spawn((
+                    Node {
+                        width: Val::Px(240.0), height: Val::Px(60.0),
+                        justify_content: JustifyContent::Center, align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(2.0)), ..default()
                     },
-                    TextColor(Color::WHITE),
-                ));
+                    BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.3)),
+                    BackgroundColor(Color::srgba(0.2, 0.2, 0.2, 0.85)),
+                    Button,
+                    StartGameButton,
+                )).with_children(|p| {
+                    let btn_text = if has_save { "重 塑 道 基" } else { "开 始 修 行" };
+                    p.spawn((Text::new(btn_text), TextFont { font: chinese_font.clone(), font_size: 32.0, ..default() }, TextColor(Color::WHITE)));
+                });
             });
         });
 }
@@ -407,11 +431,12 @@ fn setup_breakthrough_button(
 // 组件标记
 // ============================================================================
 
-/// 开始游戏按钮标记
 #[derive(Component)]
 struct StartGameButton;
 
-/// 退出游戏按钮标记（未使用）
+#[derive(Component)]
+struct ContinueGameButton;
+
 #[derive(Component)]
 struct QuitGameButton;
 
@@ -429,36 +454,60 @@ pub struct MapNodeButton {
 // 按钮交互系统
 // ============================================================================
 
-/// 处理按钮点击事件
+/// 处理主菜单按钮点击
 fn handle_button_clicks(
     mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
-    mut interaction_query: Query<
-        (&Interaction, &mut BackgroundColor),
-        (With<StartGameButton>, Without<QuitGameButton>),
-    >,
+    mut button_queries: ParamSet<(
+        Query<&Interaction, (Changed<Interaction>, With<StartGameButton>)>,
+        Query<&Interaction, (Changed<Interaction>, With<ContinueGameButton>)>,
+        Query<&Interaction, (Changed<Interaction>, With<QuitGameButton>)>,
+    )>,
+    mut exit: EventWriter<AppExit>,
 ) {
-    for (interaction, mut color) in interaction_query.iter_mut() {
+    // 1. 开始修行（重塑道基）
+    for interaction in button_queries.p0().iter() {
         if matches!(interaction, Interaction::Pressed) {
-            // 点击开始游戏按钮
-            info!("开始游戏按钮被点击");
-
-            // 初始化玩家牌组（如果不存在）
-            commands.init_resource::<PlayerDeck>();
-
-            // 初始化地图进度（如果不存在）
-            // 注意：使用 init_resource 而不是 insert_resource，这样不会覆盖现有进度
-            commands.init_resource::<MapProgress>();
-
-            info!("开始游戏 - 玩家牌组和地图进度已初始化");
-
+            info!("【主菜单】开始新修行，删除旧存档");
+            crate::resources::save::GameStateSave::delete_save();
             next_state.set(GameState::Prologue);
-        } else if matches!(interaction, Interaction::Hovered) {
-            // 悬停效果
-            *color = BackgroundColor(Color::srgb(0.3, 0.3, 0.3));
-        } else {
-            // 默认颜色
-            *color = BackgroundColor(Color::srgb(0.2, 0.2, 0.2));
+            return;
+        }
+    }
+
+    // 2. 继续修行（读档）
+    for interaction in button_queries.p1().iter() {
+        if matches!(interaction, Interaction::Pressed) {
+            info!("【主菜单】继续修行，尝试加载存档");
+            match crate::resources::save::GameStateSave::load_from_disk() {
+                Ok(save) => {
+                    // 恢复状态
+                    commands.insert_resource(save.player);
+                    commands.insert_resource(save.cultivation);
+                    commands.insert_resource(PlayerDeck { cards: save.deck });
+                    commands.insert_resource(RelicCollection { relic: save.relics });
+                    commands.insert_resource(MapProgress {
+                        nodes: save.map_nodes,
+                        current_node_id: save.current_map_node_id,
+                        current_layer: save.current_map_layer,
+                        game_completed: false,
+                    });
+                    
+                    next_state.set(GameState::Map);
+                    info!("【存档系统】读档成功，进入大地图");
+                }
+                Err(e) => {
+                    error!("【存档系统】加载失败: {}", e);
+                }
+            }
+            return;
+        }
+    }
+
+    // 3. 离开尘世
+    for interaction in button_queries.p2().iter() {
+        if matches!(interaction, Interaction::Pressed) {
+            exit.send(AppExit::Success);
         }
     }
 }
@@ -466,78 +515,61 @@ fn handle_button_clicks(
 /// 处理地图界面按钮点击
 fn handle_map_button_clicks(
     mut next_state: ResMut<NextState<GameState>>,
-    mut map_progress: Option<ResMut<MapProgress>>,
-    mut button_queries: ParamSet<(
-        Query<(&Interaction, &MapNodeButton, &mut BackgroundColor)>,
-        Query<(&Interaction, &mut BackgroundColor), With<BackToMenuButton>>,
-    )>,
+    mut map_progress: ResMut<MapProgress>,
+    player_query: Query<(&Player, &crate::components::Cultivation)>,
+    deck: Res<PlayerDeck>,
+    relics: Res<RelicCollection>,
+    button_queries: Query<(&Interaction, &MapNodeButton), Changed<Interaction>>,
 ) {
-    // 处理地图节点点击
-    for (interaction, node_btn, mut color) in button_queries.p0().iter_mut() {
+    for (interaction, node_btn) in button_queries.iter() {
         if matches!(interaction, Interaction::Pressed) {
-            // 获取节点类型
-            let node_type: NodeType = if let Some(ref progress) = map_progress {
-                progress.nodes.iter()
-                    .find(|n| n.id == node_btn.node_id)
-                    .map(|n| n.node_type)
-                    .unwrap_or(NodeType::Normal)
+            let node_id = node_btn.node_id;
+            
+            // 找到对应的节点
+            let node_type = if let Some(node) = map_progress.nodes.iter().find(|n| n.id == node_id) {
+                // 只有解锁的节点才能点击
+                if !node.unlocked || node.completed {
+                    continue;
+                }
+                node.node_type
             } else {
-                NodeType::Normal
+                continue;
             };
 
-            info!("地图节点 {} 被点击，节点类型: {:?}", node_btn.node_id, node_type);
+            info!("点击了地图节点: {}, 类型: {:?}", node_id, node_type);
+            
+            // 更新当前位置
+            map_progress.set_current_node(node_id);
 
-            // 根据节点类型进入不同状态
+            // --- 执行自动存档 ---
+            if let Ok((player, cultivation)) = player_query.get_single() {
+                let save = crate::resources::save::GameStateSave {
+                    player: player.clone(),
+                    cultivation: cultivation.clone(),
+                    deck: deck.cards.clone(),
+                    relics: relics.relic.clone(),
+                    map_nodes: map_progress.nodes.clone(),
+                    current_map_node_id: map_progress.current_node_id,
+                    current_map_layer: map_progress.current_layer,
+                };
+                let _ = save.save_to_disk();
+            }
+
+            // 根据节点类型切换状态
             match node_type {
-                NodeType::Shop => {
-                    // 进入商店
-                    if let Some(ref mut progress) = map_progress {
-                        progress.set_current_node(node_btn.node_id);
-                    }
-                    next_state.set(GameState::Shop);
-                }
-                NodeType::Rest => {
-                    // 休息点 - 恢复生命值
-                    if let Some(ref mut progress) = map_progress {
-                        progress.set_current_node(node_btn.node_id);
-                    }
-                    next_state.set(GameState::Rest);
-                }
-                NodeType::Treasure | NodeType::Normal | NodeType::Elite | NodeType::Boss => {
-                    // 战斗节点
-                    if let Some(ref mut progress) = map_progress {
-                        progress.set_current_node(node_btn.node_id);
-                    }
+                NodeType::Normal | NodeType::Elite | NodeType::Boss => {
                     next_state.set(GameState::Combat);
                 }
-                NodeType::Unknown => {
-                    info!("未知节点类型，忽略");
+                NodeType::Rest => {
+                    next_state.set(GameState::Rest);
+                }
+                NodeType::Shop => {
+                    next_state.set(GameState::Shop);
+                }
+                _ => {
+                    info!("暂未实现该节点类型的关卡");
                 }
             }
-        } else if matches!(interaction, Interaction::Hovered) {
-            // 悬停效果（稍微变亮）
-            if let Color::Srgba(ref c) = color.0 {
-                *color = BackgroundColor(Color::srgb(
-                    (c.red + 0.2).min(1.0),
-                    (c.green + 0.2).min(1.0),
-                    (c.blue + 0.2).min(1.0),
-                ));
-            }
-        } else {
-            // 恢复默认颜色（这里简化处理，实际应该根据节点类型恢复）
-            *color = BackgroundColor(Color::srgb(0.3, 0.5, 0.3));
-        }
-    }
-
-    // 处理返回按钮点击
-    for (interaction, mut color) in button_queries.p1().iter_mut() {
-        if matches!(interaction, Interaction::Pressed) {
-            info!("返回主菜单按钮被点击");
-            next_state.set(GameState::MainMenu);
-        } else if matches!(interaction, Interaction::Hovered) {
-            *color = BackgroundColor(Color::srgb(0.4, 0.4, 0.4));
-        } else {
-            *color = BackgroundColor(Color::srgb(0.3, 0.3, 0.3));
         }
     }
 }
@@ -555,10 +587,15 @@ fn setup_map_ui(
 ) {
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
 
+    // 健壮性处理：如果资源不存在，则创建并插入
     let progress = if let Some(p) = map_progress {
         p.clone()
     } else {
-        MapProgress::default()
+        info!("【地图系统】未找到地图进度，创建新机缘地图");
+        let new_progress = MapProgress::default();
+        // 关键修复：将新创建的进度插入为全局资源，供其它系统使用
+        commands.insert_resource(new_progress.clone());
+        new_progress
     };
 
     let nodes = progress.nodes.clone();
@@ -567,15 +604,19 @@ fn setup_map_ui(
         .map(|n| n.position.0)
         .unwrap_or(0);
 
-    // 视野逻辑：神识随境界增强
-    let (player, cultivation) = player_query.get_single().expect("必须有玩家实体");
+    // 健壮性处理：获取玩家数据，如果不存在则使用默认值
+    let player_info = player_query.get_single().ok();
     
     use crate::components::cultivation::Realm;
-    let vision_range = match cultivation.realm {
-        Realm::QiRefining => 1,
-        Realm::FoundationEstablishment => 2,
-        Realm::GoldenCore => 3,
-        _ => 99, // 元婴及以上神识通天，全图可见
+    let vision_range = if let Some((_, cultivation)) = player_info {
+        match cultivation.realm {
+            Realm::QiRefining => 1,
+            Realm::FoundationEstablishment => 2,
+            Realm::GoldenCore => 3,
+            _ => 99,
+        }
+    } else {
+        1 // 默认为炼气期视野
     };
     let visible_limit = current_layer + vision_range;
 
@@ -605,13 +646,19 @@ fn setup_map_ui(
                     TextFont { font: chinese_font.clone(), font_size: 42.0, ..default() },
                     TextColor(Color::srgb(0.8, 1.0, 0.8)),
                 ));
-                let realm_text = match cultivation.realm {
-                    Realm::QiRefining => "炼气期 - 神识笼罩周边",
-                    Realm::FoundationEstablishment => "筑基期 - 神识洞察远方",
-                    Realm::GoldenCore => "金丹期 - 神识横扫百里",
-                    Realm::NascentSoul => "元婴期 - 神识通天彻地",
-                    _ => "凡人 - 只能看到脚下",
+                
+                let realm_text = if let Some((_, cultivation)) = player_info {
+                    match cultivation.realm {
+                        Realm::QiRefining => "炼气期 - 神识笼罩周边",
+                        Realm::FoundationEstablishment => "筑基期 - 神识洞察远方",
+                        Realm::GoldenCore => "金丹期 - 神识横扫百里",
+                        Realm::NascentSoul => "元婴期 - 神识通天彻地",
+                        _ => "凡人 - 只能看到脚下",
+                    }
+                } else {
+                    "凡人 - 只能看到脚下"
                 };
+                
                 header.spawn((
                     Text::new(realm_text),
                     TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() },
@@ -689,8 +736,9 @@ fn setup_map_ui(
                     ..default()
                 },
             )).with_children(|footer| {
+                let gold = player_info.map(|(p, _)| p.gold).unwrap_or(0);
                 footer.spawn((
-                    Text::new(format!("持有灵石: {}", player.gold)),
+                    Text::new(format!("持有灵石: {}", gold)),
                     TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() },
                     TextColor(Color::srgb(1.0, 0.8, 0.2)),
                 ));
@@ -2394,28 +2442,37 @@ fn create_relic_reward_option(parent: &mut ChildBuilder, relic: Relic, asset_ser
 
 /// 处理游戏结束界面按钮点击
 fn handle_game_over_clicks(
-    interactions: Query<
-        (&Interaction, &RestartButton),
-        (Changed<Interaction>, With<RestartButton>),
-    >,
     mut next_state: ResMut<NextState<GameState>>,
-    mut player_deck: ResMut<PlayerDeck>,
-    mut map_progress: ResMut<MapProgress>,
+    mut player_query: Query<&mut Player>,
+    mut cultivation_query: Query<&mut crate::components::Cultivation>,
+    mut deck: ResMut<PlayerDeck>,
+    mut relics: ResMut<RelicCollection>,
+    button_queries: Query<(&Interaction, &RestartButton), Changed<Interaction>>,
 ) {
-    for (interaction, _restart_btn) in interactions.iter() {
+    for (interaction, _) in button_queries.iter() {
         if matches!(interaction, Interaction::Pressed) {
-            info!("游戏结束：重新开始游戏");
+            info!("【游戏结束】点击重新开始，正在重塑道基...");
+            
+            // 1. 彻底删除旧存档
+            crate::resources::save::GameStateSave::delete_save();
 
-            // 重置玩家牌组
-            player_deck.reset();
-            info!("玩家牌组已重置，大小: {}", player_deck.len());
+            // 2. 重置玩家数值
+            if let Ok(mut player) = player_query.get_single_mut() {
+                *player = Player::default(); // 恢复 80 HP
+            }
+            
+            // 3. 重置修为
+            if let Ok(mut cultivation) = cultivation_query.get_single_mut() {
+                *cultivation = crate::components::Cultivation::new();
+            }
 
-            // 重置地图进度
-            map_progress.reset();
-            info!("地图进度已重置，当前层数: {}", map_progress.current_layer);
+            // 4. 重置牌组与遗物
+            deck.cards = crate::components::cards::create_starting_deck();
+            relics.relic.clear();
+            relics.add_relic(crate::components::relic::Relic::burning_blood());
 
-            // 进入地图状态
-            next_state.set(GameState::Map);
+            next_state.set(GameState::Prologue);
+            return;
         }
     }
 }

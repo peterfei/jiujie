@@ -3,13 +3,14 @@
 //! 遗物提供永久性被动效果，是杀戮尖塔风格游戏的核心元素
 
 use bevy::prelude::*;
+use serde::{Serialize, Deserialize};
 
 // ============================================================================
 // 遗物定义
 // ============================================================================
 
 /// 遗物组件
-#[derive(Component, Debug, Clone, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Relic {
     /// 遗物ID
     pub id: RelicId,
@@ -24,7 +25,7 @@ pub struct Relic {
 }
 
 /// 遗物ID
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum RelicId {
     BurningBlood,     // 燃烧之血 - 战斗开始时对所有敌人造成3点伤害
     BagOfPreparation, // 准备背包 - 每场战斗开始时获得1张随机卡牌
@@ -33,7 +34,7 @@ pub enum RelicId {
 }
 
 /// 遗物稀有度
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RelicRarity {
     Common,    // 常见 - 基础效果
     Uncommon,  // 罕见 - 中等效果
@@ -42,7 +43,7 @@ pub enum RelicRarity {
 }
 
 /// 遗物效果类型
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RelicEffect {
     /// 战斗开始时触发（造成伤害、获得护甲等）
     OnCombatStart { damage: i32, block: i32, draw_cards: i32 },

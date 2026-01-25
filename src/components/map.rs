@@ -1,13 +1,14 @@
 //! 地图组件和系统
 
 use bevy::prelude::*;
+use serde::{Serialize, Deserialize};
 
 // ============================================================================
 // 地图组件
 // ============================================================================
 
 /// 地图节点
-#[derive(Component, Debug, Clone)]
+#[derive(Component, Debug, Clone, Serialize, Deserialize)]
 pub struct MapNode {
     /// 节点ID
     pub id: u32,
@@ -22,7 +23,7 @@ pub struct MapNode {
 }
 
 /// 节点类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NodeType {
     /// 普通战斗
     Normal,

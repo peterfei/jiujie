@@ -1,9 +1,10 @@
 //! 修仙境界系统组件
 
 use bevy::prelude::*;
+use serde::{Serialize, Deserialize};
 
 /// 修仙境界枚举
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Realm {
     /// 炼气期 (Qi Refining)
     #[default]
@@ -17,7 +18,7 @@ pub enum Realm {
 }
 
 /// 玩家修炼进度组件
-#[derive(Component, Debug, Clone)]
+#[derive(Component, Resource, Debug, Clone, Serialize, Deserialize)]
 pub struct Cultivation {
     /// 当前境界
     pub realm: Realm,

@@ -1,13 +1,14 @@
 //! 战斗组件和系统
 
 use bevy::prelude::*;
+use serde::{Serialize, Deserialize};
 
 // ============================================================================
 // 战斗状态
 // ============================================================================
 
 /// 战斗回合阶段
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum TurnPhase {
     /// 玩家回合开始
     #[default]
@@ -25,7 +26,7 @@ pub enum TurnPhase {
 // ============================================================================
 
 /// 玩家战斗属性
-#[derive(Component, Debug, Clone)]
+#[derive(Component, Resource, Debug, Clone, Serialize, Deserialize)]
 pub struct Player {
     /// 当前生命值
     pub hp: i32,

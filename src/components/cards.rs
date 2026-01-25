@@ -2,13 +2,14 @@
 
 use bevy::prelude::*;
 use rand::prelude::SliceRandom;
+use serde::{Serialize, Deserialize};
 
 // ============================================================================
 // 卡牌组件
 // ============================================================================
 
 /// 卡牌组件
-#[derive(Component, Debug, Clone)]
+#[derive(Component, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Card {
     /// 卡牌ID
     pub id: u32,
@@ -27,7 +28,7 @@ pub struct Card {
 }
 
 /// 卡牌类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CardType {
     /// 攻击卡
     Attack,
@@ -40,7 +41,7 @@ pub enum CardType {
 }
 
 /// 卡牌效果
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum CardEffect {
     /// 造成伤害
     DealDamage { amount: i32 },
@@ -58,7 +59,7 @@ pub enum CardEffect {
     MultiAttack { damage: i32, times: i32 },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CardRarity {
     /// 普通
     Common,

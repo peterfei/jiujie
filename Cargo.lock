@@ -468,6 +468,7 @@ dependencies = [
  "rand_core",
  "ron",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
