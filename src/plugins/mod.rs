@@ -10,7 +10,7 @@ use crate::components::{
     ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation, 
     EnemySpriteMarker, VictoryDelay, RelicCollection, Relic, RelicId,
     RelicObtainedEvent, RelicTriggeredEvent, DialogueLine,
-    PlaySfxEvent, SfxType
+    PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker
 };
 use crate::systems::sprite::spawn_character_sprite;
 
@@ -424,10 +424,6 @@ pub struct MapUiRoot;
 pub struct MapNodeButton {
     pub node_id: u32,
 }
-
-/// 返回主菜单按钮标记
-#[derive(Component)]
-struct BackToMenuButton;
 
 // ============================================================================
 // 按钮交互系统
@@ -857,48 +853,26 @@ fn get_node_icon(node_type: NodeType) -> &'static str {
 // 战斗系统
 // ============================================================================
 
-/// 战斗UI根节点标记
 #[derive(Component)]
 pub struct CombatUiRoot;
 
-/// 结束回合按钮标记
 #[derive(Component)]
-struct EndTurnButton;
-
-/// 返回地图按钮标记（战斗结束）
-#[derive(Component)]
-struct ReturnToMapButton;
-
-/// 奖励UI根节点标记
-#[derive(Component)]
-struct RewardUiRoot;
-
-/// 奖励卡牌按钮标记
-#[derive(Component)]
-pub struct RewardCardButton {
-    pub card_id: u32,
-}
-
-/// 奖励遗物按钮标记
-#[derive(Component)]
-pub struct RewardRelicButton {
-    pub relic_id: RelicId,
-}
-
-/// 卡牌悬停详情面板标记
-#[derive(Component)]
-struct CardHoverPanelMarker;
-
-/// 遗物悬停详情面板标记
-#[derive(Component)]
-struct RelicHoverPanelMarker;
-
-// 战斗UI文本标记组件
-#[derive(Component)]
-struct EnemyHpText;
+struct TopBar;
 
 #[derive(Component)]
-struct EnemyIntentText;
+struct TopBarHpText;
+
+#[derive(Component)]
+struct TopBarGoldText;
+
+#[derive(Component)]
+struct EnergyOrb;
+
+#[derive(Component)]
+struct DrawPileIcon;
+
+#[derive(Component)]
+struct DiscardPileIcon;
 
 #[derive(Component)]
 struct PlayerHpText;
@@ -910,7 +884,28 @@ struct PlayerEnergyText;
 struct PlayerBlockText;
 
 #[derive(Component)]
+struct EnemyHpText;
+
+#[derive(Component)]
+struct EnemyIntentText;
+
+#[derive(Component)]
 struct TurnText;
+
+#[derive(Component)]
+struct DrawPileText;
+
+#[derive(Component)]
+struct DiscardPileText;
+
+#[derive(Component)]
+struct HandCountText;
+
+#[derive(Component)]
+struct EndTurnButton;
+
+#[derive(Component)]
+struct ReturnToMapButton;
 
 /// 手牌卡片标记
 #[derive(Component)]
@@ -925,381 +920,113 @@ struct HandCard {
 }
 
 #[derive(Component)]
-struct DrawPileText;
-
-#[derive(Component)]
-struct DiscardPileText;
-
-#[derive(Component)]
-struct HandCountText;
-
-#[derive(Component)]
 pub struct HandArea;
 
+#[derive(Component)]
+struct RewardUiRoot;
+
+#[derive(Component)]
+struct RewardCardButton {
+    card_id: u32,
+}
+
+#[derive(Component)]
+struct RewardRelicButton {
+    relic_id: RelicId,
+}
+
+#[derive(Component)]
+struct RestartButton;
+
+#[derive(Component)]
+struct BackToMenuButton;
+
+#[derive(Component)]
+struct BackToMapButton;
+
 /// 设置战斗UI
-fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>, player_deck: Res<PlayerDeck>, mut victory_delay: ResMut<VictoryDelay>) {
-    // 进入战斗时确保胜利延迟被重置（防止上一场战斗的状态泄漏）
+fn setup_combat_ui(
+    mut commands: Commands, 
+    asset_server: Res<AssetServer>, 
+    player_deck: Res<PlayerDeck>, 
+    mut victory_delay: ResMut<VictoryDelay>,
+    player_query: Query<(&Player, &crate::components::Cultivation)>,
+) {
+    info!("setup_combat_ui: 开始重构尖塔风格布局");
     if victory_delay.active {
-        info!("进入战斗时检测到胜利延迟仍然激活，强制重置");
         victory_delay.active = false;
         victory_delay.elapsed = 0.0;
     }
+    
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
-
-    // 注意：玩家实体由 init_player 系统统一管理，不再在此创建
-
     commands.spawn(Enemy::new(0, "嗜血妖狼", 30));
-
-    // 创建敌人精灵
-    spawn_character_sprite(
-        &mut commands,
-        CharacterType::NormalEnemy,
-        Vec3::new(0.0, 100.0, 10.0),
-        Vec2::new(70.0, 100.0),
-    );
-
-    // 创建玩家精灵
-    spawn_character_sprite(
-        &mut commands,
-        CharacterType::Player,
-        Vec3::new(0.0, -200.0, 10.0),
-        Vec2::new(80.0, 120.0),
-    );
-
-    // 初始化战斗状态
+    spawn_character_sprite(&mut commands, CharacterType::NormalEnemy, Vec3::new(300.0, 50.0, 10.0), Vec2::new(120.0, 150.0));
+    spawn_character_sprite(&mut commands, CharacterType::Player, Vec3::new(-350.0, -80.0, 10.0), Vec2::new(100.0, 140.0));
     commands.insert_resource(CombatState::default());
-
-    // 创建牌组（使用持久化的玩家牌组）
     let deck_cards = player_deck.cards.clone();
     commands.insert_resource(DeckConfig { starting_deck: deck_cards.clone(), ..default() });
-
-    // 计算初始抽牌后剩余的卡牌
     let initial_draw = 5.min(deck_cards.len());
     let drawn_cards: Vec<Card> = deck_cards.iter().take(initial_draw).cloned().collect();
     let remaining_deck: Vec<Card> = deck_cards.iter().skip(initial_draw).cloned().collect();
-
     commands.spawn(DrawPile::new(remaining_deck));
     commands.spawn(DiscardPile::new());
-
-    // 创建手牌并添加初始卡牌
     let mut hand = Hand::new(10);
-    for card in drawn_cards {
-        hand.add_card(card);
-    }
-    info!("战斗开始：初始抽了 {} 张牌到手牌", hand.cards.len());
+    for card in drawn_cards { hand.add_card(card); }
     commands.spawn(hand);
+    let player_data = player_query.get_single().ok();
 
-    // 创建战斗UI根容器
-    commands
-        .spawn((
-            Node {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                flex_direction: FlexDirection::Column,
-                ..default()
-            },
-            CombatUiRoot,
-        ))
-        .with_children(|parent| {
-            // 顶部：敌人区域
-            parent
-                .spawn(Node {
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(40.0),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                })
-                .with_children(|enemy_area| {
-                    // 敌人信息面板
-                    enemy_area
-                        .spawn((
-                            Node {
-                            width: Val::Px(200.0),
-                            height: Val::Px(150.0),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            flex_direction: FlexDirection::Column,
-                            row_gap: Val::Px(10.0),
-                            ..default()
-                        },
-                        EnemyUiMarker,
-                    ))
-                        .with_children(|enemy_panel| {
-                            // 敌人名称
-                            enemy_panel.spawn((
-                                Text::new("嗜血妖狼"),
-                                TextFont {
-                                    font: chinese_font.clone(),
-                                    font_size: 24.0,
-                                    ..default()
-                                },
-                                TextColor(Color::WHITE),
-                            ));
-
-                            // 敌人血量
-                            enemy_panel.spawn((
-                                Text::new("HP: 30/30"),
-                                TextFont {
-                                    font: chinese_font.clone(),
-                                    font_size: 18.0,
-                                    ..default()
-                                },
-                                TextColor(Color::srgb(1.0, 0.3, 0.3)),
-                                EnemyHpText,
-                            ));
-
-                            // 敌人意图
-                            enemy_panel.spawn((
-                                Text::new("意图: 攻击(10)"),
-                                TextFont {
-                                    font: chinese_font.clone(),
-                                    font_size: 16.0,
-                                    ..default()
-                                },
-                                TextColor(Color::srgb(1.0, 0.8, 0.0)),
-                                EnemyIntentText,
-                            ));
-                        });
-                });
-
-            // 中部：玩家区域
-            parent
-                .spawn(Node {
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(40.0),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                })
-                .with_children(|player_area| {
-                    // 玩家信息面板
-                    player_area
-                        .spawn((
-                            Node {
-                            width: Val::Px(300.0),
-                            height: Val::Px(150.0),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            flex_direction: FlexDirection::Column,
-                            row_gap: Val::Px(10.0),
-                            ..default()
-                        },
-                        PlayerUiMarker,
-                    ))
-                        .with_children(|player_panel| {
-                            // 玩家血量
-                            player_panel.spawn((
-                                Text::new("HP: 80/80"),
-                                TextFont {
-                                    font: chinese_font.clone(),
-                                    font_size: 20.0,
-                                    ..default()
-                                },
-                                TextColor(Color::srgb(0.3, 1.0, 0.3)),
-                                PlayerHpText,
-                            ));
-
-                            // 玩家能量
-                            player_panel.spawn((
-                                Text::new("能量: 3/3"),
-                                TextFont {
-                                    font: chinese_font.clone(),
-                                    font_size: 20.0,
-                                    ..default()
-                                },
-                                TextColor(Color::srgb(0.3, 0.6, 1.0)),
-                                PlayerEnergyText,
-                            ));
-
-                            // 玩家护甲
-                            player_panel.spawn((
-                                Text::new("护甲: 0"),
-                                TextFont {
-                                    font: chinese_font.clone(),
-                                    font_size: 20.0,
-                                    ..default()
-                                },
-                                TextColor(Color::srgb(0.8, 0.5, 0.2)),
-                                PlayerBlockText,
-                            ));
-
-                            // 当前回合
-                            player_panel.spawn((
-                                Text::new("第 1 回合"),
-                                TextFont {
-                                    font: chinese_font.clone(),
-                                    font_size: 16.0,
-                                    ..default()
-                                },
-                                TextColor(Color::srgb(0.7, 0.7, 0.7)),
-                                TurnText,
-                            ));
-                        });
-                });
-
-            // 底部：控制区域（左侧：牌组信息，右侧：控制按钮，下方：手牌区）
-            parent
-                .spawn(Node {
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(40.0),
-                    flex_direction: FlexDirection::Column,
-                    justify_content: JustifyContent::SpaceBetween,
-                    align_items: AlignItems::Center,
-                    padding: UiRect::all(Val::Px(10.0)),
-                    row_gap: Val::Px(10.0),
-                    ..default()
-                })
-                .with_children(|control_area| {
-                    // 上半部分：牌组信息 + 控制按钮
-                    control_area
-                        .spawn(Node {
-                            width: Val::Percent(100.0),
-                            height: Val::Px(50.0),
-                            flex_direction: FlexDirection::Row,
-                            justify_content: JustifyContent::SpaceBetween,
-                            align_items: AlignItems::Center,
-                            ..default()
-                        })
-                        .with_children(|top_row| {
-                            // 左侧：抽牌堆和弃牌堆信息
-                            top_row
-                                .spawn(Node {
-                                    width: Val::Px(200.0),
-                                    height: Val::Px(50.0),
-                                    justify_content: JustifyContent::Center,
-                                    align_items: AlignItems::Center,
-                                    column_gap: Val::Px(20.0),
-                                    ..default()
-                                })
-                                .with_children(|deck_info| {
-                                    // 抽牌堆
-                                    deck_info.spawn((
-                                        Text::new("抽牌堆: 10"),
-                                        TextFont {
-                                            font: chinese_font.clone(),
-                                            font_size: 14.0,
-                                            ..default()
-                                        },
-                                        TextColor(Color::srgb(0.7, 0.7, 0.7)),
-                                        DrawPileText,
-                                    ));
-
-                                    // 弃牌堆
-                                    deck_info.spawn((
-                                        Text::new("弃牌堆: 0"),
-                                        TextFont {
-                                            font: chinese_font.clone(),
-                                            font_size: 14.0,
-                                            ..default()
-                                        },
-                                        TextColor(Color::srgb(0.7, 0.7, 0.7)),
-                                        DiscardPileText,
-                                    ));
-                                });
-
-                            // 右侧：控制按钮
-                            top_row
-                                .spawn(Node {
-                                    width: Val::Px(280.0),
-                                    height: Val::Px(50.0),
-                                    justify_content: JustifyContent::Center,
-                                    align_items: AlignItems::Center,
-                                    column_gap: Val::Px(10.0),
-                                    ..default()
-                                })
-                                .with_children(|button_area| {
-                                    // 结束回合按钮
-                                    button_area
-                                        .spawn((
-                                            Node {
-                                                width: Val::Px(120.0),
-                                                height: Val::Px(40.0),
-                                                justify_content: JustifyContent::Center,
-                                                align_items: AlignItems::Center,
-                                                ..default()
-                                            },
-                                            BackgroundColor(Color::srgb(0.3, 0.5, 0.3)),
-                                            Button,
-                                            EndTurnButton,
-                                        ))
-                                        .with_children(|parent| {
-                                            parent.spawn((
-                                                Text::new("结束回合"),
-                                                TextFont {
-                                                    font: chinese_font.clone(),
-                                                    font_size: 16.0,
-                                                    ..default()
-                                                },
-                                                TextColor(Color::WHITE),
-                                            ));
-                                        });
-
-                                    // 返回地图按钮
-                                    button_area
-                                        .spawn((
-                                            Node {
-                                                width: Val::Px(120.0),
-                                                height: Val::Px(40.0),
-                                                justify_content: JustifyContent::Center,
-                                                align_items: AlignItems::Center,
-                                                ..default()
-                                            },
-                                            BackgroundColor(Color::srgb(0.3, 0.3, 0.3)),
-                                            Button,
-                                            ReturnToMapButton,
-                                        ))
-                                        .with_children(|parent| {
-                                            parent.spawn((
-                                                Text::new("返回地图"),
-                                                TextFont {
-                                                    font: chinese_font.clone(),
-                                                    font_size: 16.0,
-                                                    ..default()
-                                                },
-                                                TextColor(Color::WHITE),
-                                            ));
-                                        });
-                                });
-                        });
-
-                    // 下半部分：手牌区域
-                    control_area
-                        .spawn((
-                            Node {
-                                width: Val::Percent(100.0),
-                                height: Val::Auto,
-                                min_height: Val::Px(100.0),
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                column_gap: Val::Px(10.0),
-                                flex_wrap: FlexWrap::Wrap,
-                                ..default()
-                            },
-                            HandArea,
-                        ))
-                        .with_children(|hand_area| {
-                            // 手牌卡片容器（稍后动态添加）
-                            hand_area.spawn((
-                                Text::new("手牌: 0/10"),
-                                TextFont {
-                                    font: chinese_font.clone(),
-                                    font_size: 16.0,
-                                    ..default()
-                                },
-                                TextColor(Color::srgb(0.6, 0.6, 0.6)),
-                                Node {
-                                    margin: UiRect::top(Val::Px(5.0)),
-                                    ..default()
-                                },
-                                HandCountText,
-                            ));
-                        });
-                });
+    commands.spawn((
+        Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+        PickingBehavior::IGNORE,
+        CombatUiRoot,
+    )).with_children(|root| {
+        root.spawn((
+            Node { position_type: PositionType::Absolute, top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Px(45.0), flex_direction: FlexDirection::Row, align_items: AlignItems::Center, padding: UiRect::horizontal(Val::Px(20.0)), column_gap: Val::Px(30.0), ..default() },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.85)),
+            TopBar,
+        )).with_children(|bar| {
+            if let Some((player, cultivation)) = player_data {
+                let realm_name = match cultivation.realm {
+                    crate::components::cultivation::Realm::QiRefining => "炼气期",
+                    crate::components::cultivation::Realm::FoundationEstablishment => "筑基期",
+                    _ => "修仙者",
+                };
+                bar.spawn((Text::new(format!("境界: {}", realm_name)), TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() }, TextColor(Color::srgb(0.4, 1.0, 0.4))));
+                bar.spawn((Text::new(format!("道行: {}/{}", player.hp, player.max_hp)), TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() }, TextColor(Color::srgb(1.0, 0.4, 0.4)), TopBarHpText));
+                bar.spawn((Text::new(format!("灵石: {}", player.gold)), TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() }, TextColor(Color::srgb(1.0, 0.8, 0.2)), TopBarGoldText));
+            }
         });
+        root.spawn(Node { position_type: PositionType::Absolute, left: Val::Px(150.0), bottom: Val::Px(280.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() }).with_children(|p| {
+            if let Some((player, _)) = player_data {
+                p.spawn((Text::new(format!("{}/{}", player.hp, player.max_hp)), TextFont { font: chinese_font.clone(), font_size: 22.0, ..default() }, TextColor(Color::WHITE), PlayerHpText));
+                p.spawn((Text::new(format!("护甲: {}", player.block)), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(Color::srgb(0.4, 0.7, 1.0)), PlayerBlockText));
+            }
+        });
+        root.spawn((Node { position_type: PositionType::Absolute, right: Val::Px(250.0), bottom: Val::Px(350.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: Val::Px(5.0), ..default() }, EnemyUiMarker)).with_children(|e| {
+            e.spawn((Text::new("嗜血妖狼"), TextFont { font: chinese_font.clone(), font_size: 24.0, ..default() }, TextColor(Color::WHITE)));
+            e.spawn((Text::new("HP: 30/30"), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::srgb(1.0, 0.3, 0.3)), EnemyHpText));
+            e.spawn((Text::new("意图: 等待"), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(Color::srgb(1.0, 0.8, 0.4)), EnemyIntentText));
+        });
+        root.spawn((Node { position_type: PositionType::Absolute, left: Val::Px(100.0), bottom: Val::Px(120.0), width: Val::Px(90.0), height: Val::Px(90.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, ZIndex(10), BackgroundColor(Color::srgba(0.1, 0.2, 0.5, 0.9)), EnergyOrb)).with_children(|orb| {
+            if let Some((player, _)) = player_data {
+                orb.spawn((Text::new(format!("{}/{}", player.energy, player.max_energy)), TextFont { font: chinese_font.clone(), font_size: 32.0, ..default() }, TextColor(Color::WHITE), PlayerEnergyText));
+            }
+        });
+        root.spawn((Button, Node { position_type: PositionType::Absolute, right: Val::Px(100.0), bottom: Val::Px(140.0), width: Val::Px(160.0), height: Val::Px(50.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: UiRect::all(Val::Px(2.0)), ..default() }, BackgroundColor(Color::srgb(0.2, 0.4, 0.2)), BorderColor(Color::BLACK), EndTurnButton)).with_children(|btn| {
+            btn.spawn((Text::new("结束回合"), TextFont { font: chinese_font.clone(), font_size: 24.0, ..default() }, TextColor(Color::WHITE)));
+        });
+        root.spawn((Node { position_type: PositionType::Absolute, left: Val::Percent(0.0), bottom: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Px(250.0), justify_content: JustifyContent::Center, ..default() }, HandArea)).with_children(|parent| {
+            parent.spawn((Text::new("手牌: 0/10"), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::srgba(1.0, 1.0, 1.0, 0.5)), Node { position_type: PositionType::Absolute, top: Val::Px(10.0), ..default() }, HandCountText));
+        });
+        root.spawn((Node { position_type: PositionType::Absolute, left: Val::Px(30.0), bottom: Val::Px(30.0), ..default() })).with_children(|p| {
+            p.spawn((Text::new("剑冢: 0"), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE), DrawPileText));
+        });
+        root.spawn((Node { position_type: PositionType::Absolute, right: Val::Px(30.0), bottom: Val::Px(30.0), ..default() })).with_children(|p| {
+            p.spawn((Text::new("归墟: 0"), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE), DiscardPileText));
+        });
+    });
 }
 
-/// 清理战斗UI
 pub fn cleanup_combat_ui(
     mut commands: Commands,
     ui_query: Query<Entity, With<CombatUiRoot>>,
@@ -1314,47 +1041,16 @@ pub fn cleanup_combat_ui(
     hand_query: Query<Entity, With<Hand>>,
     hand_area_query: Query<Entity, With<HandArea>>,
 ) {
-    // 清理UI
-    for entity in ui_query.iter() {
-        commands.entity(entity).despawn_recursive();
-    }
-    // 注意：不再在这里清理玩家实体，玩家需要持久化以保留修仙境界
-    
-    // 清理敌人实体
-    for entity in enemy_query.iter() {
-        commands.entity(entity).despawn_recursive();
-    }
-    // 清理精灵实体
-    for entity in _sprite_query.iter() {
-        commands.entity(entity).despawn_recursive();
-    }
-    // 清理粒子实体
-    for entity in particle_query.iter() {
-        commands.entity(entity).despawn_recursive();
-    }
-    // 清理发射器实体
-    for entity in emitter_query.iter() {
-        commands.entity(entity).despawn_recursive();
-    }
-    // 清理屏幕特效实体
-    for entity in screen_effect_query.iter() {
-        commands.entity(entity).despawn_recursive();
-    }
-    // 牌组实体
-    for entity in draw_pile_query.iter() {
-        commands.entity(entity).despawn_recursive();
-    }
-    for entity in discard_pile_query.iter() {
-        commands.entity(entity).despawn_recursive();
-    }
-    for entity in hand_query.iter() {
-        commands.entity(entity).despawn_recursive();
-    }
-    // 清理手牌区域标记实体
-    for entity in hand_area_query.iter() {
-        commands.entity(entity).despawn_recursive();
-    }
-    // 移除战斗状态资源
+    for entity in ui_query.iter() { commands.entity(entity).despawn_recursive(); }
+    for entity in enemy_query.iter() { commands.entity(entity).despawn_recursive(); }
+    for entity in _sprite_query.iter() { commands.entity(entity).despawn_recursive(); }
+    for entity in particle_query.iter() { commands.entity(entity).despawn_recursive(); }
+    for entity in emitter_query.iter() { commands.entity(entity).despawn_recursive(); }
+    for entity in screen_effect_query.iter() { commands.entity(entity).despawn_recursive(); }
+    for entity in draw_pile_query.iter() { commands.entity(entity).despawn_recursive(); }
+    for entity in discard_pile_query.iter() { commands.entity(entity).despawn_recursive(); }
+    for entity in hand_query.iter() { commands.entity(entity).despawn_recursive(); }
+    for entity in hand_area_query.iter() { commands.entity(entity).despawn_recursive(); }
     commands.remove_resource::<CombatState>();
     commands.remove_resource::<DeckConfig>();
 }
@@ -1490,63 +1186,53 @@ fn handle_combat_button_clicks(
     }
 }
 
-/// 实时更新战斗UI
+/// 更新战斗UI显示
 fn update_combat_ui(
-    player_query: Query<&Player>,
-    enemy_query: Query<&Enemy>,
+    player_query: Query<&Player, Changed<Player>>,
+    enemy_query: Query<&Enemy, Changed<Enemy>>,
     mut text_queries: ParamSet<(
-        Query<&mut Text, With<EnemyHpText>>,
-        Query<&mut Text, With<EnemyIntentText>>,
         Query<&mut Text, With<PlayerHpText>>,
         Query<&mut Text, With<PlayerEnergyText>>,
         Query<&mut Text, With<PlayerBlockText>>,
-        Query<&mut Text, With<TurnText>>,
+        Query<&mut Text, With<EnemyHpText>>,
+        Query<&mut Text, With<EnemyIntentText>>,
+        Query<&mut Text, With<TopBarHpText>>,
+        Query<&mut Text, With<TopBarGoldText>>,
     )>,
 ) {
-    // 获取玩家和敌人数据
+    // 更新玩家信息
     if let Ok(player) = player_query.get_single() {
-        if let Ok(enemy) = enemy_query.get_single() {
-            // 更新敌人HP
-            if let Ok(mut hp_text) = text_queries.p0().get_single_mut() {
-                hp_text.0 = format!("HP: {}/{}", enemy.hp, enemy.max_hp);
-            }
+        if let Ok(mut text) = text_queries.p0().get_single_mut() {
+            text.0 = format!("{}/{}", player.hp, player.max_hp);
+        }
+        if let Ok(mut text) = text_queries.p1().get_single_mut() {
+            text.0 = format!("{}/{}", player.energy, player.max_energy);
+        }
+        if let Ok(mut text) = text_queries.p2().get_single_mut() {
+            text.0 = format!("护甲: {}", player.block);
+        }
+        // 同步更新顶部状态栏
+        if let Ok(mut text) = text_queries.p5().get_single_mut() {
+            text.0 = format!("道行: {}/{}", player.hp, player.max_hp);
+        }
+        if let Ok(mut text) = text_queries.p6().get_single_mut() {
+            text.0 = format!("灵石: {}", player.gold);
+        }
+    }
 
-            // 更新敌人意图
-            if let Ok(mut intent_text) = text_queries.p1().get_single_mut() {
-                let intent_str = match enemy.intent {
-                    crate::components::EnemyIntent::Attack { damage } => format!("攻击({})", damage),
-                    crate::components::EnemyIntent::Defend { block } => format!("防御({})", block),
-                    crate::components::EnemyIntent::Buff { strength } => format!("强化({})", strength),
-                    crate::components::EnemyIntent::Wait => "等待".to_string(),
-                };
-                intent_text.0 = format!("意图: {}", intent_str);
-            }
-
-            // 更新玩家HP
-            if let Ok(mut hp_text) = text_queries.p2().get_single_mut() {
-                let old_text = hp_text.0.clone();
-                hp_text.0 = format!("HP: {}/{}", player.hp, player.max_hp);
-                if old_text != hp_text.0 {
-                    info!("玩家HP更新: {} -> {}", old_text, hp_text.0);
-                }
-            } else {
-                error!("严重错误: PlayerHpText 查询失败！UI可能没有正确创建");
-            }
-
-            // 更新玩家能量
-            if let Ok(mut energy_text) = text_queries.p3().get_single_mut() {
-                energy_text.0 = format!("能量: {}/{}", player.energy, player.max_energy);
-            }
-
-            // 更新玩家护甲
-            if let Ok(mut block_text) = text_queries.p4().get_single_mut() {
-                block_text.0 = format!("护甲: {}", player.block);
-            }
-
-            // 更新回合数
-            if let Ok(mut turn_text) = text_queries.p5().get_single_mut() {
-                turn_text.0 = format!("第 {} 回合", player.turn);
-            }
+    // 更新敌人信息
+    if let Ok(enemy) = enemy_query.get_single() {
+        if let Ok(mut text) = text_queries.p3().get_single_mut() {
+            text.0 = format!("HP: {}/{}", enemy.hp, enemy.max_hp);
+        }
+        if let Ok(mut text) = text_queries.p4().get_single_mut() {
+            let intent_text = match &enemy.intent {
+                EnemyIntent::Attack { damage } => format!("意图: 攻击({})", damage),
+                EnemyIntent::Defend { block } => format!("意图: 防御({})", block),
+                EnemyIntent::Buff { strength } => format!("意图: 强化({})", strength),
+                EnemyIntent::Wait => "意图: 等待".to_string(),
+            };
+            text.0 = intent_text;
         }
     }
 }
@@ -2440,13 +2126,8 @@ fn handle_reward_clicks(
 // 游戏结束系统
 // ============================================================================
 
-/// 游戏结束UI根节点标记
 #[derive(Component)]
 struct GameOverUiRoot;
-
-/// 重新开始按钮标记
-#[derive(Component)]
-struct RestartButton;
 
 /// 设置游戏结束界面
 fn setup_game_over_ui(
