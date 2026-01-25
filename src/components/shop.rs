@@ -10,12 +10,19 @@ use crate::components::{Card, Relic};
 /// 商店商品
 #[derive(Debug, Clone)]
 pub enum ShopItem {
-    /// 卡牌
+    /// 功法（卡牌）
     Card(Card),
-    /// 遗物
+    /// 法宝（遗物）
     Relic(Relic),
-    /// 移除卡牌服务
-    RemoveCard,
+    /// 灵丹（恢复类）
+    Elixir {
+        name: String,
+        hp_restore: i32,
+        price: i32,
+        description: String,
+    },
+    /// 遗忘功法（移除卡牌服务）
+    ForgetTechnique,
 }
 
 impl ShopItem {
@@ -23,7 +30,6 @@ impl ShopItem {
     pub fn get_price(&self) -> i32 {
         match self {
             ShopItem::Card(card) => {
-                // 根据稀有度定价
                 match card.rarity {
                     crate::components::CardRarity::Common => 30,
                     crate::components::CardRarity::Uncommon => 50,
@@ -32,7 +38,6 @@ impl ShopItem {
                 }
             }
             ShopItem::Relic(relic) => {
-                // 遗物统一价格
                 match relic.rarity {
                     crate::components::relic::RelicRarity::Common => 50,
                     crate::components::relic::RelicRarity::Uncommon => 75,
@@ -40,7 +45,8 @@ impl ShopItem {
                     crate::components::relic::RelicRarity::Special => 150,
                 }
             }
-            ShopItem::RemoveCard => 50,
+            ShopItem::Elixir { price, .. } => *price,
+            ShopItem::ForgetTechnique => 50,
         }
     }
 
@@ -49,7 +55,8 @@ impl ShopItem {
         match self {
             ShopItem::Card(card) => &card.name,
             ShopItem::Relic(relic) => &relic.name,
-            ShopItem::RemoveCard => "移除卡牌",
+            ShopItem::Elixir { name, .. } => name,
+            ShopItem::ForgetTechnique => "遗忘功法",
         }
     }
 
@@ -58,7 +65,8 @@ impl ShopItem {
         match self {
             ShopItem::Card(card) => &card.description,
             ShopItem::Relic(relic) => &relic.description,
-            ShopItem::RemoveCard => "从牌组中永久移除一张卡牌",
+            ShopItem::Elixir { description, .. } => description,
+            ShopItem::ForgetTechnique => "从识海中永久抹去一门功法，以免贪多嚼不烂",
         }
     }
 }

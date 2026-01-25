@@ -112,7 +112,7 @@ fn test_shop_item_remove_card_price() {
     // 场景描述: 移除卡牌服务应有固定价格
     // 预期结果: 固定价格50
 
-    let shop_item = ShopItem::RemoveCard;
+    let shop_item = ShopItem::ForgetTechnique;
     assert_eq!(shop_item.get_price(), 50, "移除卡牌服务价格应为50");
 }
 
@@ -140,9 +140,9 @@ fn test_shop_item_name_and_description() {
     assert_eq!(relic_item.get_name(), "飞剑符");
     assert!(!relic_item.get_description().is_empty());
 
-    let remove_item = ShopItem::RemoveCard;
-    assert_eq!(remove_item.get_name(), "移除卡牌");
-    assert_eq!(remove_item.get_description(), "从牌组中永久移除一张卡牌");
+    let remove_item = ShopItem::ForgetTechnique;
+    assert_eq!(remove_item.get_name(), "遗忘功法");
+    assert!(remove_item.get_description().contains("永久抹去"));
 }
 
 // ============================================================================
@@ -308,7 +308,7 @@ fn test_buy_remove_card_service() {
     let mut player = Player::default();
     player.gold = 100;
 
-    let remove_service = ShopItem::RemoveCard;
+    let remove_service = ShopItem::ForgetTechnique;
     let price = remove_service.get_price();
 
     assert_eq!(price, 50, "移除服务价格为50");
@@ -382,7 +382,7 @@ fn test_shop_generation_respects_limits() {
 
     let items = CurrentShopItems {
         items: vec![
-            ShopItem::RemoveCard, // 移除卡牌服务
+            ShopItem::ForgetTechnique, // 移除卡牌服务
         ],
     };
 
@@ -416,8 +416,8 @@ fn test_shop_prices_are_reasonable() {
     assert!(ShopItem::Relic(Relic::burning_blood()).get_price() <= 200);
 
     // 移除服务价格
-    assert!(ShopItem::RemoveCard.get_price() > 0);
-    assert!(ShopItem::RemoveCard.get_price() <= 100);
+    assert!(ShopItem::ForgetTechnique.get_price() > 0);
+    assert!(ShopItem::ForgetTechnique.get_price() <= 100);
 }
 
 // ============================================================================
@@ -471,6 +471,6 @@ fn test_shop_state_exists() {
         GameState::Reward => panic!("不应是Reward"),
         GameState::Shop => {}, // 正确
         GameState::Rest => panic!("不应是Rest"),
-        GameState::GameOver => panic!("不应是GameOver"),
+        GameState::GameOver => panic!("不应是GameOver"), _ => {}
     }
 }

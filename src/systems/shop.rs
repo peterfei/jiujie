@@ -41,19 +41,11 @@ pub fn setup_shop_ui(
     relic_collection: Res<RelicCollection>,
     mut player_query: Query<&mut Player>,
 ) {
-    info!("【商店系统】设置商店UI");
+    info!("【仙家坊市】设置坊市UI");
 
-    // 玩家实体由 init_player 系统统一管理
-    // 如果玩家金币为0，给予初始金币
-    let current_gold = if let Ok(mut player) = player_query.get_single_mut() {
-        if player.gold == 0 {
-            player.gold = 100;
-            info!("【商店系统】玩家获得初始金币: 100");
-        }
+    let current_gold = if let Ok(player) = player_query.get_single() {
         player.gold
     } else {
-        // 理论上不应该到达这里，因为 init_player 应该已经创建了 Player
-        warn!("【商店系统】未找到玩家实体！init_player 应该已经创建了");
         100
     };
 
@@ -68,198 +60,152 @@ pub fn setup_shop_ui(
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(20.0),
+                row_gap: Val::Px(25.0),
                 ..default()
             },
-            BackgroundColor(Color::srgb(0.1, 0.1, 0.15)),
+            BackgroundColor(Color::srgb(0.02, 0.05, 0.02)), // 更深邃的墨绿背景
             ShopUiRoot,
         ))
         .with_children(|parent| {
+            // 坊市大标题
             parent.spawn((
-                Text::new("商店"),
+                Text::new("仙 家 坊 市"),
                 TextFont {
-                    font_size: 40.0,
+                    font_size: 52.0,
                     font: chinese_font.clone(),
                     ..default()
                 },
-                TextColor(Color::WHITE),
+                TextColor(Color::srgb(0.6, 0.9, 0.6)),
             ));
 
-            parent.spawn((
-                Text::new(format!("金币: {}", current_gold)),
-                TextFont {
-                    font_size: 24.0,
-                    font: chinese_font.clone(),
-                    ..default()
-                },
-                TextColor(COLOR_GOLD),
-                ShopGoldText, // 标记金币文本，用于后续更新
-            ));
-
-            // 商品列表
+            // 灵石存量
             parent.spawn((
                 Node {
-                    width: Val::Percent(80.0),
-                    height: Val::Percent(50.0),
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    column_gap: Val::Px(10.0),
+                    ..default()
+                },
+            )).with_children(|p| {
+                p.spawn((
+                    Text::new("所持灵石:"),
+                    TextFont { font_size: 24.0, font: chinese_font.clone(), ..default() },
+                    TextColor(Color::srgb(0.7, 0.7, 0.7)),
+                ));
+                p.spawn((
+                    Text::new(format!("{}", current_gold)),
+                    TextFont { font_size: 28.0, font: chinese_font.clone(), ..default() },
+                    TextColor(COLOR_GOLD),
+                    ShopGoldText,
+                ));
+            });
+
+            // 商品货架
+            parent.spawn((
+                Node {
+                    width: Val::Percent(90.0),
+                    height: Val::Percent(60.0),
                     flex_direction: FlexDirection::Row,
                     flex_wrap: FlexWrap::Wrap,
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
-                    column_gap: Val::Px(20.0),
-                    row_gap: Val::Px(20.0),
+                    column_gap: Val::Px(25.0),
+                    row_gap: Val::Px(25.0),
                     ..default()
                 },
-                BackgroundColor(Color::srgb(0.05, 0.05, 0.1)),
             ))
             .with_children(|items_parent| {
                 let item_font = chinese_font.clone();
                 for (index, item) in current_items.items.iter().enumerate() {
                     items_parent.spawn((
                         Node {
-                            width: Val::Px(150.0),
-                            height: Val::Px(200.0),
+                            width: Val::Px(190.0),
+                            height: Val::Px(260.0),
                             flex_direction: FlexDirection::Column,
                             justify_content: JustifyContent::SpaceBetween,
                             align_items: AlignItems::Center,
-                            padding: UiRect::all(Val::Px(10.0)),
+                            padding: UiRect::all(Val::Px(15.0)),
+                            border: UiRect::all(Val::Px(1.0)),
                             ..default()
                         },
-                        BackgroundColor(Color::srgb(0.2, 0.2, 0.25)),
-                        BorderRadius::all(Val::Px(8.0)),
+                        BackgroundColor(Color::srgba(0.05, 0.1, 0.05, 0.9)),
+                        BorderColor(Color::srgb(0.3, 0.4, 0.3)),
+                        BorderRadius::all(Val::Px(12.0)),
                     ))
                     .with_children(|item_parent| {
                         // 商品名称
                         item_parent.spawn((
                             Text::new(item.get_name()),
-                            TextFont {
-                                font_size: 16.0,
-                                font: item_font.clone(),
-                                ..default()
-                            },
+                            TextFont { font_size: 22.0, font: item_font.clone(), ..default() },
                             TextColor(Color::WHITE),
+                        ));
+
+                        // 描述
+                        item_parent.spawn((
+                            Text::new(item.get_description()),
+                            TextFont { font_size: 13.0, font: item_font.clone(), ..default() },
+                            TextColor(Color::srgb(0.6, 0.6, 0.6)),
+                            Node { max_width: Val::Px(160.0), ..default() },
                         ));
 
                         // 价格
                         item_parent.spawn((
-                            Text::new(format!("{}金币", item.get_price())),
-                            TextFont {
-                                font_size: 14.0,
-                                font: item_font.clone(),
-                                ..default()
-                            },
+                            Text::new(format!("{} 灵石", item.get_price())),
+                            TextFont { font_size: 18.0, font: item_font.clone(), ..default() },
                             TextColor(COLOR_GOLD),
                         ));
 
-                        // 购买按钮（带商品标记）
-                        match item {
-                            ShopItem::Card(_) => {
-                                item_parent.spawn((
-                                    Button,
-                                    ShopCardButton { item_index: index },
-                                    Interaction::None,
-                                    Node {
-                                        width: Val::Px(80.0),
-                                        height: Val::Px(30.0),
-                                        justify_content: JustifyContent::Center,
-                                        align_items: AlignItems::Center,
-                                        ..default()
-                                    },
-                                    BackgroundColor(Color::srgb(0.3, 0.6, 0.3)),
-                                    BorderRadius::all(Val::Px(4.0)),
-                                ))
-                                .with_children(|btn_parent| {
-                                    btn_parent.spawn((
-                                        Text::new("购买"),
-                                        TextFont {
-                                            font_size: 14.0,
-                                            font: item_font.clone(),
-                                            ..default()
-                                        },
-                                        TextColor(Color::WHITE),
-                                    ));
-                                });
-                            }
-                            ShopItem::Relic(_) => {
-                                item_parent.spawn((
-                                    Button,
-                                    ShopRelicButton { item_index: index },
-                                    Interaction::None,
-                                    Node {
-                                        width: Val::Px(80.0),
-                                        height: Val::Px(30.0),
-                                        justify_content: JustifyContent::Center,
-                                        align_items: AlignItems::Center,
-                                        ..default()
-                                    },
-                                    BackgroundColor(Color::srgb(0.3, 0.6, 0.3)),
-                                    BorderRadius::all(Val::Px(4.0)),
-                                ))
-                                .with_children(|btn_parent| {
-                                    btn_parent.spawn((
-                                        Text::new("购买"),
-                                        TextFont {
-                                            font_size: 14.0,
-                                            font: item_font.clone(),
-                                            ..default()
-                                        },
-                                        TextColor(Color::WHITE),
-                                    ));
-                                });
-                            }
-                            ShopItem::RemoveCard => {
-                                item_parent.spawn((
-                                    Button,
-                                    ShopRemoveCardButton,
-                                    Interaction::None,
-                                    Node {
-                                        width: Val::Px(80.0),
-                                        height: Val::Px(30.0),
-                                        justify_content: JustifyContent::Center,
-                                        align_items: AlignItems::Center,
-                                        ..default()
-                                    },
-                                    BackgroundColor(Color::srgb(0.3, 0.6, 0.3)),
-                                    BorderRadius::all(Val::Px(4.0)),
-                                ))
-                                .with_children(|btn_parent| {
-                                    btn_parent.spawn((
-                                        Text::new("购买"),
-                                        TextFont {
-                                            font_size: 14.0,
-                                            font: item_font.clone(),
-                                            ..default()
-                                        },
-                                        TextColor(Color::WHITE),
-                                    ));
-                                });
-                            }
-                        }
+                        // 动作按钮
+                        let action_text = match item {
+                            ShopItem::Card(_) => "参悟",
+                            ShopItem::Relic(_) => "求取",
+                            ShopItem::Elixir { .. } => "服下",
+                            ShopItem::ForgetTechnique => "了断",
+                        };
+
+                        item_parent.spawn((
+                            Button,
+                            ShopCardButton { item_index: index },
+                            Node {
+                                width: Val::Px(90.0),
+                                height: Val::Px(35.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0.2, 0.4, 0.2)),
+                            BorderRadius::all(Val::Px(6.0)),
+                        ))
+                        .with_children(|btn| {
+                            btn.spawn((
+                                Text::new(action_text),
+                                TextFont { font_size: 16.0, font: item_font.clone(), ..default() },
+                                TextColor(Color::WHITE),
+                            ));
+                        });
                     });
                 }
             });
 
-            // 返回地图按钮
+            // 离去按钮
             parent.spawn((
                 Button,
                 Node {
-                    width: Val::Px(200.0),
-                    height: Val::Px(50.0),
+                    width: Val::Px(180.0),
+                    height: Val::Px(45.0),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
+                    margin: UiRect::top(Val::Px(20.0)),
                     ..default()
                 },
-                BackgroundColor(Color::srgb(0.3, 0.5, 0.3)),
-                BorderRadius::all(Val::Px(5.0)),
+                BackgroundColor(Color::srgb(0.25, 0.35, 0.25)),
+                BorderRadius::all(Val::Px(8.0)),
                 ShopExitButton,
             ))
-            .with_children(|parent| {
-                parent.spawn((
-                    Text::new("返回地图"),
-                    TextFont {
-                        font_size: 20.0,
-                        font: chinese_font,
-                        ..default()
-                    },
+            .with_children(|p| {
+                p.spawn((
+                    Text::new("离开坊市"),
+                    TextFont { font_size: 22.0, font: chinese_font.clone(), ..default() },
                     TextColor(Color::WHITE),
                 ));
             });
@@ -270,24 +216,50 @@ pub fn setup_shop_ui(
 
 /// 生成商店商品
 fn generate_shop_items(_player_deck: &PlayerDeck, _relic_collection: &RelicCollection) -> Vec<ShopItem> {
-    info!("【商店系统】生成商店商品");
+    info!("【仙家坊市】生成机缘商品");
 
     let all_cards = crate::components::cards::CardPool::all_cards();
     let mut items = vec![];
-
-    // 添加3张随机卡牌
     use rand::seq::SliceRandom;
     let mut rng = rand::thread_rng();
 
-    // 选择3张不同的卡牌
+    // 1. 随机添加 3 张功法（卡牌）
     for card in all_cards.choose_multiple(&mut rng, 3) {
         items.push(ShopItem::Card(card.clone()));
     }
 
-    // 添加移除卡牌服务
-    items.push(ShopItem::RemoveCard);
+    // 2. 随机添加 1 个法宝（遗物）
+    // TODO: 目前遗物池较小，暂不随机，或直接添加一个
+    
+    // 3. 随机添加 1 颗灵丹
+    let elixirs = vec![
+        ShopItem::Elixir {
+            name: "洗髓丹".to_string(),
+            hp_restore: 20,
+            price: 40,
+            description: "洗筋伐髓，恢复 20 点道行".to_string(),
+        },
+        ShopItem::Elixir {
+            name: "聚灵散".to_string(),
+            hp_restore: 10,
+            price: 25,
+            description: "聚拢灵气，恢复 10 点道行".to_string(),
+        },
+        ShopItem::Elixir {
+            name: "九转还魂丹".to_string(),
+            hp_restore: 50,
+            price: 90,
+            description: "生死肉骨，恢复 50 点道行".to_string(),
+        },
+    ];
+    if let Some(elixir) = elixirs.choose(&mut rng) {
+        items.push(elixir.clone());
+    }
 
-    info!("【商店系统】生成了{}个商品", items.len());
+    // 4. 固定提供“遗忘功法”服务
+    items.push(ShopItem::ForgetTechnique);
+
+    info!("【仙家坊市】机缘已至，共生成了 {} 个商品", items.len());
     items
 }
 
@@ -312,7 +284,7 @@ pub fn handle_shop_interactions(
         }
     }
 
-    // 处理卡牌购买
+    // 处理卡牌与灵丹购买
     for (interaction, shop_btn) in card_buttons.iter() {
         if matches!(interaction, Interaction::Pressed) {
             let item = &current_items.items[shop_btn.item_index];
@@ -320,14 +292,23 @@ pub fn handle_shop_interactions(
 
             if let Ok(mut player) = player_query.get_single_mut() {
                 if player.gold >= price {
-                    if let ShopItem::Card(card) = item {
-                        player.gold -= price;
-                        deck.add_card(card.clone());
-                        info!("【商店系统】购买卡牌: {}, 价格: {}, 剩余金币: {}",
-                              card.name, price, player.gold);
+                    match item {
+                        ShopItem::Card(card) => {
+                            player.gold -= price;
+                            deck.add_card(card.clone());
+                            info!("【仙家坊市】换取功法: {}, 消耗灵石: {}, 剩余灵石: {}",
+                                  card.name, price, player.gold);
+                        }
+                        ShopItem::Elixir { name, hp_restore, .. } => {
+                            player.gold -= price;
+                            player.hp = (player.hp + hp_restore).min(player.max_hp);
+                            info!("【仙家坊市】服下 {}: 恢复 {} 点道行, 消耗灵石: {}, 剩余灵石: {}",
+                                  name, hp_restore, price, player.gold);
+                        }
+                        _ => {}
                     }
                 } else {
-                    info!("【商店系统】金币不足: 需要 {}, 拥有 {}", price, player.gold);
+                    info!("【仙家坊市】灵石不足: 需要 {}, 拥有 {}", price, player.gold);
                 }
             }
         }
@@ -344,29 +325,29 @@ pub fn handle_shop_interactions(
                     if let ShopItem::Relic(relic) = item {
                         player.gold -= price;
                         relic_collection.add_relic(relic.clone());
-                        info!("【商店系统】购买遗物: {}, 价格: {}, 剩余金币: {}",
+                        info!("【仙家坊市】求取法宝: {}, 消耗灵石: {}, 剩余灵石: {}",
                               relic.name, price, player.gold);
                     }
                 } else {
-                    info!("【商店系统】金币不足: 需要 {}, 拥有 {}", price, player.gold);
+                    info!("【仙家坊市】灵石不足: 需要 {}, 拥有 {}", price, player.gold);
                 }
             }
         }
     }
 
-    // 处理移除卡牌服务购买
+    // 处理遗忘功法服务购买
     for (interaction, _) in remove_buttons.iter() {
         if matches!(interaction, Interaction::Pressed) {
-            let price = ShopItem::RemoveCard.get_price();
+            let price = ShopItem::ForgetTechnique.get_price();
 
             if let Ok(mut player) = player_query.get_single_mut() {
                 if player.gold >= price {
                     player.gold -= price;
-                    info!("【商店系统】购买移除卡牌服务, 价格: {}, 剩余金币: {}",
+                    info!("【仙家坊市】了断尘缘, 消耗灵石: {}, 剩余灵石: {}",
                           price, player.gold);
                     // TODO: 进入移除卡牌选择UI
                 } else {
-                    info!("【商店系统】金币不足: 需要 {}, 拥有 {}", price, player.gold);
+                    info!("【仙家坊市】灵石不足: 需要 {}, 拥有 {}", price, player.gold);
                 }
             }
         }
