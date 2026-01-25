@@ -666,7 +666,7 @@ fn get_node_icon(node_type: NodeType) -> &'static str {
 
 /// 战斗UI根节点标记
 #[derive(Component)]
-struct CombatUiRoot;
+pub struct CombatUiRoot;
 
 /// 结束回合按钮标记
 #[derive(Component)]
