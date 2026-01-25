@@ -7,6 +7,7 @@ pub mod screen_effect;
 pub mod relic;
 pub mod shop;
 pub mod rest;
+pub mod audio;
 
 pub use animation::AnimationPlugin;
 pub use sprite::SpritePlugin;
@@ -15,3 +16,4 @@ pub use screen_effect::ScreenEffectPlugin;
 pub use relic::{RelicPlugin, RelicUiPlugin, CombatStartProcessed};
 pub use shop::{ShopPlugin, update_gold_display};
 pub use rest::RestPlugin;
+pub use audio::SfxPlugin;

@@ -9,7 +9,8 @@ use crate::components::{
     SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, 
     ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation, 
     EnemySpriteMarker, VictoryDelay, RelicCollection, Relic, RelicId,
-    RelicObtainedEvent, RelicTriggeredEvent, DialogueLine
+    RelicObtainedEvent, RelicTriggeredEvent, DialogueLine,
+    PlaySfxEvent, SfxType
 };
 use crate::systems::sprite::spawn_character_sprite;
 
@@ -109,6 +110,8 @@ impl Plugin for MenuPlugin {
         app.add_systems(Update, draw_cards_on_turn_start.run_if(in_state(GameState::Combat)));
         // 更新手牌UI
         app.add_systems(Update, update_hand_ui.run_if(in_state(GameState::Combat)));
+        // 处理手牌卡片交互（缩放、弹出音效等）
+        app.add_systems(Update, handle_hand_card_interaction.run_if(in_state(GameState::Combat)));
         // 处理出牌
         app.add_systems(Update, handle_card_play.run_if(in_state(GameState::Combat)));
         // 检查战斗结束
@@ -909,10 +912,16 @@ struct PlayerBlockText;
 #[derive(Component)]
 struct TurnText;
 
-// 卡牌UI标记组件
+/// 手牌卡片标记
 #[derive(Component)]
 struct HandCard {
     card_id: u32,
+    /// 原始位置（用于悬停恢复）
+    base_bottom: f32,
+    /// 原始旋转弧度
+    base_rotation: f32,
+    /// 原始索引
+    index: usize,
 }
 
 #[derive(Component)]
@@ -1294,7 +1303,7 @@ fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>, playe
 pub fn cleanup_combat_ui(
     mut commands: Commands,
     ui_query: Query<Entity, With<CombatUiRoot>>,
-    player_query: Query<Entity, With<Player>>,
+    _player_query: Query<Entity, With<Player>>,
     enemy_query: Query<Entity, With<Enemy>>,
     _sprite_query: Query<Entity, With<SpriteMarker>>,
     particle_query: Query<Entity, With<ParticleMarker>>,
@@ -1697,57 +1706,70 @@ fn update_hand_ui(
         if let Ok((hand_area_entity, children)) = hand_area_query.get_single_mut() {
             let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
 
-            // 清空现有手牌显示（保留第一个子元素，即"手牌: X/Y"文本）
+            // 1. 清空现有手牌显示（保留第一个子元素，即"手牌: X/Y"文本）
             for (i, child) in children.iter().enumerate() {
                 if i > 0 {
                     commands.entity(*child).despawn_recursive();
                 }
             }
 
-            // 为每张手牌创建UI卡片
+            // 2. 为每张手牌创建UI卡片 (扇形布局)
+            let total_cards = hand.cards.len();
+            let center_index = (total_cards as f32 - 1.0) / 2.0;
+
             for (i, card) in hand.cards.iter().enumerate() {
-                info!("生成卡牌UI: {} (索引: {})", card.name, i);
-                let card_color = card.get_color();
-                let cost_text = if card.cost > 0 {
-                    format!("{}", card.cost)
-                } else {
-                    "0".to_string()
-                };
+                // 计算扇形布局参数
+                let offset_from_center = i as f32 - center_index;
+                
+                // 水平偏移
+                let x_pos = offset_from_center * 95.0; 
+                
+                // 垂直偏移 (形成圆弧)
+                let arc_height = -3.0 * offset_from_center * offset_from_center;
+                let base_bottom = 20.0 + arc_height;
+                
+                // 旋转
+                let rotation = -offset_from_center * 0.06;
 
                 commands.entity(hand_area_entity).with_children(|parent| {
                     // 卡牌容器
                     parent
                         .spawn((
                             Node {
-                                width: Val::Px(80.0),
-                                height: Val::Px(110.0),
+                                position_type: PositionType::Absolute,
+                                width: Val::Px(105.0),
+                                height: Val::Px(145.0),
+                                left: Val::Px(x_pos + 450.0), // 假设中心在450
+                                bottom: Val::Px(base_bottom),
                                 flex_direction: FlexDirection::Column,
                                 justify_content: JustifyContent::SpaceBetween,
                                 align_items: AlignItems::Center,
-                                padding: UiRect::all(Val::Px(5.0)),
-                                margin: UiRect::horizontal(Val::Px(3.0)),
+                                padding: UiRect::all(Val::Px(6.0)),
                                 border: UiRect::all(Val::Px(2.0)),
                                 ..default()
                             },
-                            BackgroundColor(card_color),
+                            Transform::from_rotation(Quat::from_rotation_z(rotation)),
+                            BackgroundColor(card.get_color()),
                             BorderColor(Color::BLACK),
-                            HandCard { card_id: card.id },
+                            HandCard { 
+                                card_id: card.id,
+                                base_bottom,
+                                base_rotation: rotation,
+                                index: i,
+                            },
                             Button,
                         ))
                         .with_children(|card_ui| {
                             // 能量消耗
+                            let cost_text = format!("{}", card.cost);
                             card_ui.spawn((
                                 Text::new(cost_text),
                                 TextFont {
                                     font: chinese_font.clone(),
-                                    font_size: 16.0,
+                                    font_size: 18.0,
                                     ..default()
                                 },
                                 TextColor(Color::WHITE),
-                                Node {
-                                    margin: UiRect::top(Val::Px(2.0)),
-                                    ..default()
-                                },
                             ));
 
                             // 卡牌名称
@@ -1759,10 +1781,7 @@ fn update_hand_ui(
                                     ..default()
                                 },
                                 TextColor(Color::WHITE),
-                                Node {
-                                    margin: UiRect::top(Val::Px(5.0)),
-                                    ..default()
-                                },
+                                TextLayout::new_with_justify(JustifyText::Center),
                             ));
 
                             // 卡牌描述
@@ -1773,11 +1792,8 @@ fn update_hand_ui(
                                     font_size: 10.0,
                                     ..default()
                                 },
-                                TextColor(Color::srgb(0.9, 0.9, 0.9)),
-                                Node {
-                                    margin: UiRect::bottom(Val::Px(2.0)),
-                                    ..default()
-                                },
+                                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.9)),
+                                TextLayout::new_with_justify(JustifyText::Center),
                             ));
                         });
                 });
@@ -1790,6 +1806,31 @@ fn update_hand_ui(
 // 出牌系统
 // ============================================================================
 
+/// 处理手牌卡片交互（悬停缩放、弹出）
+fn handle_hand_card_interaction(
+    mut query: Query<(&Interaction, &HandCard, &mut Node, &mut Transform, &mut ZIndex, &mut BorderColor), Changed<Interaction>>,
+) {
+    for (interaction, hand_card, mut node, mut transform, mut z_index, mut border_color) in query.iter_mut() {
+        match interaction {
+            Interaction::Hovered => {
+                node.bottom = Val::Px(hand_card.base_bottom + 50.0);
+                transform.scale = Vec3::splat(1.3);
+                transform.rotation = Quat::IDENTITY;
+                *z_index = ZIndex(100);
+                *border_color = BorderColor(Color::WHITE);
+            }
+            Interaction::None => {
+                node.bottom = Val::Px(hand_card.base_bottom);
+                transform.scale = Vec3::ONE;
+                transform.rotation = Quat::from_rotation_z(hand_card.base_rotation);
+                *z_index = ZIndex(hand_card.index as i32);
+                border_color.0 = Color::BLACK;
+            }
+            _ => {}
+        }
+    }
+}
+
 /// 处理卡牌点击事件
 fn handle_card_play(
     _commands: Commands,
@@ -1801,36 +1842,32 @@ fn handle_card_play(
     mut enemy_query: Query<&mut Enemy>,
     mut effect_events: EventWriter<SpawnEffectEvent>,
     mut screen_events: EventWriter<ScreenEffectEvent>,
+    mut sfx_events: EventWriter<PlaySfxEvent>,
 ) {
     for (interaction, hand_card) in card_query.iter() {
         if matches!(interaction, Interaction::Pressed) {
-            // 获取玩家信息
-            let (_can_play, player_energy) = if let Ok(player) = player_query.get_single() {
-                (player.energy > 0, player.energy)
+            let player_energy = if let Ok(player) = player_query.get_single() {
+                player.energy
             } else {
-                (false, 0)
+                0
             };
 
-            // 获取手牌信息
-            let (card_opt, hand_entity) = if let Ok(hand) = hand_query.get_single() {
-                // 找到对应的卡牌
+            let card_opt = if let Ok(hand) = hand_query.get_single() {
                 let card_index = hand.cards.iter().position(|c| c.id == hand_card.card_id);
-                (card_index.map(|i| hand.cards[i].clone()), ())
+                card_index.map(|i| hand.cards[i].clone())
             } else {
-                (None, ())
+                None
             };
 
-            if let (Some(card), _) = (card_opt, hand_entity) {
-                // 检查能量是否足够
+            if let Some(card) = card_opt {
                 if player_energy >= card.cost {
                     info!("打出卡牌: {} (消耗: {})", card.name, card.cost);
+                    sfx_events.send(PlaySfxEvent::new(SfxType::CardPlay));
 
-                    // 扣除能量
                     if let Ok(mut player) = player_query.get_single_mut() {
                         player.energy -= card.cost;
                     }
 
-                    // 触发卡牌效果
                     apply_card_effect(
                         &card.effect,
                         &mut player_query,
@@ -1842,11 +1879,9 @@ fn handle_card_play(
                         &mut screen_events,
                     );
 
-                    // 从手牌移除卡牌
                     if let Ok(mut hand) = hand_query.get_single_mut() {
                         if let Some(index) = hand.cards.iter().position(|c| c.id == card.id) {
                             let played_card = hand.remove_card(index).unwrap();
-                            // 添加到弃牌堆
                             if let Ok(mut discard_pile) = discard_pile_query.get_single_mut() {
                                 discard_pile.add_card(played_card);
                             }
@@ -1876,14 +1911,12 @@ fn apply_card_effect(
             if let Ok(mut enemy) = enemy_query.get_single_mut() {
                 enemy.take_damage(*amount);
                 info!("卡牌效果：对敌人造成 {} 点伤害，敌人剩余HP: {}", amount, enemy.hp);
-                // 触发火焰特效
                 effect_events.send(SpawnEffectEvent {
                     effect_type: EffectType::Fire,
                     position: Vec3::new(0.0, 100.0, 999.0),
                     burst: true,
                     count: 30,
                 });
-                // 触发屏幕震动（轻）
                 screen_events.send(ScreenEffectEvent::Shake {
                     trauma: 0.2,
                     decay: 6.0,
@@ -1892,10 +1925,8 @@ fn apply_card_effect(
         }
         CardEffect::GainBlock { amount } => {
             if let Ok(mut player) = player_query.get_single_mut() {
-                let old_block = player.block;
                 player.gain_block(*amount);
-                info!("卡牌效果：获得 {} 点护甲，{} -> {}", amount, old_block, player.block);
-                // 触发冰霜特效（护甲）
+                info!("卡牌效果：获得 {} 点护甲，当前护甲: {}", amount, player.block);
                 effect_events.send(SpawnEffectEvent {
                     effect_type: EffectType::Ice,
                     position: Vec3::new(0.0, -200.0, 999.0),
@@ -1906,83 +1937,28 @@ fn apply_card_effect(
         }
         CardEffect::Heal { amount } => {
             if let Ok(mut player) = player_query.get_single_mut() {
-                let old_hp = player.hp;
                 player.hp = (player.hp + amount).min(player.max_hp);
-                info!("卡牌效果：回复 {} 点生命，{} -> {}", amount, old_hp, player.hp);
-                // 触发治疗粒子特效
+                info!("卡牌效果：回复 {} 点生命，当前道行: {}", amount, player.hp);
                 effect_events.send(SpawnEffectEvent {
                     effect_type: EffectType::Heal,
                     position: Vec3::new(0.0, -200.0, 999.0),
                     burst: true,
                     count: 20,
                 });
-                // 触发白色闪光
-                screen_events.send(ScreenEffectEvent::white_flash(0.3));
             }
         }
         CardEffect::DrawCards { amount } => {
-            // 从抽牌堆抽牌到手牌
             let mut drawn = 0;
-            let cards_to_draw = *amount;
-
-            // 如果抽牌堆为空，先将弃牌堆洗入抽牌堆
             if let Ok(mut draw_pile) = draw_pile_query.get_single_mut() {
                 if draw_pile.count == 0 {
                     if let Ok(mut discard_pile) = discard_pile_query.get_single_mut() {
                         let cards = discard_pile.clear();
                         if !cards.is_empty() {
                             draw_pile.shuffle_from_discard(cards);
-                            info!("卡牌效果：抽牌堆为空，将弃牌堆洗入抽牌堆，共 {} 张牌", draw_pile.count);
                         }
                     }
                 }
-
-                // 抽牌
-                for _ in 0..cards_to_draw {
-                    if let Some(card) = draw_pile.draw_card() {
-                        if let Ok(mut hand) = hand_query.get_single_mut() {
-                            if hand.add_card(card) {
-                                drawn += 1;
-                            }
-                        }
-                    } else {
-                        break; // 抽牌堆空了，停止抽牌
-                    }
-                }
-            }
-
-            if drawn > 0 {
-                info!("卡牌效果：抽了 {} 张牌", drawn);
-            }
-        }
-        CardEffect::GainEnergy { amount } => {
-            if let Ok(mut player) = player_query.get_single_mut() {
-                let old_energy = player.energy;
-                player.energy = (player.energy + amount).min(player.max_energy);
-                info!("卡牌效果：获得 {} 点能量，{} -> {}", amount, old_energy, player.energy);
-            }
-        }
-        CardEffect::AttackAndDraw { damage, cards } => {
-            if let Ok(mut enemy) = enemy_query.get_single_mut() {
-                enemy.take_damage(*damage);
-                info!("卡牌效果：造成 {} 点伤害，敌人剩余HP: {}", damage, enemy.hp);
-            }
-
-            // 抽牌效果
-            let mut drawn = 0;
-            if let Ok(mut draw_pile) = draw_pile_query.get_single_mut() {
-                // 如果抽牌堆为空，先将弃牌堆洗入抽牌堆
-                if draw_pile.count == 0 {
-                    if let Ok(mut discard_pile) = discard_pile_query.get_single_mut() {
-                        let cards = discard_pile.clear();
-                        if !cards.is_empty() {
-                            draw_pile.shuffle_from_discard(cards);
-                            info!("卡牌效果：抽牌堆为空，将弃牌堆洗入抽牌堆，共 {} 张牌", draw_pile.count);
-                        }
-                    }
-                }
-
-                for _ in 0..*cards {
+                for _ in 0..*amount {
                     if let Some(card) = draw_pile.draw_card() {
                         if let Ok(mut hand) = hand_query.get_single_mut() {
                             if hand.add_card(card) {
@@ -1994,20 +1970,17 @@ fn apply_card_effect(
                     }
                 }
             }
-
             if drawn > 0 {
                 info!("卡牌效果：抽了 {} 张牌", drawn);
             }
         }
-        CardEffect::MultiAttack { damage, times } => {
-            if let Ok(mut enemy) = enemy_query.get_single_mut() {
-                let total_damage = damage * times;
-                enemy.take_damage(total_damage);
-                info!("卡牌效果：{} 次攻击，每次 {} 点伤害，共 {} 点，敌人剩余HP: {}", times, damage, total_damage, enemy.hp);
-            }
-        }
+        _ => {}
     }
 }
+
+// ============================================================================
+// 战斗结算与延迟系统
+// ============================================================================
 
 /// 检查战斗是否结束
 fn check_combat_end(
@@ -2926,6 +2899,7 @@ fn update_tribulation(
     mut next_state: ResMut<NextState<GameState>>,
     mut screen_events: EventWriter<ScreenEffectEvent>,
     mut effect_events: EventWriter<SpawnEffectEvent>,
+    mut sfx_events: EventWriter<PlaySfxEvent>,
 ) {
     // 推进总进度
     timer.total_timer.tick(time.delta());
@@ -2949,6 +2923,9 @@ fn update_tribulation(
             player.hp -= damage;
             
             info!("⚡ 第 {} 道天雷落下！造成 {} 点伤害，剩余道行: {}", timer.strikes_count, damage, player.hp);
+
+            // 播放天雷音效
+            sfx_events.send(PlaySfxEvent::new(SfxType::LightningStrike));
 
             // 视觉特效：强力白光闪烁 + 剧烈震动
             screen_events.send(ScreenEffectEvent::Flash { 
@@ -2986,6 +2963,7 @@ fn teardown_tribulation(
     ui_query: Query<Entity, With<TribulationUiMarker>>,
     mut player_query: Query<(&mut Player, &mut crate::components::Cultivation)>,
     mut effect_events: EventWriter<SpawnEffectEvent>,
+    mut sfx_events: EventWriter<PlaySfxEvent>,
 ) {
     // 清理渡劫专用UI
     for entity in ui_query.iter() {
@@ -3003,6 +2981,9 @@ fn teardown_tribulation(
                 
                 info!("✨【破境成功】成功晋升至 {:?}！道行大进，上限增加 {} 点", cultivation.realm, hp_bonus);
                 
+                // 播放突破成功的仙乐
+                sfx_events.send(PlaySfxEvent::new(SfxType::BreakthroughSuccess));
+
                 // 成功的金色光辉
                 effect_events.send(SpawnEffectEvent {
                     effect_type: EffectType::Victory,

@@ -11,6 +11,7 @@ pub mod relic;
 pub mod shop;
 pub mod cultivation;
 pub mod dialogue;
+pub mod audio;
 
 pub use map::{MapNode, NodeType, MapConfig, generate_map_nodes, MapProgress};
 pub use combat::{Player, Enemy, EnemyIntent, EnemyType, AiPattern, CombatConfig, CombatState, TurnPhase, PlayerDeck, VictoryDelay, CardHoverPanelMarker, RelicHoverPanelMarker};
@@ -21,6 +22,7 @@ pub use cards::{
 };
 pub use cultivation::{Cultivation, Realm};
 pub use dialogue::{Dialogue, DialogueLine};
+pub use audio::{PlaySfxEvent, SfxType};
 pub use animation::{
     MovementAnimation, ShakeAnimation, FloatingDamageText,
     EnemyUiMarker, PlayerUiMarker, EasingFunction, EnemyAttackEvent

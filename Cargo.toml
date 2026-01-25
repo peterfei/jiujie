@@ -9,8 +9,8 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 # Bevy 0.15.x - 固定版本避免breaking changes
-# 使用默认功能，后续可按需优化
-bevy = "0.15"
+# TODO: 暂时开启 mp3 支持以验证效果，生产环境建议替换为 .ogg 格式并移除此 feature
+bevy = { version = "0.15", features = ["mp3"] }
 
 # 随机数生成
 rand = "0.8"
