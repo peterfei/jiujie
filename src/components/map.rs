@@ -148,7 +148,7 @@ pub struct MapConfig {
 impl Default for MapConfig {
     fn default() -> Self {
         Self {
-            layers: 3,
+            layers: 10,
             nodes_per_layer: 4,
             node_spacing: 150.0,
         }

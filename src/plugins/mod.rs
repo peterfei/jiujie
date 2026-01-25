@@ -547,21 +547,38 @@ fn handle_map_button_clicks(
 // ============================================================================
 
 /// 设置地图UI
-fn setup_map_ui(mut commands: Commands, asset_server: Res<AssetServer>, map_progress: Option<Res<MapProgress>>) {
-    // 加载中文字体
+fn setup_map_ui(
+    mut commands: Commands, 
+    asset_server: Res<AssetServer>, 
+    map_progress: Option<Res<MapProgress>>,
+    player_query: Query<(&Player, &crate::components::Cultivation)>,
+) {
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
 
-    // 如果没有地图进度，创建新的
     let progress = if let Some(p) = map_progress {
         p.clone()
     } else {
-        info!("创建新地图进度");
         MapProgress::default()
     };
 
     let nodes = progress.nodes.clone();
+    let current_layer = progress.current_node_id
+        .and_then(|id| nodes.iter().find(|n| n.id == id))
+        .map(|n| n.position.0)
+        .unwrap_or(0);
 
-    // 创建地图UI根容器
+    // 视野逻辑：神识随境界增强
+    let (player, cultivation) = player_query.get_single().expect("必须有玩家实体");
+    
+    use crate::components::cultivation::Realm;
+    let vision_range = match cultivation.realm {
+        Realm::QiRefining => 1,
+        Realm::FoundationEstablishment => 2,
+        Realm::GoldenCore => 3,
+        _ => 99, // 元婴及以上神识通天，全图可见
+    };
+    let visible_limit = current_layer + vision_range;
+
     commands
         .spawn((
             Node {
@@ -572,23 +589,35 @@ fn setup_map_ui(mut commands: Commands, asset_server: Res<AssetServer>, map_prog
                 flex_direction: FlexDirection::Column,
                 ..default()
             },
+            BackgroundColor(Color::srgb(0.05, 0.05, 0.05)),
             MapUiRoot,
         ))
         .with_children(|parent| {
-            // 地图标题
-            parent.spawn((
-                Text::new("地图"),
-                TextFont {
-                    font: chinese_font.clone(),
-                    font_size: 36.0,
-                    ..default()
-                },
-                TextColor(Color::WHITE),
-                Node {
-                    margin: UiRect::bottom(Val::Px(30.0)),
-                    ..default()
-                },
-            ));
+            // 地图标题与境界显示
+            parent.spawn(Node {
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                margin: UiRect::bottom(Val::Px(20.0)),
+                ..default()
+            }).with_children(|header| {
+                header.spawn((
+                    Text::new("寻 仙 觅 缘"),
+                    TextFont { font: chinese_font.clone(), font_size: 42.0, ..default() },
+                    TextColor(Color::srgb(0.8, 1.0, 0.8)),
+                ));
+                let realm_text = match cultivation.realm {
+                    Realm::QiRefining => "炼气期 - 神识笼罩周边",
+                    Realm::FoundationEstablishment => "筑基期 - 神识洞察远方",
+                    Realm::GoldenCore => "金丹期 - 神识横扫百里",
+                    Realm::NascentSoul => "元婴期 - 神识通天彻地",
+                    _ => "凡人 - 只能看到脚下",
+                };
+                header.spawn((
+                    Text::new(realm_text),
+                    TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() },
+                    TextColor(Color::srgb(0.5, 0.7, 0.5)),
+                ));
+            });
 
             // 地图节点容器
             parent
@@ -601,12 +630,12 @@ fn setup_map_ui(mut commands: Commands, asset_server: Res<AssetServer>, map_prog
                     ..default()
                 })
                 .with_children(|map_parent| {
-                    // 计算最大层数
                     let max_layer = nodes.iter().map(|n| n.position.0).max().unwrap_or(0);
 
-                    // 按层显示节点
                     for layer in 0..=max_layer {
-                        // 创建层容器
+                        // 只显示视野范围内的层级，或者已经走过的层级，或者最后一层Boss
+                        let is_visible = layer <= visible_limit || layer == max_layer;
+
                         map_parent
                             .spawn(Node {
                                 width: Val::Percent(100.0),
@@ -618,51 +647,58 @@ fn setup_map_ui(mut commands: Commands, asset_server: Res<AssetServer>, map_prog
                                 ..default()
                             })
                             .with_children(|layer_parent| {
-                                // 在该层中添加节点
-                                for node in &nodes {
-                                    if node.position.0 == layer {
-                                        spawn_map_node(
-                                            layer_parent,
-                                            node,
-                                            &chinese_font,
-                                            &progress,
-                                        );
+                                if is_visible {
+                                    for node in &nodes {
+                                        if node.position.0 == layer {
+                                            spawn_map_node(layer_parent, node, &chinese_font, &progress);
+                                        }
+                                    }
+                                } else {
+                                    // 迷雾效果：在该层显示一些模糊的占位符
+                                    for _ in 0..4 {
+                                        layer_parent.spawn((
+                                            Node {
+                                                width: Val::Px(60.0),
+                                                height: Val::Px(60.0),
+                                                justify_content: JustifyContent::Center,
+                                                align_items: AlignItems::Center,
+                                                ..default()
+                                            },
+                                            BackgroundColor(Color::srgba(0.2, 0.2, 0.2, 0.3)),
+                                            BorderRadius::all(Val::Px(30.0)),
+                                        )).with_children(|p| {
+                                            p.spawn((
+                                                Text::new("?"),
+                                                TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() },
+                                                TextColor(Color::srgba(0.5, 0.5, 0.5, 0.5)),
+                                            ));
+                                        });
                                     }
                                 }
                             });
                     }
                 });
 
-            // 返回按钮
-            parent
-                .spawn((
-                    Node {
-                        width: Val::Px(150.0),
-                        height: Val::Px(40.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        margin: UiRect::top(Val::Px(20.0)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.3, 0.3, 0.3)),
-                    Button,
-                    BackToMenuButton,
-                ))
-                .with_children(|parent| {
-                    parent.spawn((
-                        Text::new("返回主菜单"),
-                        TextFont {
-                            font: chinese_font,
-                            font_size: 18.0,
-                            ..default()
-                        },
-                        TextColor(Color::WHITE),
-                    ));
-                });
+            // 底部状态栏（显示灵石等）
+            parent.spawn((
+                Node {
+                    width: Val::Px(300.0),
+                    height: Val::Px(40.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+            )).with_children(|footer| {
+                footer.spawn((
+                    Text::new(format!("持有灵石: {}", player.gold)),
+                    TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() },
+                    TextColor(Color::srgb(1.0, 0.8, 0.2)),
+                ));
+            });
         });
 }
 
-/// 生成单个地图节点UI
+/// 地图节点
 fn spawn_map_node(
     parent: &mut ChildBuilder,
     node: &MapNode,
@@ -2643,6 +2679,7 @@ fn teardown_tribulation(
     mut commands: Commands,
     ui_query: Query<Entity, With<TribulationUiMarker>>,
     mut player_query: Query<(&mut Player, &mut crate::components::Cultivation)>,
+    mut deck: ResMut<PlayerDeck>,
     mut effect_events: EventWriter<SpawnEffectEvent>,
     mut sfx_events: EventWriter<PlaySfxEvent>,
 ) {
@@ -2652,25 +2689,34 @@ fn teardown_tribulation(
     }
 
     if let Ok((mut player, mut cultivation)) = player_query.get_single_mut() {
-        // 只有在没死的情况下才进入这里（由于 GameOver 也会触发出状态，这里加个判断）
+        // 只有在没死的情况下才处理突破（避免 GameOver 状态逻辑冲突）
         if player.hp > 0 {
-            let _old_realm = cultivation.realm;
             if cultivation.breakthrough() {
-                let hp_bonus = cultivation.get_hp_bonus();
+                // 1. 属性质变
+                let hp_bonus = match cultivation.realm {
+                    crate::components::cultivation::Realm::FoundationEstablishment => 50,
+                    _ => 20,
+                };
                 player.max_hp += hp_bonus;
-                player.hp += hp_bonus;
+                player.hp = player.max_hp; // 状态全回满
+                player.gold += 100; // 天道赏赐灵石
                 
-                info!("✨【破境成功】成功晋升至 {:?}！道行大进，上限增加 {} 点", cultivation.realm, hp_bonus);
+                info!("✨【破境成功】成功晋升至 {:?}！道行大进，上限增加 {} 点，获灵石 100 块", cultivation.realm, hp_bonus);
                 
-                // 播放突破成功的仙乐
-                sfx_events.send(PlaySfxEvent::new(SfxType::BreakthroughSuccess));
+                // 2. 功法质变：发放本命功法
+                if cultivation.realm == crate::components::cultivation::Realm::FoundationEstablishment {
+                    let innate_spell = crate::components::cards::CardPool::get_innate_spell();
+                    deck.add_card(innate_spell.clone());
+                    info!("📖【本命功法】获得筑基期本命功法：{}", innate_spell.name);
+                }
 
-                // 成功的金色光辉
+                // 3. 视听反馈
+                sfx_events.send(PlaySfxEvent::new(SfxType::BreakthroughSuccess));
                 effect_events.send(SpawnEffectEvent {
                     effect_type: EffectType::Victory,
-                    position: Vec3::ZERO,
+                    position: Vec3::new(0.0, 0.0, 999.0),
                     burst: true,
-                    count: 150,
+                    count: 100,
                 });
             }
         }

@@ -435,6 +435,19 @@ impl CardPool {
 
         rewards
     }
+
+    /// 获取筑基期本命功法
+    pub fn get_innate_spell() -> Card {
+        Card::new(
+            999,
+            "青莲剑歌",
+            "造成30点穿透伤害，恢复10点灵力",
+            CardType::Attack,
+            3,
+            CardEffect::MultiAttack { damage: 10, times: 3 },
+            CardRarity::Special,
+        )
+    }
 }
 
 /// 奖励选项组件
