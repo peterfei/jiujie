@@ -152,11 +152,10 @@ pub struct EmitterConfig {
 }
 
 impl EmitterConfig {
-    /// 火焰特效配置
     pub fn fire() -> Self {
         Self {
             lifetime: (0.5, 1.0),
-            size: (20.0, 50.0),  // 增大粒子
+            size: (20.0, 50.0),
             start_color: Color::srgb(1.0, 0.8, 0.2),
             end_color: Color::srgba(1.0, 0.3, 0.0, 0.0),
             speed: (50.0, 120.0),
@@ -167,7 +166,6 @@ impl EmitterConfig {
         }
     }
 
-    /// 冰霜特效配置
     pub fn ice() -> Self {
         Self {
             lifetime: (0.4, 0.8),
@@ -182,7 +180,6 @@ impl EmitterConfig {
         }
     }
 
-    /// 闪电特效配置
     pub fn lightning() -> Self {
         Self {
             lifetime: (0.1, 0.3),
@@ -197,130 +194,99 @@ impl EmitterConfig {
         }
     }
 
-    /// 治疗特效配置
     pub fn heal() -> Self {
         Self {
             lifetime: (0.5, 1.0),
             size: (5.0, 12.0),
-            start_color: Color::srgb(1.0, 0.95, 0.3),
-            end_color: Color::srgba(1.0, 0.8, 0.0, 0.0),
+            start_color: Color::srgb(0.4, 1.0, 0.4),
+            end_color: Color::srgba(0.2, 0.8, 0.2, 0.0),
             speed: (30.0, 60.0),
-            angle: (-std::f32::consts::PI / 2.0 - 0.5, -std::f32::consts::PI / 2.0 + 0.5),
+            angle: (0.0, std::f32::consts::PI * 2.0),
             gravity: Vec2::new(0.0, 50.0),
+            rotation_speed: (-2.0, 2.0),
+            shape: ParticleShape::Star,
+        }
+    }
+
+    pub fn hit() -> Self {
+        Self {
+            lifetime: (0.3, 0.6),
+            size: (5.0, 15.0),
+            start_color: Color::srgb(1.0, 1.0, 1.0),
+            end_color: Color::srgba(1.0, 0.2, 0.2, 0.0),
+            speed: (80.0, 150.0),
+            angle: (0.0, std::f32::consts::PI * 2.0),
+            gravity: Vec2::ZERO,
+            rotation_speed: (-5.0, 5.0),
+            shape: ParticleShape::Circle,
+        }
+    }
+
+    pub fn coin() -> Self {
+        Self {
+            lifetime: (0.8, 1.5),
+            size: (10.0, 20.0),
+            start_color: Color::srgb(1.0, 0.84, 0.0),
+            end_color: Color::srgba(1.0, 0.5, 0.0, 0.0),
+            speed: (40.0, 100.0),
+            angle: (-std::f32::consts::PI / 4.0, -std::f32::consts::PI * 3.0 / 4.0),
+            gravity: Vec2::new(0.0, -150.0),
+            rotation_speed: (-3.0, 3.0),
+            shape: ParticleShape::Star,
+        }
+    }
+
+    pub fn victory() -> Self {
+        Self {
+            lifetime: (2.0, 3.5),
+            size: (8.0, 20.0),
+            start_color: Color::srgb(1.0, 0.9, 0.3),
+            end_color: Color::srgba(1.0, 0.5, 0.0, 0.0),
+            speed: (100.0, 300.0),
+            angle: (0.0, std::f32::consts::PI * 2.0),
+            gravity: Vec2::new(0.0, -100.0),
+            rotation_speed: (-5.0, 5.0),
+            shape: ParticleShape::Star,
+        }
+    }
+
+    pub fn mana_flow() -> Self {
+        Self {
+            lifetime: (1.0, 2.0),
+            size: (15.0, 35.0), // 显著增大粒子
+            start_color: Color::srgba(0.2, 0.7, 1.0, 0.9), // 极其明亮的青蓝色
+            end_color: Color::srgba(0.0, 0.2, 0.5, 0.0),
+            speed: (40.0, 80.0), // 提高流动速度
+            angle: (std::f32::consts::PI * 0.4, std::f32::consts::PI * 0.6), // 向上喷涌
+            gravity: Vec2::new(0.0, 20.0), 
             rotation_speed: (-2.0, 2.0),
             shape: ParticleShape::Circle,
         }
     }
 
-    /// 受击特效配置（血迹）
-    pub fn hit() -> Self {
-        Self {
-            lifetime: (0.3, 0.5),
-            size: (5.0, 15.0),
-            start_color: Color::srgb(1.0, 0.1, 0.1),
-            end_color: Color::srgba(0.5, 0.0, 0.0, 0.0),
-            speed: (80.0, 150.0),
-            angle: (0.0, std::f32::consts::PI * 2.0),
-            gravity: Vec2::new(0.0, -100.0),
-            rotation_speed: (-8.0, 8.0),
-            shape: ParticleShape::Circle,
-        }
-    }
-
-    /// 金币特效配置
-    pub fn coin() -> Self {
-        Self {
-            lifetime: (0.6, 1.0),
-            size: (8.0, 15.0),
-            start_color: Color::srgb(1.0, 0.8, 0.2),
-            end_color: Color::srgba(0.8, 0.6, 0.0, 0.0),
-            speed: (40.0, 80.0),
-            angle: (-std::f32::consts::PI / 2.0 - 0.3, -std::f32::consts::PI / 2.0 + 0.3),
-            gravity: Vec2::new(0.0, 80.0),
-            rotation_speed: (-15.0, 15.0),
-            shape: ParticleShape::Circle,
-        }
-    }
-
-    /// 胜利特效配置（金色圆形粒子，向上飘动）
-    pub fn victory() -> Self {
-        Self {
-            lifetime: (1.0, 2.0),
-            size: (15.0, 30.0),
-            start_color: Color::srgb(1.0, 0.9, 0.3),
-            end_color: Color::srgba(1.0, 0.7, 0.0, 0.0),
-            speed: (80.0, 150.0),
-            angle: (-std::f32::consts::PI / 2.0 - 1.0, -std::f32::consts::PI / 2.0 + 1.0),
-            gravity: Vec2::new(0.0, 50.0),
-            rotation_speed: (-3.0, 3.0),
-            shape: ParticleShape::Circle,
-        }
-    }
-
-    /// 生成随机粒子
     pub fn spawn_particle(&self, _position: Vec3) -> Particle {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-
         let lifetime = self.lifetime.0 + rng.gen::<f32>() * (self.lifetime.1 - self.lifetime.0);
         let size = self.size.0 + rng.gen::<f32>() * (self.size.1 - self.size.0);
         let speed = self.speed.0 + rng.gen::<f32>() * (self.speed.1 - self.speed.0);
         let angle = self.angle.0 + rng.gen::<f32>() * (self.angle.1 - self.angle.0);
         let rotation_speed = self.rotation_speed.0 + rng.gen::<f32>() * (self.rotation_speed.1 - self.rotation_speed.0);
-
         let velocity = Vec2::new(angle.cos(), angle.sin()) * speed;
-
         Particle {
-            velocity,
-            lifetime,
-            elapsed: 0.0,
-            start_size: size,
-            end_size: size * 0.3,
-            start_color: self.start_color,
-            end_color: self.end_color,
-            rotation_speed,
-            rotation: 0.0,
-            gravity: self.gravity,
+            velocity, lifetime, elapsed: 0.0, start_size: size, end_size: size * 0.3,
+            start_color: self.start_color, end_color: self.end_color, rotation_speed, rotation: 0.0, gravity: self.gravity,
         }
     }
 }
 
-/// 粒子形状
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum ParticleShape {
-    /// 圆形
-    Circle,
-    /// 方形
-    Square,
-    /// 线条
-    Line,
-    /// 三角形
-    Triangle,
-    /// 星形
-    Star,
-}
+pub enum ParticleShape { Circle, Square, Line, Triangle, Star }
 
-/// 特效类型
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum EffectType {
-    /// 火焰
-    Fire,
-    /// 冰霜
-    Ice,
-    /// 闪电
-    Lightning,
-    /// 治疗
-    Heal,
-    /// 受击
-    Hit,
-    /// 金币
-    Coin,
-    /// 胜利（金色粒子）
-    Victory,
-}
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum EffectType { Fire, Ice, Hit, Lightning, Victory, ManaFlow, Heal, Coin }
 
 impl EffectType {
-    /// 获取对应的发射器配置
     pub fn config(&self) -> EmitterConfig {
         match self {
             EffectType::Fire => EmitterConfig::fire(),
@@ -330,78 +296,27 @@ impl EffectType {
             EffectType::Hit => EmitterConfig::hit(),
             EffectType::Coin => EmitterConfig::coin(),
             EffectType::Victory => EmitterConfig::victory(),
+            EffectType::ManaFlow => EmitterConfig::mana_flow(),
         }
     }
 }
 
-/// 发射特效事件
 #[derive(Event, Debug)]
-pub struct SpawnEffectEvent {
-    /// 特效类型
-    pub effect_type: EffectType,
-    /// 发射位置
-    pub position: Vec3,
-    /// 是否一次性爆发
-    pub burst: bool,
-    /// 粒子数量
-    pub count: usize,
-}
+pub struct SpawnEffectEvent { pub effect_type: EffectType, pub position: Vec3, pub burst: bool, pub count: usize }
 
 impl SpawnEffectEvent {
-    /// 创建新的特效事件
-    pub fn new(effect_type: EffectType, position: Vec3) -> Self {
-        Self {
-            effect_type,
-            position,
-            burst: true,
-            count: 20,
-        }
-    }
-
-    /// 设置为爆发模式
-    pub fn burst(mut self, count: usize) -> Self {
-        self.burst = true;
-        self.count = count;
-        self
-    }
-
-    /// 设置为持续发射
-    pub fn continuous(mut self, _rate: f32) -> Self {
-        self.burst = false;
-        self.count = 0;
-        self
-    }
+    pub fn new(effect_type: EffectType, position: Vec3) -> Self { Self { effect_type, position, burst: true, count: 20 } }
+    pub fn burst(mut self, count: usize) -> Self { self.burst = true; self.count = count; self }
 }
 
-/// 粒子标记组件
 #[derive(Component)]
 pub struct ParticleMarker;
-
-/// 发射器标记组件
 #[derive(Component)]
 pub struct EmitterMarker;
 
-/// 敌人死亡动画组件
 #[derive(Component)]
-pub struct EnemyDeathAnimation {
-    /// 动画进度 (0.0 到 1.0)
-    pub progress: f32,
-    /// 淡出持续时间（秒）
-    pub duration: f32,
-    /// 已经过的时间
-    pub elapsed: f32,
-}
+pub struct EnemyDeathAnimation { pub progress: f32, pub duration: f32, pub elapsed: f32 }
+impl EnemyDeathAnimation { pub fn new(duration: f32) -> Self { Self { progress: 0.0, duration, elapsed: 0.0 } } }
 
-impl EnemyDeathAnimation {
-    pub fn new(duration: f32) -> Self {
-        Self {
-            progress: 0.0,
-            duration,
-            elapsed: 0.0,
-        }
-    }
-}
-
-/// 胜利事件（敌人被击败时触发）
 #[derive(Event, Debug)]
 pub struct VictoryEvent;

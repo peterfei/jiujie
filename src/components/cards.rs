@@ -58,7 +58,6 @@ pub enum CardEffect {
     MultiAttack { damage: i32, times: i32 },
 }
 
-/// 卡牌稀有度
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CardRarity {
     /// 普通
@@ -69,6 +68,17 @@ pub enum CardRarity {
     Rare,
     /// 特殊
     Special,
+}
+
+impl CardRarity {
+    pub fn get_chinese_name(&self) -> &str {
+        match self {
+            CardRarity::Common => "凡阶",
+            CardRarity::Uncommon => "玄阶",
+            CardRarity::Rare => "地阶",
+            CardRarity::Special => "天阶",
+        }
+    }
 }
 
 impl Card {

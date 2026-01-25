@@ -10,7 +10,7 @@ use crate::components::{
     ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation, 
     EnemySpriteMarker, VictoryDelay, RelicCollection, Relic, RelicId,
     RelicObtainedEvent, RelicTriggeredEvent, DialogueLine,
-    PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker
+    PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker, ParticleEmitter
 };
 use crate::systems::sprite::spawn_character_sprite;
 
@@ -1043,14 +1043,58 @@ fn setup_combat_ui(
             e.spawn((Text::new("HP: 30/30"), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::srgb(1.0, 0.3, 0.3)), EnemyHpText));
             e.spawn((Text::new("意图: 等待"), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(Color::srgb(1.0, 0.8, 0.4)), EnemyIntentText));
         });
-        root.spawn((Node { position_type: PositionType::Absolute, left: Val::Px(100.0), bottom: Val::Px(120.0), width: Val::Px(90.0), height: Val::Px(90.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, ZIndex(10), BackgroundColor(Color::srgba(0.1, 0.2, 0.5, 0.9)), EnergyOrb)).with_children(|orb| {
-            if let Some((player, _)) = player_data {
-                orb.spawn((Text::new(format!("{}/{}", player.energy, player.max_energy)), TextFont { font: chinese_font.clone(), font_size: 32.0, ..default() }, TextColor(Color::WHITE), PlayerEnergyText));
-            }
-        });
-        root.spawn((Button, Node { position_type: PositionType::Absolute, right: Val::Px(100.0), bottom: Val::Px(140.0), width: Val::Px(160.0), height: Val::Px(50.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: UiRect::all(Val::Px(2.0)), ..default() }, BackgroundColor(Color::srgb(0.2, 0.4, 0.2)), BorderColor(Color::BLACK), EndTurnButton)).with_children(|btn| {
-            btn.spawn((Text::new("结束回合"), TextFont { font: chinese_font.clone(), font_size: 24.0, ..default() }, TextColor(Color::WHITE)));
-        });
+            // --- Energy Orb ---
+            root.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(100.0),
+                    bottom: Val::Px(120.0),
+                    width: Val::Px(90.0),
+                    height: Val::Px(90.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                ZIndex(10),
+                BackgroundColor(Color::srgba(0.1, 0.2, 0.5, 0.9)),
+                EnergyOrb,
+            )).with_children(|orb| {
+                if let Some((player, _)) = player_data {
+                    orb.spawn((
+                        Text::new(format!("{}/{}", player.energy, player.max_energy)),
+                        TextFont { font: chinese_font.clone(), font_size: 32.0, ..default() },
+                        TextColor(Color::WHITE),
+                        PlayerEnergyText,
+                    ));
+                }
+            });
+
+            // --- 5. 交互控制 ---
+            root.spawn((
+                Button,
+                Node {
+                    position_type: PositionType::Absolute,
+                    right: Val::Px(100.0),
+                    bottom: Val::Px(140.0),
+                    width: Val::Px(160.0),
+                    height: Val::Px(50.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    border: UiRect::all(Val::Px(2.0)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.2, 0.4, 0.2)),
+                BorderColor(Color::BLACK),
+                EndTurnButton,
+            )).with_children(|btn| {
+                btn.spawn((
+                    Text::new("结束回合"),
+                    TextFont { font: chinese_font.clone(), font_size: 24.0, ..default() },
+                    TextColor(Color::WHITE),
+                ));
+            });
+
+            
         root.spawn((Node { position_type: PositionType::Absolute, left: Val::Percent(0.0), bottom: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Px(250.0), justify_content: JustifyContent::Center, ..default() }, HandArea)).with_children(|parent| {
             parent.spawn((Text::new("手牌: 0/10"), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::srgba(1.0, 1.0, 1.0, 0.5)), Node { position_type: PositionType::Absolute, top: Val::Px(10.0), ..default() }, HandCountText));
         });
@@ -1061,6 +1105,16 @@ fn setup_combat_ui(
             p.spawn((Text::new("归墟: 0"), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE), DiscardPileText));
         });
     });
+
+    // --- 独立于 UI 树之外的灵力粒子发射器 ---
+    // 1280x720 屏幕, Orb 在 Left 100, Bottom 120
+    commands.spawn((
+        ParticleEmitter::new(25.0, EffectType::ManaFlow.config()),
+        Transform::from_xyz(-495.0, -195.0, 950.0),
+        GlobalTransform::default(),
+        EmitterMarker,
+        CombatUiRoot,
+    ));
 }
 
 pub fn cleanup_combat_ui(
@@ -1865,22 +1919,26 @@ fn update_victory_delay(
 // 奖励系统
 // ============================================================================
 
-/// 设置奖励界面
-fn setup_reward_ui(mut commands: Commands, asset_server: Res<AssetServer>, relic_collection: Res<RelicCollection>, mut reward_cards_resource: ResMut<CurrentRewardCards>, mut reward_relic_resource: ResMut<CurrentRewardRelic>) {
-    info!("设置奖励界面");
+/// 设置机缘奖励界面
+fn setup_reward_ui(
+    mut commands: Commands, 
+    asset_server: Res<AssetServer>, 
+    relic_collection: Res<RelicCollection>, 
+    mut reward_cards_resource: ResMut<CurrentRewardCards>, 
+    mut reward_relic_resource: ResMut<CurrentRewardRelic>,
+    player_query: Query<&Player>,
+) {
+    info!("【天道机缘】展现机缘界面");
 
-    // 生成随机奖励卡牌（3张）
     let reward_cards = CardPool::random_rewards(3);
-
-    // 存储奖励卡牌到资源中（供悬停系统使用）
     reward_cards_resource.cards = reward_cards.clone();
 
-    // 生成随机遗物奖励
     let relic_reward = generate_relic_reward(&relic_collection);
     let show_relic = relic_reward.is_some();
-
-    // 存储遗物奖励到资源中（供悬停系统使用）
     reward_relic_resource.relic = relic_reward.clone();
+
+    let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
+    let player_gold = player_query.get_single().map(|p| p.gold).unwrap_or(0);
 
     commands
         .spawn((
@@ -1890,197 +1948,123 @@ fn setup_reward_ui(mut commands: Commands, asset_server: Res<AssetServer>, relic
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::Center,
-                row_gap: Val::Px(30.0),
+                row_gap: Val::Px(40.0),
                 ..default()
             },
-            BackgroundColor(Color::srgb(0.1, 0.1, 0.15)),
+            BackgroundColor(Color::srgb(0.01, 0.01, 0.03)), // 深邃虚空背景
             RewardUiRoot,
         ))
         .with_children(|parent| {
-            // 标题
-            parent.spawn((
-                Text::new("战斗胜利！选择奖励"),
-                TextFont {
-                    font: asset_server.load("fonts/Arial Unicode.ttf"),
-                    font_size: 48.0,
-                    ..default()
-                },
-                TextColor(Color::srgb(1.0, 0.9, 0.3)),
-                TextLayout::new_with_justify(JustifyText::Center),
-            ));
+            // 标题区
+            parent.spawn(Node {
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                row_gap: Val::Px(10.0),
+                ..default()
+            }).with_children(|header| {
+                header.spawn((
+                    Text::new("天 道 机 缘"),
+                    TextFont { font: chinese_font.clone(), font_size: 56.0, ..default() },
+                    TextColor(Color::srgb(0.9, 0.8, 0.4)), // 金色标题
+                ));
+                header.spawn((
+                    Text::new("冥冥之中，自有天定。择一而行，莫失机缘。"),
+                    TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() },
+                    TextColor(Color::srgb(0.6, 0.6, 0.6)),
+                ));
+            });
 
-            // 奖励选项容器
-            parent
-                .spawn(Node {
-                    width: Val::Percent(80.0),
-                    height: Val::Auto,
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Center,
-                    row_gap: Val::Px(20.0),
-                    ..default()
-                })
-                .with_children(|parent| {
-                    // 卡牌容器
-                    parent
-                        .spawn(Node {
-                            width: Val::Percent(100.0),
-                            height: Val::Auto,
-                            flex_direction: FlexDirection::Row,
-                            justify_content: JustifyContent::Center,
-                            column_gap: Val::Px(30.0),
-                            ..default()
-                        })
-                        .with_children(|parent| {
-                            // 为每张奖励卡创建UI
-                            for (index, card) in reward_cards.iter().enumerate() {
-                                create_reward_card(parent, card, index, &asset_server);
-                            }
-                        });
+            // 奖励卡牌区
+            parent.spawn(Node {
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::Center,
+                column_gap: Val::Px(40.0),
+                ..default()
+            }).with_children(|card_area| {
+                for (index, card) in reward_cards.iter().enumerate() {
+                    create_reward_card(card_area, card, index, &asset_server);
+                }
+            });
 
-                    // 遗物选项（如果可用）
-                    if show_relic {
-                        if let Some(relic) = relic_reward {
-                            parent.spawn(Node {
-                                width: Val::Percent(100.0),
-                                height: Val::Auto,
-                                align_items: AlignItems::Center,
-                                justify_content: JustifyContent::Center,
-                                margin: UiRect::top(Val::Px(20.0)),
-                                ..default()
-                            })
-                            .with_children(|parent| {
-                                create_relic_reward_option(parent, relic, &asset_server);
-                            });
-                        }
-                    }
-                });
+            // 底部操作区
+            parent.spawn(Node {
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                row_gap: Val::Px(20.0),
+                ..default()
+            }).with_children(|footer| {
+                // 灵石显示
+                footer.spawn((
+                    Text::new(format!("持有灵石: {}", player_gold)),
+                    TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() },
+                    TextColor(Color::srgb(1.0, 0.8, 0.2)),
+                ));
 
-            // 跳过按钮
-            parent
-                .spawn((
+                // 放弃按钮
+                footer.spawn((
                     Button,
-                    BackgroundColor(Color::srgb(0.3, 0.3, 0.4)),
-                    BorderColor(Color::srgb(0.5, 0.5, 0.6)),
                     Node {
-                        width: Val::Px(200.0),
-                        height: Val::Px(50.0),
-                        align_items: AlignItems::Center,
+                        width: Val::Px(180.0),
+                        height: Val::Px(40.0),
                         justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
                         ..default()
                     },
+                    BackgroundColor(Color::srgba(0.2, 0.2, 0.2, 0.5)),
+                    BorderRadius::all(Val::Px(5.0)),
                 ))
-                .with_children(|parent| {
-                    parent.spawn((
-                        Text::new("跳过奖励"),
-                        TextFont {
-                            font: asset_server.load("fonts/Arial Unicode.ttf"),
-                            font_size: 20.0,
-                            ..default()
-                        },
-                        TextColor(Color::srgb(1.0, 1.0, 1.0)),
+                .with_children(|p| {
+                    p.spawn((
+                        Text::new("因缘未至 (离去)"),
+                        TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() },
+                        TextColor(Color::srgb(0.7, 0.7, 0.7)),
                     ));
                 })
-                .observe(|_entity: Trigger<Pointer<Click>>, mut next_state: ResMut<NextState<GameState>>, mut map_progress: ResMut<MapProgress>| {
-                    info!("跳过奖励");
-                    // 标记当前节点为完成，解锁下一层
+                .observe(|_trigger: Trigger<Pointer<Click>>, mut next_state: ResMut<NextState<GameState>>, mut map_progress: ResMut<MapProgress>| {
+                    info!("【机缘】玩家选择放弃，因缘未至");
                     map_progress.complete_current_node();
-                    info!("节点已完成，已解锁下一层");
                     next_state.set(GameState::Map);
                 });
-        }); // commands.with_children
-} // setup_reward_ui 函数结束
+            });
+        });
+}
 
 /// 创建单张奖励卡UI
 fn create_reward_card(parent: &mut ChildBuilder, card: &Card, _index: usize, asset_server: &AssetServer) {
+    let chinese_font = asset_server.load("fonts/Arial Unicode.ttf");
     let card_color = match card.card_type {
-        CardType::Attack => Color::srgb(0.8, 0.2, 0.2),
-        CardType::Defense => Color::srgb(0.2, 0.5, 0.8),
-        CardType::Skill => Color::srgb(0.2, 0.7, 0.3),
-        CardType::Power => Color::srgb(0.7, 0.3, 0.8),
+        CardType::Attack => Color::srgba(0.15, 0.05, 0.05, 0.9),
+        CardType::Defense => Color::srgba(0.05, 0.05, 0.15, 0.9),
+        CardType::Skill => Color::srgba(0.05, 0.15, 0.05, 0.9),
+        CardType::Power => Color::srgba(0.15, 0.05, 0.15, 0.9),
     };
-
     let rarity_color = match card.rarity {
-        CardRarity::Common => Color::srgb(0.7, 0.7, 0.7),
-        CardRarity::Uncommon => Color::srgb(0.3, 0.8, 0.9),
+        CardRarity::Common => Color::srgb(0.6, 0.6, 0.6),
+        CardRarity::Uncommon => Color::srgb(0.2, 0.8, 0.6),
         CardRarity::Rare => Color::srgb(0.9, 0.7, 0.2),
-        CardRarity::Special => Color::srgb(0.9, 0.4, 0.9),
+        CardRarity::Special => Color::srgb(0.9, 0.3, 0.9),
     };
-
-    parent
-        .spawn((
-            Button,
-            BackgroundColor(card_color),
-            BorderColor(rarity_color),
-            Node {
-                width: Val::Px(180.0),
-                height: Val::Px(260.0),
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                padding: UiRect::all(Val::Px(12.0)),
-                row_gap: Val::Px(8.0),
-                border: UiRect::all(Val::Px(4.0)),
-                ..default()
-            },
-            RewardCardButton { card_id: card.id },
-        ))
-        .with_children(|parent| {
-            // 稀有度标签
-            parent.spawn((
-                Text::new(format!("{:?}", card.rarity)),
-                TextFont {
-                    font: asset_server.load("fonts/Arial Unicode.ttf"),
-                    font_size: 14.0,
-                    ..default()
-                },
-                TextColor(rarity_color),
-            ));
-
-            // 卡牌名称
-            parent.spawn((
-                Text::new(card.name.clone()),
-                TextFont {
-                    font: asset_server.load("fonts/Arial Unicode.ttf"),
-                    font_size: 20.0,
-                    ..default()
-                },
-                TextColor(Color::WHITE),
-                TextLayout::new_with_justify(JustifyText::Center),
-            ));
-
-            // 能量消耗
-            parent.spawn((
-                Text::new(format!("能量: {}", card.cost)),
-                TextFont {
-                    font: asset_server.load("fonts/Arial Unicode.ttf"),
-                    font_size: 16.0,
-                    ..default()
-                },
-                TextColor(Color::srgb(1.0, 0.9, 0.3)),
-            ));
-
-            // 卡牌描述
-            parent.spawn((
-                Text::new(card.description.clone()),
-                TextFont {
-                    font: asset_server.load("fonts/Arial Unicode.ttf"),
-                    font_size: 14.0,
-                    ..default()
-                },
-                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.9)),
-                TextLayout::new_with_justify(JustifyText::Center),
-            ));
-
-            // 类型标签
-            parent.spawn((
-                Text::new(format!("{:?}", card.card_type)),
-                TextFont {
-                    font: asset_server.load("fonts/Arial Unicode.ttf"),
-                    font_size: 12.0,
-                    ..default()
-                },
-                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.7)),
-            ));
-        });
+    parent.spawn((
+        Button,
+        BackgroundColor(card_color),
+        BorderColor(rarity_color),
+        Node {
+            width: Val::Px(200.0), height: Val::Px(280.0),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            padding: UiRect::all(Val::Px(15.0)),
+            row_gap: Val::Px(12.0),
+            border: UiRect::all(Val::Px(2.0)),
+            ..default()
+        },
+        BorderRadius::all(Val::Px(8.0)),
+        RewardCardButton { card_id: card.id },
+    )).with_children(|parent| {
+        parent.spawn((Text::new(card.rarity.get_chinese_name()), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(rarity_color)));
+        parent.spawn((Text::new(card.name.clone()), TextFont { font: chinese_font.clone(), font_size: 24.0, ..default() }, TextColor(Color::WHITE)));
+        parent.spawn((Text::new(format!("灵力消耗: {}", card.cost)), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(Color::srgb(0.4, 0.8, 1.0))));
+        parent.spawn((Text::new(card.description.clone()), TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() }, TextColor(Color::srgb(0.8, 0.8, 0.8)), TextLayout::new_with_justify(JustifyText::Center), Node { max_width: Val::Px(170.0), ..default() }));
+    });
 }
 
 /// 清理奖励界面
