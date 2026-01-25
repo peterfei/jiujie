@@ -35,4 +35,4 @@ pub use bevy::prelude::*;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// 游戏名称
-pub const GAME_NAME: &str = "Bevy Card Battler";
+pub const GAME_NAME: &str = "九界：渡劫";

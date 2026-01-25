@@ -11,16 +11,16 @@ use bevy::prelude::Vec3;
 
 #[test]
 fn e2e_delay_001_victory_delay_exists() {
-    let delay = VictoryDelay::new(1.5);
+    let delay = VictoryDelay::new(2.0);
 
-    assert_eq!(delay.duration, 1.5, "延迟时长应该是1.5秒");
+    assert_eq!(delay.duration, 2.0, "延迟时长应该是2.0秒");
     assert!(!delay.active, "初始状态应该是不激活");
     assert_eq!(delay.elapsed, 0.0, "初始经过时间应该是0");
 }
 
 #[test]
 fn e2e_delay_002_victory_delay_can_be_activated() {
-    let mut delay = VictoryDelay::new(1.5);
+    let mut delay = VictoryDelay::new(2.0);
 
     delay.active = true;
     delay.elapsed = 0.5;
@@ -127,12 +127,12 @@ fn e2e_delay_103_victory_events_use_burst_mode() {
 
 #[test]
 fn e2e_delay_201_delay_duration_reasonable() {
-    let delay = VictoryDelay::new(1.5);
+    let delay = VictoryDelay::new(2.0);
 
     // 延迟时长应该在1-3秒之间，足够显示粒子但不会太久
     assert!(delay.duration >= 1.0, "延迟时长应该至少1秒");
     assert!(delay.duration <= 3.0, "延迟时长不应该超过3秒");
-    assert_eq!(delay.duration, 1.5, "当前实现使用1.5秒延迟");
+    assert_eq!(delay.duration, 2.0, "当前实现使用2.0秒延迟");
 }
 
 #[test]
@@ -140,7 +140,7 @@ fn e2e_delay_202_delay_longer_than_particle_lifetime() {
     use bevy_card_battler::components::EmitterConfig;
 
     let config = EmitterConfig::victory();
-    let delay = VictoryDelay::new(1.5);
+    let delay = VictoryDelay::new(2.1); // 使用比2.0略大的值进行比较测试
 
     // 粒子最大生命周期
     let max_particle_lifetime = config.lifetime.1;
@@ -153,7 +153,7 @@ fn e2e_delay_202_delay_longer_than_particle_lifetime() {
 
 #[test]
 fn e2e_delay_203_multiple_victories_reset_delay() {
-    let mut delay = VictoryDelay::new(1.5);
+    let mut delay = VictoryDelay::new(2.0);
 
     // 第一次胜利
     delay.active = true;

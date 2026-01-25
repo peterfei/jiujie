@@ -141,12 +141,7 @@ fn interaction_flow_map_to_shop_components() {
         .init_resource::<RelicCollection>()
         .init_resource::<PlayerDeck>()
         .init_resource::<MapProgress>()
-        .init_asset::<Font>()
-        .insert_resource(AssetServer::new(
-            bevy::asset::io::AssetSources::new(),
-            bevy::asset::AssetServerMode::Unprocessed,
-            false,
-        ));
+        .add_plugins(AssetPlugin::default());
 
     // 创建地图节点按钮
     app.world_mut().spawn((
@@ -181,12 +176,7 @@ fn interaction_flow_map_to_rest_components() {
         .init_state::<GameState>()
         .init_resource::<ButtonInput<KeyCode>>()
         .init_resource::<MapProgress>()
-        .init_asset::<Font>()
-        .insert_resource(AssetServer::new(
-            bevy::asset::io::AssetSources::new(),
-            bevy::asset::AssetServerMode::Unprocessed,
-            false,
-        ));
+        .add_plugins(AssetPlugin::default());
 
     app.world_mut().spawn(Player::default());
 

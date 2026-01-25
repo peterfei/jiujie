@@ -142,8 +142,14 @@ fn test_empty_relic_collection_no_effect() {
     app.insert_resource(CombatState::default());
     app.insert_resource(RelicCollection::default()); // 空遗物背包
 
-    // 设置玩家和敌人
-    app.world_mut().spawn(Player::default());
+    // 运行一次更新以处理 Startup 系统，然后再次确保背包为空
+    app.update();
+    {
+        let mut collection = app.world_mut().get_resource_mut::<RelicCollection>().unwrap();
+        collection.relic.clear();
+    }
+
+    // 设置敌人
     let enemy_hp_before = 30;
     app.world_mut().spawn(Enemy::new(0, "测试敌人", enemy_hp_before));
 

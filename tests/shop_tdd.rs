@@ -137,7 +137,7 @@ fn test_shop_item_name_and_description() {
 
     let relic = Relic::burning_blood();
     let relic_item = ShopItem::Relic(relic);
-    assert_eq!(relic_item.get_name(), "燃烧之血");
+    assert_eq!(relic_item.get_name(), "飞剑符");
     assert!(!relic_item.get_description().is_empty());
 
     let remove_item = ShopItem::RemoveCard;

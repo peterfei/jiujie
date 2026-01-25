@@ -104,45 +104,45 @@ impl RelicCollection {
 // ============================================================================
 
 impl Relic {
-    /// 创建燃烧之血遗物
+    /// 创建燃烧之血遗物 -> 飞剑符
     pub fn burning_blood() -> Self {
         Self {
             id: RelicId::BurningBlood,
-            name: "燃烧之血".to_string(),
-            description: "每场战斗开始时，对所有敌人造成 3 点伤害".to_string(),
+            name: "飞剑符".to_string(),
+            description: "每场战斗开始时，对所有敌人造成 3 点剑气伤害".to_string(),
             rarity: RelicRarity::Common,
             effect: RelicEffect::OnCombatStart { damage: 3, block: 0, draw_cards: 0 },
         }
     }
 
-    /// 创建准备背包遗物
+    /// 创建准备背包遗物 -> 乾坤袋
     pub fn bag_of_preparation() -> Self {
         Self {
             id: RelicId::BagOfPreparation,
-            name: "准备背包".to_string(),
-            description: "每场战斗开始时，获得 1 张随机卡牌".to_string(),
+            name: "乾坤袋".to_string(),
+            description: "每场战斗开始时，从乾坤袋中额外获得 1 张随机功法".to_string(),
             rarity: RelicRarity::Common,
             effect: RelicEffect::OnCombatStart { damage: 0, block: 0, draw_cards: 1 },
         }
     }
 
-    /// 创建锚遗物
+    /// 创建锚遗物 -> 定风珠
     pub fn anchor() -> Self {
         Self {
             id: RelicId::Anchor,
-            name: "锚".to_string(),
+            name: "定风珠".to_string(),
             description: "每回合结束时，保留最多 3 张手牌到下回合".to_string(),
             rarity: RelicRarity::Uncommon,
             effect: RelicEffect::OnTurnEnd { keep_cards: 3 },
         }
     }
 
-    /// 创建奇怪勺子遗物
+    /// 创建奇怪勺子遗物 -> 聚灵阵
     pub fn strange_spoon() -> Self {
         Self {
             id: RelicId::StrangeSpoon,
-            name: "奇怪勺子".to_string(),
-            description: "每打出第 3 张牌时，抽 1 张牌".to_string(),
+            name: "聚灵阵".to_string(),
+            description: "每打出第 3 张牌时，灵气涌动，抽 1 张牌".to_string(),
             rarity: RelicRarity::Rare,
             effect: RelicEffect::OnCardPlayed { every_nth: 3, draw_cards: 1 },
         }

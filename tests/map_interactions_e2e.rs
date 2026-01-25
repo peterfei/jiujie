@@ -3,33 +3,34 @@
 //! 覆盖所有节点类型的点击交互
 
 use bevy::prelude::*;
-use bevy::app::App;
 use bevy::state::app::StatesPlugin;
 use bevy_card_battler::components::*;
-use bevy_card_battler::components::shop::{CurrentShopItems, SelectedCardForRemoval};
-use bevy_card_battler::plugins::{CorePlugin, MenuPlugin};
+use bevy_card_battler::plugins::{CorePlugin, MenuPlugin, MapNodeButton};
+use bevy_card_battler::systems::RestPlugin;
+use bevy_card_battler::systems::rest::RestContinueButton;
 use bevy_card_battler::states::GameState;
 
-/// 创建测试应用
+use bevy::asset::AssetPlugin;
+
 fn create_test_app() -> App {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins)
         .add_plugins(AssetPlugin::default())
+        .add_plugins(ImagePlugin::default()) // 即使不使用UiPlugin，MenuPlugin加载字体也可能需要
+        .init_asset::<Shader>()
+        .init_asset::<Mesh>()
+        .init_asset::<ColorMaterial>()
+        .init_asset::<Font>()
+        .init_asset::<Image>()
         .add_plugins(StatesPlugin)
         .add_plugins(CorePlugin)
         .add_plugins(MenuPlugin)
+        .add_plugins(RestPlugin) // 添加 RestPlugin
         .init_state::<GameState>()
-        .init_asset::<Image>()
-        .init_asset::<Font>()
-        .init_resource::<CurrentShopItems>()
-        .init_resource::<SelectedCardForRemoval>()
-        .init_resource::<RelicCollection>();
-
-    // 初始化玩家
-    app.world_mut().spawn(Player::default());
-    app.insert_resource(PlayerDeck::default());
-    app.insert_resource(MapProgress::default());
-
+        .init_resource::<ButtonInput<KeyCode>>()
+        .init_resource::<ButtonInput<MouseButton>>();
+    
+    app.update();
     app
 }
 
@@ -99,8 +100,16 @@ fn e2e_rest_returns_to_map_on_click() {
     let state = app.world().get_resource::<State<GameState>>().unwrap();
     assert_eq!(*state.get(), GameState::Rest);
 
-    // WHEN: 模拟点击（运行一次更新）
-    app.update();
+    // WHEN: 模拟点击（手动插入并设置组件状态）
+    {
+        let mut button_query = app.world_mut().query_filtered::<Entity, With<RestContinueButton>>();
+        let button_entity = button_query.iter(app.world_mut()).next().expect("应该找到继续按钮");
+        
+        // 显式插入 Interaction 组件，因为没有 UiPlugin 自动添加
+        app.world_mut().entity_mut(button_entity).insert(Interaction::Pressed);
+    }
+    app.update(); // 运行 handle_rest_interactions 系统，设置 NextState
+    app.update(); // 运行状态转换系统，应用新状态
 
     // THEN: 应该返回地图
     let state = app.world().get_resource::<State<GameState>>().unwrap();

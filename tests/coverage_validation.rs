@@ -9,12 +9,12 @@
 //!
 //! ## 迁移说明
 //!
-### 旧方式（已废弃）:
+//! ### 旧方式（已废弃）:
 //! ```bash
 //! cargo test --test coverage_validation -- --test-threads=1
 //! ```
 //!
-### 新方式（推荐）:
+//! ### 新方式（推荐）:
 //! ```bash
 //! # 运行所有验证测试
 //! cargo test --test integration shop -- --test-threads=1

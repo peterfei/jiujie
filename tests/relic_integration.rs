@@ -254,6 +254,14 @@ fn test_empty_relic_collection_combat() {
     // 场景描述: 没有遗物时战斗应正常进行
 
     let mut app = setup_combat_with_relics(vec![]);
+    
+    // 运行 Startup 系统，然后确保清空自动生成的初始遗物
+    app.update();
+    {
+        let mut collection = app.world_mut().get_resource_mut::<RelicCollection>().unwrap();
+        collection.relic.clear();
+    }
+
     app.world_mut().insert_resource(State::new(GameState::Combat));
 
     // 更新系统（不应崩溃）

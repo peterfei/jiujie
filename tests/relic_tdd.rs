@@ -34,7 +34,7 @@ fn create_test_app() -> App {
     app.world_mut().spawn(DrawPile::new(vec![
         Card::new(
             1,
-            "打击",
+            "御剑术",
             "造成6点伤害",
             CardType::Attack,
             1,
@@ -58,7 +58,7 @@ fn test_relic_acquisition_no_duplicates() {
 
     let mut collection = RelicCollection::default();
 
-    // 第一次添加燃烧之血
+    // 第一次添加飞剑符
     let burning_blood = Relic::burning_blood();
     assert!(collection.add_relic(burning_blood), "第一次添加遗物应该成功");
     assert_eq!(collection.count(), 1, "应该有1个遗物");
@@ -82,11 +82,11 @@ fn test_relic_collection_has_method() {
     assert!(!collection.has(RelicId::BurningBlood), "初始时不应拥有任何遗物");
 
     collection.add_relic(Relic::burning_blood());
-    assert!(collection.has(RelicId::BurningBlood), "应该拥有燃烧之血");
-    assert!(!collection.has(RelicId::Anchor), "不应拥有锚");
+    assert!(collection.has(RelicId::BurningBlood), "应该拥有飞剑符");
+    assert!(!collection.has(RelicId::Anchor), "不应拥有定风珠");
 
     collection.add_relic(Relic::anchor());
-    assert!(collection.has(RelicId::Anchor), "应该拥有锚");
+    assert!(collection.has(RelicId::Anchor), "应该拥有定风珠");
 }
 
 #[test]
@@ -99,16 +99,16 @@ fn test_relic_collection_get_method() {
     collection.add_relic(Relic::burning_blood());
     let relic = collection.get(RelicId::BurningBlood);
     assert!(relic.is_some(), "应返回遗物引用");
-    assert_eq!(relic.unwrap().name, "燃烧之血");
+    assert_eq!(relic.unwrap().name, "飞剑符");
 }
 
 // ============================================================================
-// 场景2: 战斗开始效果 - 燃烧之血（造成伤害）
+// 场景2: 战斗开始效果 - 飞剑符（造成伤害）
 // ============================================================================
 
 #[test]
 fn test_burning_blood_deals_damage_on_combat_start() {
-    // 场景描述: 战斗开始时，燃烧之血应对所有敌人造成3点伤害
+    // 场景描述: 战斗开始时，飞剑符应对所有敌人造成3点伤害
     // 预期结果: 敌人HP从30减少到27
 
     let mut app = create_test_app();
@@ -137,12 +137,12 @@ fn test_burning_blood_deals_damage_on_combat_start() {
 }
 
 // ============================================================================
-// 场景3: 战斗开始效果 - 准备背包（抽牌）
+// 场景3: 战斗开始效果 - 乾坤袋（抽牌）
 // ============================================================================
 
 #[test]
 fn test_bag_of_preparation_draws_card_on_combat_start() {
-    // 场景描述: 战斗开始时，准备背包应抽1张牌
+    // 场景描述: 战斗开始时，乾坤袋应抽1张牌
     // 预期结果: 手牌增加1张
 
     let mut app = create_test_app();
@@ -188,12 +188,12 @@ fn test_energy_on_turn_start() {
 }
 
 // ============================================================================
-// 场景5: 回合结束效果 - 锚（保留手牌）
+// 场景5: 回合结束效果 - 定风珠（保留手牌）
 // ============================================================================
 
 #[test]
 fn test_anchor_keeps_cards_on_turn_end() {
-    // 场景描述: 回合结束时，锚遗物允许保留最多3张牌
+    // 场景描述: 回合结束时，定风珠遗物允许保留最多3张牌
     // 预期结果: 手牌数量不超过3张
 
     let app = create_test_app();
@@ -201,19 +201,19 @@ fn test_anchor_keeps_cards_on_turn_end() {
 
     match &anchor.effect {
         RelicEffect::OnTurnEnd { keep_cards } => {
-            assert_eq!(*keep_cards, 3, "锚应该允许保留3张牌");
+            assert_eq!(*keep_cards, 3, "定风珠应该允许保留3张牌");
         }
-        _ => panic!("锚遗物效果不正确"),
+        _ => panic!("定风珠遗物效果不正确"),
     }
 }
 
 // ============================================================================
-// 场景6: 打出牌效果 - 奇怪勺子（每3张牌抽1张）
+// 场景6: 打出牌效果 - 聚灵阵（每3张牌抽1张）
 // ============================================================================
 
 #[test]
 fn test_strange_spoon_draws_every_third_card() {
-    // 场景描述: 每打出第3张牌时，奇怪勺子抽1张牌
+    // 场景描述: 每打出第3张牌时，聚灵阵抽1张牌
     // 预期结果: 第3、6、9张牌触发抽牌
 
     let strange_spoon = Relic::strange_spoon();
@@ -223,7 +223,7 @@ fn test_strange_spoon_draws_every_third_card() {
             assert_eq!(*every_nth, 3, "应该每3张牌触发");
             assert_eq!(*draw_cards, 1, "应该抽1张牌");
         }
-        _ => panic!("奇怪勺子遗物效果不正确"),
+        _ => panic!("聚灵阵遗物效果不正确"),
     }
 
     // 验证计数逻辑
@@ -240,7 +240,7 @@ fn test_strange_spoon_draws_every_third_card() {
 #[test]
 fn test_multiple_relics_stack_effects() {
     // 场景描述: 同时拥有多个遗物时，效果应该叠加
-    // 预期结果: 燃烧之血造成伤害 + 准备背包抽牌
+    // 预期结果: 飞剑符造成伤害 + 乾坤袋抽牌
 
     let mut collection = RelicCollection::default();
     collection.add_relic(Relic::burning_blood());

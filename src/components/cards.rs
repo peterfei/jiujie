@@ -248,10 +248,10 @@ impl Default for DeckConfig {
 /// 初始牌组
 pub fn create_starting_deck() -> Vec<Card> {
     vec![
-        // 5张攻击卡
+        // 5张道法（攻击）卡 - 御剑术
         Card::new(
             0,
-            "打击",
+            "御剑术",
             "造成6点伤害",
             CardType::Attack,
             1,
@@ -260,7 +260,7 @@ pub fn create_starting_deck() -> Vec<Card> {
         ),
         Card::new(
             1,
-            "打击",
+            "御剑术",
             "造成6点伤害",
             CardType::Attack,
             1,
@@ -269,7 +269,7 @@ pub fn create_starting_deck() -> Vec<Card> {
         ),
         Card::new(
             2,
-            "打击",
+            "御剑术",
             "造成6点伤害",
             CardType::Attack,
             1,
@@ -278,7 +278,7 @@ pub fn create_starting_deck() -> Vec<Card> {
         ),
         Card::new(
             3,
-            "打击",
+            "御剑术",
             "造成6点伤害",
             CardType::Attack,
             1,
@@ -287,18 +287,18 @@ pub fn create_starting_deck() -> Vec<Card> {
         ),
         Card::new(
             4,
-            "打击",
+            "御剑术",
             "造成6点伤害",
             CardType::Attack,
             1,
             CardEffect::DealDamage { amount: 6 },
             CardRarity::Common,
         ),
-        // 4张防御卡
+        // 4张护体（防御）卡 - 金光咒
         Card::new(
             5,
-            "防御",
-            "获得5点护甲",
+            "金光咒",
+            "获得5点护盾",
             CardType::Defense,
             1,
             CardEffect::GainBlock { amount: 5 },
@@ -306,8 +306,8 @@ pub fn create_starting_deck() -> Vec<Card> {
         ),
         Card::new(
             6,
-            "防御",
-            "获得5点护甲",
+            "金光咒",
+            "获得5点护盾",
             CardType::Defense,
             1,
             CardEffect::GainBlock { amount: 5 },
@@ -315,8 +315,8 @@ pub fn create_starting_deck() -> Vec<Card> {
         ),
         Card::new(
             7,
-            "防御",
-            "获得5点护甲",
+            "金光咒",
+            "获得5点护盾",
             CardType::Defense,
             1,
             CardEffect::GainBlock { amount: 5 },
@@ -324,17 +324,17 @@ pub fn create_starting_deck() -> Vec<Card> {
         ),
         Card::new(
             8,
-            "防御",
-            "获得5点护甲",
+            "金光咒",
+            "获得5点护盾",
             CardType::Defense,
             1,
             CardEffect::GainBlock { amount: 5 },
             CardRarity::Common,
         ),
-        // 1张攻击抽牌卡
+        // 1张剑气卡 - 剑气斩
         Card::new(
             9,
-            "突刺",
+            "剑气斩",
             "造成3点伤害，抽1张牌",
             CardType::Attack,
             1,
@@ -344,11 +344,11 @@ pub fn create_starting_deck() -> Vec<Card> {
             },
             CardRarity::Uncommon,
         ),
-        // 2张治疗卡
+        // 2张回复卡 - 回春术
         Card::new(
             10,
-            "治疗",
-            "恢复5点生命",
+            "回春术",
+            "恢复5点道行",
             CardType::Skill,
             1,
             CardEffect::Heal { amount: 5 },
@@ -356,8 +356,8 @@ pub fn create_starting_deck() -> Vec<Card> {
         ),
         Card::new(
             11,
-            "治疗",
-            "恢复5点生命",
+            "回春术",
+            "恢复5点道行",
             CardType::Skill,
             1,
             CardEffect::Heal { amount: 5 },
@@ -377,20 +377,20 @@ impl CardPool {
     /// 获取所有可获得的卡牌
     pub fn all_cards() -> Vec<Card> {
         vec![
-            // === 普通卡牌 ===
-            Card::new(100, "重击", "造成12点伤害", CardType::Attack, 2, CardEffect::DealDamage { amount: 12 }, CardRarity::Common),
-            Card::new(101, "铁壁", "获得8点护甲", CardType::Defense, 1, CardEffect::GainBlock { amount: 8 }, CardRarity::Common),
-            Card::new(102, "快速打击", "造成4点伤害", CardType::Attack, 0, CardEffect::DealDamage { amount: 4 }, CardRarity::Common),
-            // === 稀有卡牌 ===
-            Card::new(200, "旋风斩", "造成8点伤害，抽2张牌", CardType::Attack, 2, CardEffect::AttackAndDraw { damage: 8, cards: 2 }, CardRarity::Uncommon),
-            Card::new(201, "完美格挡", "获得12点护甲", CardType::Defense, 2, CardEffect::GainBlock { amount: 12 }, CardRarity::Uncommon),
-            Card::new(202, "圣光治疗", "恢复10点生命", CardType::Skill, 2, CardEffect::Heal { amount: 10 }, CardRarity::Uncommon),
-            Card::new(203, "强力突刺", "造成6点伤害，抽1张牌", CardType::Attack, 1, CardEffect::AttackAndDraw { damage: 6, cards: 1 }, CardRarity::Uncommon),
-            Card::new(204, "战斗专注", "抽3张牌，获得2点能量", CardType::Skill, 1, CardEffect::DrawCards { amount: 3 }, CardRarity::Uncommon),
-            // === 稀有卡牌（更强）===
-            Card::new(300, "雷霆一击", "造成20点伤害", CardType::Attack, 3, CardEffect::DealDamage { amount: 20 }, CardRarity::Rare),
-            Card::new(301, "不屈意志", "获得15点护甲，恢复5点生命", CardType::Defense, 2, CardEffect::GainBlock { amount: 15 }, CardRarity::Rare),
-            Card::new(302, "生命涌动", "恢复15点生命", CardType::Skill, 2, CardEffect::Heal { amount: 15 }, CardRarity::Rare),
+            // === 普通功法 ===
+            Card::new(100, "雷法·掌心雷", "造成12点雷击伤害", CardType::Attack, 2, CardEffect::DealDamage { amount: 12 }, CardRarity::Common),
+            Card::new(101, "不动明王", "获得8点护盾", CardType::Defense, 1, CardEffect::GainBlock { amount: 8 }, CardRarity::Common),
+            Card::new(102, "疾风刺", "造成4点快速伤害", CardType::Attack, 0, CardEffect::DealDamage { amount: 4 }, CardRarity::Common),
+            // === 稀有功法 ===
+            Card::new(200, "御剑·流云", "造成8点伤害，抽2张牌", CardType::Attack, 2, CardEffect::AttackAndDraw { damage: 8, cards: 2 }, CardRarity::Uncommon),
+            Card::new(201, "太极图", "获得12点护盾", CardType::Defense, 2, CardEffect::GainBlock { amount: 12 }, CardRarity::Uncommon),
+            Card::new(202, "甘霖咒", "恢复10点道行", CardType::Skill, 2, CardEffect::Heal { amount: 10 }, CardRarity::Uncommon),
+            Card::new(203, "破军剑", "造成6点伤害，抽1张牌", CardType::Attack, 1, CardEffect::AttackAndDraw { damage: 6, cards: 1 }, CardRarity::Uncommon),
+            Card::new(204, "神识全开", "抽3张牌，获得2点灵力", CardType::Skill, 1, CardEffect::DrawCards { amount: 3 }, CardRarity::Uncommon),
+            // === 传说功法 ===
+            Card::new(300, "九天神雷", "造成20点毁灭伤害", CardType::Attack, 3, CardEffect::DealDamage { amount: 20 }, CardRarity::Rare),
+            Card::new(301, "金身法相", "获得15点护盾，恢复5点道行", CardType::Defense, 2, CardEffect::GainBlock { amount: 15 }, CardRarity::Rare),
+            Card::new(302, "万物回春", "恢复15点道行", CardType::Skill, 2, CardEffect::Heal { amount: 15 }, CardRarity::Rare),
         ]
     }
 

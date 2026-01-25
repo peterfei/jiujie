@@ -14,7 +14,7 @@ impl Plugin for CorePlugin {
         // 应用启动时设置2D相机（用于渲染UI）
         app.add_systems(Startup, setup_camera);
         // 初始化胜利延迟计时器
-        app.insert_resource(VictoryDelay::new(0.8)); // 延迟1.5秒让粒子特效播放
+        app.insert_resource(VictoryDelay::new(2.0)); // 延迟2.0秒让粒子特效播放
 
         // 玩家实体初始化系统 - 在所有OnEnter系统之前运行
         // 使用world_mut().spawn()确保实体立即可用，避免重复创建

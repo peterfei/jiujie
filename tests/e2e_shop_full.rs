@@ -12,6 +12,8 @@ use bevy_card_battler::components::shop::*;
 use bevy_card_battler::plugins::{CorePlugin, MenuPlugin};
 use bevy_card_battler::states::GameState;
 
+use bevy_card_battler::systems::ShopPlugin;
+
 #[test]
 fn e2e_full_shop_flow_from_map_to_shop() {
     // 完整测试：从地图进入商店，显示UI和商品
@@ -19,13 +21,26 @@ fn e2e_full_shop_flow_from_map_to_shop() {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins)
         .add_plugins(AssetPlugin::default())
+        .add_plugins(ImagePlugin::default())
+        .init_asset::<Shader>()
+        .init_asset::<Mesh>()
+        .init_asset::<ColorMaterial>()
+        .add_plugins(bevy::input::InputPlugin::default())
+        .add_event::<bevy::picking::backend::PointerHits>()
+        .add_event::<bevy::window::WindowScaleFactorChanged>()
+        .add_event::<bevy::window::WindowResized>()
+        .add_plugins(bevy::sprite::SpritePlugin::default())
+        .add_plugins(bevy::ui::UiPlugin::default())
         .add_plugins(TextPlugin::default())
         .add_plugins(StatesPlugin)
         .add_plugins(CorePlugin)
         .add_plugins(MenuPlugin)
+        .add_plugins(ShopPlugin)
         .init_state::<GameState>()
         .init_resource::<ButtonInput<KeyCode>>()
-        .init_resource::<ButtonInput<MouseButton>>();
+        .init_resource::<ButtonInput<MouseButton>>()
+        .init_resource::<PlayerDeck>() // 初始化玩家牌组
+        .init_resource::<RelicCollection>(); // 初始化遗物背包（以防万一）
 
     // 初始化地图进度（包含商店节点）
     let mut progress = MapProgress::default();

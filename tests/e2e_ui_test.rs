@@ -12,11 +12,29 @@ use bevy_card_battler::components::*;
 use bevy_card_battler::plugins::MenuPlugin;
 use bevy_card_battler::states::GameState;
 
+use bevy::asset::AssetPlugin;
+use bevy::text::TextPlugin;
+
 /// 创建完整测试应用（包含所有插件）
 fn create_full_test_app() -> App {
     let mut app = App::new();
-    app.add_plugins((StatesPlugin, MenuPlugin))
-        .init_state::<GameState>();
+    app.add_plugins(MinimalPlugins)
+        .add_plugins(AssetPlugin::default())
+        .add_plugins(ImagePlugin::default())
+        .init_asset::<Shader>()
+        .init_asset::<Mesh>()
+        .init_asset::<ColorMaterial>()
+        .add_plugins(bevy::input::InputPlugin::default())
+        .add_event::<bevy::picking::backend::PointerHits>()
+        .add_event::<bevy::window::WindowScaleFactorChanged>()
+        .add_event::<bevy::window::WindowResized>()
+        .add_plugins(bevy::sprite::SpritePlugin::default())
+        .add_plugins(bevy::ui::UiPlugin::default())
+        .add_plugins(TextPlugin::default())
+        .add_plugins((StatesPlugin, MenuPlugin))
+        .init_state::<GameState>()
+        .init_resource::<ButtonInput<KeyCode>>()
+        .init_resource::<ButtonInput<MouseButton>>();
 
     app.update();
     app

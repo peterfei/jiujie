@@ -3,7 +3,7 @@ name = "bevy_card_battler"
 version = "0.1.0"
 edition = "2021"
 authors = ["Bevy Card Battler Team"]
-description = "A deck-building roguelike card game built with Bevy"
+description = "A deck-building cultivation roguelike game built with Bevy"
 repository = "https://github.com/yourusername/bevy-card-battler"
 license = "MIT OR Apache-2.0"
 

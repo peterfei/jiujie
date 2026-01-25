@@ -80,7 +80,7 @@ fn test_multiple_relics_stack_effects() {
     // 第一场战斗 - 只有初始遗物（燃烧之血）
     info!("=== 第一场战斗（只有初始遗物）===");
     let enemy1_hp_before = 30;
-    app.world_mut().spawn(Player::default());
+    // 玩家实体已由 CorePlugin 自动创建，无需手动 spawn
     app.world_mut().spawn(Enemy::new(0, "敌人1", enemy1_hp_before));
     app.insert_state(GameState::Combat);
     app.update();

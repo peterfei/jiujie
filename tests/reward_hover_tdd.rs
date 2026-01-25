@@ -720,7 +720,7 @@ fn test_relic_hover_shows_complete_info() {
     // 验证数据可访问
     let current_relic = app.world().get_resource::<TestCurrentRelic>();
     assert!(current_relic.is_some(), "应该有当前遗物数据");
-    assert_eq!(current_relic.unwrap().0.as_ref().unwrap().name, "燃烧之血", "遗物名称应该正确");
+    assert_eq!(current_relic.unwrap().0.as_ref().unwrap().name, "飞剑符", "遗物名称应该正确");
 }
 
 // ============================================================================

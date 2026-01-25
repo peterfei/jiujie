@@ -24,6 +24,7 @@ fn create_game_app() -> App {
 
     // 初始化游戏资源
     app.insert_resource(RelicCollection::default());
+    app.init_resource::<CombatState>(); // 初始化战斗状态
     app.insert_resource(CombatStartProcessed {
         processed: false,
     });
