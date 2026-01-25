@@ -142,85 +142,65 @@ fn setup_camera(mut commands: Commands) {
 
 /// 设置主菜单UI
 fn setup_main_menu(mut commands: Commands, asset_server: Res<AssetServer>) {
-    // 加载中文字体
+    // 加载中文字体和Logo图片
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
+    let logo_handle: Handle<Image> = asset_server.load("textures/logo.png");
 
     // 创建根节点（全屏容器）
     commands
-        .spawn(Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            flex_direction: FlexDirection::Column,
-            row_gap: Val::Px(20.0),
-            ..default()
-        })
-        .with_children(|parent| {
-            // 游戏标题
-            parent.spawn((
-                Text::new("Bevy Card Battler"),
-                TextFont {
-                    font_size: 60.0,
-                    ..default()
-                },
-                TextColor(Color::WHITE),
-                // 居中对齐
-                Node {
-                    margin: UiRect::bottom(Val::Px(40.0)),
-                    ..default()
-                },
-            ));
-
-            // 开始游戏按钮
-            parent.spawn((
-                Node {
-                width: Val::Px(200.0),
-                height: Val::Px(50.0),
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
+                flex_direction: FlexDirection::Column,
                 ..default()
+            },
+            BackgroundColor(Color::srgb(0.05, 0.05, 0.05)),
+        ))
+        .with_children(|parent| {
+            // 游戏 Logo 背景图片 - 铺满全屏
+            parent.spawn((
+                ImageNode::new(logo_handle),
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    position_type: PositionType::Absolute,
+                    ..default()
                 },
-                BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
+                ZIndex(-1), // 确保在最底层
+            ));
+
+            // 开始游戏按钮 - 绝对定位在屏幕中下方
+            parent.spawn((
+                Node {
+                    width: Val::Px(220.0),
+                    height: Val::Px(60.0),
+                    position_type: PositionType::Absolute,
+                    bottom: Val::Percent(15.0), // 距离底部 15%
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    border: UiRect::all(Val::Px(2.0)),
+                    ..default()
+                },
+                ZIndex(1), // 确保在最顶层
+                BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.3)),
+                BackgroundColor(Color::srgba(0.1, 0.2, 0.1, 0.85)), // 墨绿色半透明
                 Button,
                 StartGameButton,
             ))
             .with_children(|parent| {
                 parent.spawn((
-                    Text::new("开始游戏"),
+                    Text::new("进入九界"),
                     TextFont {
                         font: chinese_font.clone(),
-                        font_size: 24.0,
+                        font_size: 32.0,
                         ..default()
                     },
                     TextColor(Color::WHITE),
                 ));
             });
-
-            // 退出按钮（可选，暂时注释）
-            /*
-            parent.spawn((
-                Button {
-                    width: Val::Px(200.0),
-                    height: Val::Px(50.0),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-                BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
-                QuitGameButton,
-            ))
-            .with_children(|parent| {
-                parent.spawn((
-                    Text::new("退出"),
-                    TextFont {
-                        font_size: 24.0,
-                        ..default()
-                    },
-                    TextColor(Color::WHITE),
-                ));
-            });
-            */
         });
 }
 
