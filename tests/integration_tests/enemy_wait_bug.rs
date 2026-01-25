@@ -14,7 +14,7 @@ fn bug_enemy_wait_001_enemy_can_choose_wait() {
     let iterations = 100;
 
     for _ in 0..iterations {
-        let mut enemy = bevy_card_battler::components::Enemy::new(0, "哥布林", 30);
+        let mut enemy = bevy_card_battler::components::Enemy::new(0, "嗜血妖狼", 30);
         enemy.choose_new_intent();
 
         if matches!(enemy.intent, EnemyIntent::Wait) {
@@ -25,7 +25,7 @@ fn bug_enemy_wait_001_enemy_can_choose_wait() {
     println!("100次迭代中，Wait意图被选择了 {} 次", wait_count);
 
     // Wait意图的概率是 1.0 - (attack + defend + buff)
-    // 对于哥布林: 1.0 - (0.7 + 0.1 + 0.2) = 0.0
+    // 对于嗜血妖狼: 1.0 - (0.7 + 0.1 + 0.2) = 0.0
     // 但实际上由于浮点精度或其他因素，可能仍会发生
     if wait_count > 0 {
         println!("⚠️  警告：Wait意图被选择了 {} 次（预期0次）", wait_count);
@@ -121,13 +121,13 @@ fn bug_enemy_wait_003_attack_intent_deals_damage() {
 #[test]
 fn bug_enemy_wait_004_ai_probability_sum_check() {
     // 检查AI概率总和是否为1.0
-    let enemy = bevy_card_battler::components::Enemy::new(0, "哥布林", 30);
+    let enemy = bevy_card_battler::components::Enemy::new(0, "嗜血妖狼", 30);
 
     let sum = enemy.ai_pattern.attack_chance
            + enemy.ai_pattern.defend_chance
            + enemy.ai_pattern.buff_chance;
 
-    println!("哥布林AI概率总和: attack={:.2}, defend={:.2}, buff={:.2}, sum={:.2}",
+    println!("嗜血妖狼AI概率总和: attack={:.2}, defend={:.2}, buff={:.2}, sum={:.2}",
         enemy.ai_pattern.attack_chance,
         enemy.ai_pattern.defend_chance,
         enemy.ai_pattern.buff_chance,

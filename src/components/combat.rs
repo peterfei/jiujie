@@ -157,14 +157,14 @@ pub enum EnemyIntent {
 /// 敌人类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnemyType {
-    /// 哥布林 - 攻击型，高攻击概率
-    Goblin,
-    /// 骷髅 - 均衡型
-    Skeleton,
-    /// 史莱姆 - 防御型，高防御概率
-    Slime,
-    /// Boss - 强力型，多种攻击模式
-    Boss,
+    /// 嗜血妖狼 - 攻击型，高攻击概率
+    DemonicWolf,
+    /// 巡逻阴兵 - 均衡型
+    GhostSoldier,
+    /// 地府幽火 - 防御型，高防御概率
+    SpiritFire,
+    /// 筑基大妖 - 强力型，多种攻击模式
+    GreatDemon,
 }
 
 /// AI模式配置 - 定义敌人选择意图的概率
@@ -185,8 +185,8 @@ pub struct AiPattern {
 }
 
 impl AiPattern {
-    /// 哥布林模式 - 激进攻击型
-    pub fn goblin() -> Self {
+    /// 嗜血妖狼模式 - 激进攻击型
+    pub fn demonic_wolf() -> Self {
         Self {
             attack_chance: 0.7,
             defend_chance: 0.1,
@@ -197,8 +197,8 @@ impl AiPattern {
         }
     }
 
-    /// 骷髅模式 - 均衡型
-    pub fn skeleton() -> Self {
+    /// 巡逻阴兵模式 - 均衡型
+    pub fn ghost_soldier() -> Self {
         Self {
             attack_chance: 0.5,
             defend_chance: 0.3,
@@ -209,8 +209,8 @@ impl AiPattern {
         }
     }
 
-    /// 史莱姆模式 - 防御型
-    pub fn slime() -> Self {
+    /// 地府幽火模式 - 防御型
+    pub fn spirit_fire() -> Self {
         Self {
             attack_chance: 0.3,
             defend_chance: 0.5,
@@ -221,8 +221,8 @@ impl AiPattern {
         }
     }
 
-    /// Boss模式 - 强力型
-    pub fn boss() -> Self {
+    /// 筑基大妖模式 - 强力型
+    pub fn great_demon() -> Self {
         Self {
             attack_chance: 0.6,
             defend_chance: 0.2,
@@ -236,18 +236,18 @@ impl AiPattern {
     /// 根据敌人类型获取AI模式
     pub fn from_enemy_type(enemy_type: EnemyType) -> Self {
         match enemy_type {
-            EnemyType::Goblin => Self::goblin(),
-            EnemyType::Skeleton => Self::skeleton(),
-            EnemyType::Slime => Self::slime(),
-            EnemyType::Boss => Self::boss(),
+            EnemyType::DemonicWolf => Self::demonic_wolf(),
+            EnemyType::GhostSoldier => Self::ghost_soldier(),
+            EnemyType::SpiritFire => Self::spirit_fire(),
+            EnemyType::GreatDemon => Self::great_demon(),
         }
     }
 }
 
 impl Enemy {
-    /// 创建新敌人（默认哥布林类型）
+    /// 创建新敌人（默认嗜血妖狼类型）
     pub fn new(id: u32, name: impl Into<String>, hp: i32) -> Self {
-        let enemy_type = EnemyType::Goblin;
+        let enemy_type = EnemyType::DemonicWolf;
         let ai_pattern = AiPattern::from_enemy_type(enemy_type);
         Self {
             id,

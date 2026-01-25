@@ -37,7 +37,7 @@ fn setup_combat_with_relics(relics: Vec<Relic>) -> App {
 
     // 创建玩家和敌人
     app.world_mut().spawn(Player::default());
-    app.world_mut().spawn(Enemy::new(1, "哥布林", 30));
+    app.world_mut().spawn(Enemy::new(1, "嗜血妖狼", 30));
 
     // 创建牌堆
     app.world_mut().spawn(Hand::new(10));
@@ -181,7 +181,7 @@ fn test_relics_persist_across_multiple_combats() {
     app.world_mut().insert_resource(CombatStartProcessed {
         processed: false,
     });
-    app.world_mut().spawn(Enemy::new(2, "第二个哥布林", 30));
+    app.world_mut().spawn(Enemy::new(2, "幽冥狼", 30));
 
     // 第二场战斗 - 遗物不会再次触发（因为processed=true）
     app.update();

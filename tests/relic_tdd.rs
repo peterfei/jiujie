@@ -27,7 +27,7 @@ fn create_test_app() -> App {
 
     // 创建玩家实体
     app.world_mut().spawn(Player::default());
-    app.world_mut().spawn(Enemy::new(1, "测试哥布林", 30));
+    app.world_mut().spawn(Enemy::new(1, "测试妖兽", 30));
 
     // 创建手牌和牌堆
     app.world_mut().spawn(Hand::new(10));

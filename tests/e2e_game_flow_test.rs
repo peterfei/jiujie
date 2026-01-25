@@ -134,7 +134,7 @@ fn e2e_player_initial_stats() {
 fn e2e_enemy_initial_stats() {
     // GIVEN: 创建应用并添加敌人实体
     let mut app = create_test_app();
-    let enemy_entity = app.world_mut().spawn(Enemy::new(0, "哥布林", 30)).id();
+    let enemy_entity = app.world_mut().spawn(Enemy::new(0, "嗜血妖狼", 30)).id();
 
     // WHEN: 更新一帧
     app.update();
@@ -148,7 +148,7 @@ fn e2e_enemy_initial_stats() {
 
     assert_eq!(enemy.hp, 30, "敌人初始HP应该是30");
     assert_eq!(enemy.max_hp, 30, "敌人最大HP应该是30");
-    assert_eq!(enemy.name, "哥布林", "敌人名称应该是哥布林");
+    assert_eq!(enemy.name, "嗜血妖狼", "敌人名称应该是哥布林");
 }
 
 #[test]
@@ -220,7 +220,7 @@ fn e2e_player_start_turn_resets_energy() {
 fn e2e_enemy_death_detection() {
     // GIVEN: 创建应用并添加敌人实体
     let mut app = create_test_app();
-    let enemy_entity = app.world_mut().spawn(Enemy::new(0, "哥布林", 30)).id();
+    let enemy_entity = app.world_mut().spawn(Enemy::new(0, "嗜血妖狼", 30)).id();
     app.update();
 
     // WHEN: 敌人HP降为0

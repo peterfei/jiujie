@@ -68,7 +68,7 @@ fn e2e_bug_hand_count_with_multiple_cards() {
 #[test]
 fn e2e_bug_enemy_death_should_be_detectable() {
     // GIVEN: 创建敌人，HP为30
-    let enemy = Enemy::new(0, "哥布林", 30);
+    let enemy = Enemy::new(0, "嗜血妖狼", 30);
 
     // THEN: 初始HP应该是30
     assert_eq!(enemy.hp, 30, "初始HP应该是30");
@@ -91,7 +91,7 @@ fn e2e_bug_enemy_death_should_be_detectable() {
 #[test]
 fn e2e_bug_enemy_death_with_overkill() {
     // GIVEN: 创建敌人，HP为30
-    let mut enemy = Enemy::new(0, "哥布林", 30);
+    let mut enemy = Enemy::new(0, "嗜血妖狼", 30);
 
     // WHEN: 对敌人造成50点伤害（超过HP）
     enemy.take_damage(50);
@@ -107,7 +107,7 @@ fn e2e_bug_combat_should_end_when_enemy_dies() {
     let mut app = create_test_app();
 
     let player_entity = app.world_mut().spawn(Player::default()).id();
-    let enemy_entity = app.world_mut().spawn(Enemy::new(0, "哥布林", 30)).id();
+    let enemy_entity = app.world_mut().spawn(Enemy::new(0, "嗜血妖狼", 30)).id();
 
     app.update();
 
@@ -140,7 +140,7 @@ fn e2e_full_combat_flow_until_enemy_death() {
     let mut app = create_test_app();
 
     let player_entity = app.world_mut().spawn(Player::default()).id();
-    let enemy_entity = app.world_mut().spawn(Enemy::new(0, "哥布林", 30)).id();
+    let enemy_entity = app.world_mut().spawn(Enemy::new(0, "嗜血妖狼", 30)).id();
 
     app.update();
 
@@ -299,7 +299,7 @@ fn e2e_bug_enemy_attack_reduces_player_hp() {
     let mut app = create_test_app();
 
     let player_entity = app.world_mut().spawn(Player::default()).id();
-    let enemy_entity = app.world_mut().spawn(Enemy::new(0, "哥布林", 30)).id();
+    let enemy_entity = app.world_mut().spawn(Enemy::new(0, "嗜血妖狼", 30)).id();
 
     app.update();
 

@@ -936,7 +936,7 @@ fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>, playe
 
     // 注意：玩家实体由 init_player 系统统一管理，不再在此创建
 
-    commands.spawn(Enemy::new(0, "哥布林", 30));
+    commands.spawn(Enemy::new(0, "嗜血妖狼", 30));
 
     // 创建敌人精灵
     spawn_character_sprite(
@@ -1016,7 +1016,7 @@ fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>, playe
                         .with_children(|enemy_panel| {
                             // 敌人名称
                             enemy_panel.spawn((
-                                Text::new("哥布林"),
+                                Text::new("嗜血妖狼"),
                                 TextFont {
                                     font: chinese_font.clone(),
                                     font_size: 24.0,
