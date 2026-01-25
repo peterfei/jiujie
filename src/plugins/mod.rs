@@ -9,7 +9,7 @@ use crate::components::{
     SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, 
     ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation, 
     EnemySpriteMarker, VictoryDelay, RelicCollection, Relic, RelicId,
-    RelicObtainedEvent, RelicTriggeredEvent
+    RelicObtainedEvent, RelicTriggeredEvent, DialogueLine
 };
 use crate::systems::sprite::spawn_character_sprite;
 
@@ -181,6 +181,9 @@ impl Plugin for GamePlugin {
         .add_event::<RelicObtainedEvent>()
         .add_event::<RelicTriggeredEvent>()
         // ... (其他系统注册)
+        .add_systems(OnEnter(GameState::Prologue), setup_prologue)
+        .add_systems(Update, update_prologue.run_if(in_state(GameState::Prologue)))
+        .add_systems(OnExit(GameState::Prologue), cleanup_prologue)
         .add_systems(OnEnter(GameState::Tribulation), setup_tribulation)
         .add_systems(Update, update_tribulation.run_if(in_state(GameState::Tribulation)))
         .add_systems(OnExit(GameState::Tribulation), teardown_tribulation);
@@ -450,7 +453,7 @@ fn handle_button_clicks(
 
             info!("开始游戏 - 玩家牌组和地图进度已初始化");
 
-            next_state.set(GameState::Map);
+            next_state.set(GameState::Prologue);
         } else if matches!(interaction, Interaction::Hovered) {
             // 悬停效果
             *color = BackgroundColor(Color::srgb(0.3, 0.3, 0.3));
@@ -2744,8 +2747,107 @@ fn handle_game_over_clicks(
 }
 
 // ============================================================================
-// 渡劫系统 (Tribulation)
+// 序章系统 (Prologue)
 // ============================================================================
+
+#[derive(Component)]
+struct PrologueUiMarker;
+
+#[derive(Component)]
+struct PrologueText;
+
+fn setup_prologue(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+) {
+    info!("序章：开启九界传说...");
+
+    // 初始化序章台词
+    let dialogue = crate::components::dialogue::Dialogue::new(vec![
+        DialogueLine::new("世界", "混沌初开，九界并立..."),
+        DialogueLine::new("世界", "然万载光阴，末法降临，灵气枯竭。"),
+        DialogueLine::new("世界", "诸神陨落，众生涂炭，九界命悬一线。"),
+        DialogueLine::new("天道", "你，本是凡间一缕残魂..."),
+        DialogueLine::new("天道", "唯有逆天渡劫，重铸金身，方能挽狂澜于既倒。"),
+        DialogueLine::new("天道", "九界门启，渡劫开始！"),
+    ]);
+
+    commands.insert_resource(dialogue.clone());
+
+    // 创建纯黑背景
+    commands.spawn((
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            flex_direction: FlexDirection::Column,
+            ..default()
+        },
+        BackgroundColor(Color::BLACK),
+        PrologueUiMarker,
+    )).with_children(|parent| {
+        // 台词文本
+        parent.spawn((
+            Text::new(dialogue.current_line().unwrap().text.clone()),
+            TextFont {
+                font: asset_server.load("fonts/Arial Unicode.ttf"),
+                font_size: 40.0,
+                ..default()
+            },
+            TextColor(Color::srgb(0.9, 0.9, 0.9)),
+            PrologueText,
+        ));
+
+        // 提示文本
+        parent.spawn((
+            Text::new("—— 点击屏幕继续 ——"),
+            TextFont {
+                font: asset_server.load("fonts/Arial Unicode.ttf"),
+                font_size: 18.0,
+                ..default()
+            },
+            TextColor(Color::srgba(1.0, 1.0, 1.0, 0.4)),
+            Node {
+                margin: UiRect::top(Val::Px(50.0)),
+                ..default()
+            },
+        ));
+    });
+}
+
+fn update_prologue(
+    mut next_state: ResMut<NextState<GameState>>,
+    mut dialogue: ResMut<crate::components::dialogue::Dialogue>,
+    mut query: Query<&mut Text, With<PrologueText>>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
+    touches: Res<Touches>,
+) {
+    // 检测点击 (鼠标或触摸)
+    if mouse_button.just_pressed(MouseButton::Left) || touches.any_just_pressed() {
+        dialogue.next();
+
+        if dialogue.is_finished() {
+            info!("序章播放结束，进入地图");
+            next_state.set(GameState::Map);
+        } else if let Some(line) = dialogue.current_line() {
+            if let Ok(mut text) = query.get_single_mut() {
+                text.0 = line.text.clone();
+            }
+        }
+    }
+}
+
+fn cleanup_prologue(
+    mut commands: Commands,
+    query: Query<Entity, With<PrologueUiMarker>>,
+) {
+    for entity in query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+    commands.remove_resource::<crate::components::dialogue::Dialogue>();
+}
+
 
 #[derive(Component)]
 struct TribulationUiMarker;
@@ -2893,7 +2995,7 @@ fn teardown_tribulation(
     if let Ok((mut player, mut cultivation)) = player_query.get_single_mut() {
         // 只有在没死的情况下才进入这里（由于 GameOver 也会触发出状态，这里加个判断）
         if player.hp > 0 {
-            let old_realm = cultivation.realm;
+            let _old_realm = cultivation.realm;
             if cultivation.breakthrough() {
                 let hp_bonus = cultivation.get_hp_bonus();
                 player.max_hp += hp_bonus;

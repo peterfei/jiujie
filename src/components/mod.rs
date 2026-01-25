@@ -10,6 +10,7 @@ pub mod screen_effect;
 pub mod relic;
 pub mod shop;
 pub mod cultivation;
+pub mod dialogue;
 
 pub use map::{MapNode, NodeType, MapConfig, generate_map_nodes, MapProgress};
 pub use combat::{Player, Enemy, EnemyIntent, EnemyType, AiPattern, CombatConfig, CombatState, TurnPhase, PlayerDeck, VictoryDelay, CardHoverPanelMarker, RelicHoverPanelMarker};
@@ -19,6 +20,7 @@ pub use cards::{
     DeckConfig, CardPool, RewardCard,
 };
 pub use cultivation::{Cultivation, Realm};
+pub use dialogue::{Dialogue, DialogueLine};
 pub use animation::{
     MovementAnimation, ShakeAnimation, FloatingDamageText,
     EnemyUiMarker, PlayerUiMarker, EasingFunction, EnemyAttackEvent

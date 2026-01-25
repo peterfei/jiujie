@@ -7,6 +7,8 @@ use bevy::prelude::*;
 pub enum GameState {
     #[default]
     MainMenu,
+    /// 序章：交代背景
+    Prologue,
     Map,
     Combat,
     Reward,

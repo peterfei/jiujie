@@ -16,14 +16,15 @@ mod tests {
     #[test]
     fn test_perform_breakthrough_increases_realm() {
         let mut cultivation = Cultivation::new();
-        cultivation.gain_insight(100);
+        let threshold = cultivation.get_threshold();
+        cultivation.gain_insight(threshold);
         
         // 执行突破
         let success = cultivation.breakthrough();
         
         assert!(success, "感悟足够时突破应成功");
         assert_eq!(cultivation.realm, Realm::FoundationEstablishment, "突破后应进入筑基期");
-        assert_eq!(cultivation.insight, 0, "突破后感悟值应清空（或扣除阈值）");
+        assert_eq!(cultivation.insight, 0, "突破后感悟值应清空");
     }
 
     #[test]
