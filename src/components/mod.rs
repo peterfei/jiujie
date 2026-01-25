@@ -8,6 +8,7 @@ pub mod sprite;
 pub mod particle;
 pub mod screen_effect;
 pub mod relic;
+pub mod shop;
 
 pub use map::{MapNode, NodeType, MapConfig, generate_map_nodes, MapProgress};
 pub use combat::{Player, Enemy, EnemyIntent, EnemyType, AiPattern, CombatConfig, CombatState, TurnPhase, PlayerDeck, VictoryDelay, CardHoverPanelMarker, RelicHoverPanelMarker};
@@ -35,4 +36,9 @@ pub use screen_effect::{
 pub use relic::{
     Relic, RelicId, RelicRarity, RelicEffect,
     RelicCollection, RelicObtainedEvent, RelicTriggeredEvent
+};
+pub use shop::{
+    ShopItem, ShopUiRoot, ShopCardButton, ShopRelicButton,
+    ShopRemoveCardButton, ShopExitButton, ShopGoldText, CurrentShopItems,
+    SelectedCardForRemoval
 };

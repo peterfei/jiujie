@@ -10,5 +10,7 @@ pub enum GameState {
     Map,
     Combat,
     Reward,
+    Shop,
+    Rest,
     GameOver,
 }

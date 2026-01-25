@@ -738,7 +738,7 @@ struct HandCountText;
 struct HandArea;
 
 /// 设置战斗UI
-fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>, player_deck: Res<PlayerDeck>, mut victory_delay: ResMut<VictoryDelay>, player_query: Query<&Player>) {
+fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>, player_deck: Res<PlayerDeck>, mut victory_delay: ResMut<VictoryDelay>) {
     // 进入战斗时确保胜利延迟被重置（防止上一场战斗的状态泄漏）
     if victory_delay.active {
         info!("进入战斗时检测到胜利延迟仍然激活，强制重置");
@@ -748,12 +748,6 @@ fn setup_combat_ui(mut commands: Commands, asset_server: Res<AssetServer>, playe
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
 
     // 创建玩家和敌人实体
-    // 创建玩家实体（只在不存时）
-    if player_query.get_single().is_err() {
-        commands.spawn(Player::default());
-        info!("setup_combat_ui: 创建新玩家实体");
-    }
-
     commands.spawn(Enemy::new(0, "哥布林", 30));
 
     // 创建敌人精灵

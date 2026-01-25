@@ -180,8 +180,9 @@ fn e2e_starting_deck_size() {
     // GIVEN: 使用默认牌组配置
     let config = DeckConfig::default();
 
-    // THEN: 初始牌组应该有10张卡
-    assert_eq!(config.starting_deck.len(), 10);
+    // THEN: 初始牌组应该有12张卡
+    // 5张打击 + 1张突刺 + 4张防御 + 2张治疗
+    assert_eq!(config.starting_deck.len(), 12);
 }
 
 #[test]
@@ -196,10 +197,14 @@ fn e2e_starting_deck_composition() {
     let defense_count = config.starting_deck.iter()
         .filter(|c| c.card_type == CardType::Defense)
         .count();
+    let skill_count = config.starting_deck.iter()
+        .filter(|c| c.card_type == CardType::Skill)
+        .count();
 
-    // THEN: 应该有6张攻击卡、4张防御卡
+    // THEN: 应该有6张攻击卡、4张防御卡、2张技能卡
     assert_eq!(attack_count, 6);
     assert_eq!(defense_count, 4);
+    assert_eq!(skill_count, 2);
 }
 
 // ============================================================================
