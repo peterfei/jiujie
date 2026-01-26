@@ -1,2 +1,27 @@
 /target
 /openspec
+.gemini-clipboard
+
+# 游戏存档文件
+savegame.json
+*.sav
+
+# Rust
+*.rs.bk
+*.pdb
+Cargo.lock
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# 编辑器
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# 日志
+*.log

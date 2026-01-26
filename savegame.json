@@ -2,17 +2,17 @@
   "player": {
     "hp": 80,
     "max_hp": 80,
-    "energy": 3,
+    "energy": 1,
     "max_energy": 3,
-    "block": 0,
+    "block": 25,
     "gold": 100,
-    "turn": 1,
+    "turn": 6,
     "poison": 0,
     "weakness": 0
   },
   "cultivation": {
     "realm": "QiRefining",
-    "insight": 0
+    "insight": 100
   },
   "deck": [
     {
@@ -207,7 +207,7 @@
         1
       ],
       "unlocked": true,
-      "completed": false
+      "completed": true
     },
     {
       "id": 2,
@@ -236,7 +236,7 @@
         1,
         0
       ],
-      "unlocked": false,
+      "unlocked": true,
       "completed": false
     },
     {
@@ -246,7 +246,7 @@
         1,
         1
       ],
-      "unlocked": false,
+      "unlocked": true,
       "completed": false
     },
     {
@@ -256,7 +256,7 @@
         1,
         2
       ],
-      "unlocked": false,
+      "unlocked": true,
       "completed": false
     },
     {
@@ -266,7 +266,7 @@
         1,
         3
       ],
-      "unlocked": false,
+      "unlocked": true,
       "completed": false
     },
     {
@@ -590,6 +590,6 @@
       "completed": false
     }
   ],
-  "current_map_node_id": 1,
+  "current_map_node_id": 2,
   "current_map_layer": 0
 }
