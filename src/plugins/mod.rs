@@ -1194,14 +1194,14 @@ fn setup_combat_ui(
             let x_world = 250.0 + (i as f32 - (num_enemies as f32 - 1.0) / 2.0) * 220.0;
             commands.spawn(Enemy::with_type(enemy_id, name, hp, e_type));
 
-            // 根据妖兽类型选择渲染类型 (Nano Banana 多样化)
-            let char_type = match e_type {
-                EnemyType::DemonicWolf => CharacterType::DemonicWolf,
-                EnemyType::PoisonSpider => CharacterType::PoisonSpider,
-                EnemyType::CursedSpirit => CharacterType::CursedSpirit,
-                EnemyType::GreatDemon => CharacterType::GreatDemon,
+            // 根据妖兽类型选择渲染类型与尺寸 (大作级体型压制)
+            let (char_type, size) = match e_type {
+                EnemyType::DemonicWolf => (CharacterType::DemonicWolf, Vec2::new(100.0, 120.0)),
+                EnemyType::PoisonSpider => (CharacterType::PoisonSpider, Vec2::new(100.0, 120.0)),
+                EnemyType::CursedSpirit => (CharacterType::CursedSpirit, Vec2::new(120.0, 160.0)),
+                EnemyType::GreatDemon => (CharacterType::GreatDemon, Vec2::new(180.0, 240.0)),
             };
-            spawn_character_sprite(&mut commands, &character_assets, char_type, Vec3::new(x_world, 50.0, 10.0), Vec2::new(100.0, 120.0), Some(enemy_id));
+            spawn_character_sprite(&mut commands, &character_assets, char_type, Vec3::new(x_world, 50.0, 10.0), size, Some(enemy_id));
 
             let ui_left = 640.0 + x_world - 80.0;
             commands.entity(root_entity).with_children(|root| {

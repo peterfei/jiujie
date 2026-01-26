@@ -278,7 +278,10 @@ fn sync_2d_to_3d_render(
                 ..default()
             });
 
+            // 3. 构造 3D 纸片人 (落地修正)
             let home_pos = Vec3::new(x_3d, 0.05, z_3d + 0.1);
+            let is_boss = char_sprite.size.x > 150.0; // 尺寸判定
+
             commands.entity(entity).insert((
                 Combatant3d { facing_right: true },
                 BreathAnimation::default(),
@@ -289,8 +292,10 @@ fn sync_2d_to_3d_render(
                 Transform::from_translation(home_pos).with_rotation(Quat::from_rotation_x(-0.2)), 
             )).remove::<Sprite>()
             .with_children(|parent| {
+                // BOSS 底座半径 1.2, 普通 0.8
+                let base_radius = if is_boss { 1.2 } else { 0.8 };
                 parent.spawn((
-                    Mesh3d(meshes.add(Cylinder::new(0.8, 0.02))), 
+                    Mesh3d(meshes.add(Cylinder::new(base_radius, 0.02))), 
                     MeshMaterial3d(materials.add(StandardMaterial {
                         base_color: Color::srgba(0.0, 0.05, 0.0, 0.4),
                         emissive: LinearRgba::new(0.0, 0.2, 0.1, 1.0),

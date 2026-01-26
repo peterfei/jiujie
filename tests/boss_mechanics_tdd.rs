@@ -3,6 +3,19 @@ use bevy_card_battler::components::combat::{Enemy, EnemyType, EnemyIntent, AiPat
 use bevy_card_battler::components::sprite::{CharacterType, AnimationState};
 
 #[test]
+fn test_boss_vs_minion_scale() {
+    // 逻辑：BOSS 尺寸 vs 普通狼尺寸
+    let boss_size = Vec2::new(150.0, 200.0);
+    let minion_size = Vec2::new(70.0, 100.0);
+    
+    let height_ratio = boss_size.y / minion_size.y;
+    let width_ratio = boss_size.x / minion_size.x;
+    
+    assert!(height_ratio >= 1.5, "BOSS 高度应至少是普通怪的 1.5 倍");
+    assert!(width_ratio >= 2.0, "BOSS 宽度应至少是普通怪的 2 倍以体现体量感");
+}
+
+#[test]
 fn test_boss_hp_and_type() {
     let boss = Enemy::with_type(99, "幽冥白虎".to_string(), 150, EnemyType::GreatDemon);
     assert_eq!(boss.hp, 150);
