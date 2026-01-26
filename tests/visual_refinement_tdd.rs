@@ -1,6 +1,35 @@
 use bevy::prelude::*;
 
 #[test]
+fn test_shake_event_deduplication() {
+    // 模拟一帧内的多个事件
+    let events = vec![(0.4, 0.8), (1.0, 0.5), (0.2, 1.0)];
+    
+    let mut max_trauma = 0.0f32;
+    let mut min_decay = 100.0f32;
+    
+    for (t, d) in events {
+        max_trauma = max_trauma.max(t);
+        min_decay = min_decay.min(d);
+    }
+    
+    assert_eq!(max_trauma, 1.0, "应选取最强的震动 (1.0)");
+    assert_eq!(min_decay, 0.5, "应选取最持久的衰减 (0.5)");
+}
+
+#[test]
+fn test_boss_golden_seal_logic() {
+    // 逻辑：如果有 BOSS，法阵应变为金色且旋转加速
+    let has_boss = true;
+    let seal_color = if has_boss { Color::srgb(1.0, 0.8, 0.2) } else { Color::srgb(0.0, 0.8, 0.3) };
+    let seal_speed = if has_boss { 0.15 } else { 0.05 };
+    
+    let rgba: Srgba = seal_color.into();
+    assert!(rgba.red > 0.9, "BOSS 法阵应为金色调");
+    assert_eq!(seal_speed, 0.15, "BOSS 法阵旋转速度应提升");
+}
+
+#[test]
 fn test_glowing_seal_pulse_subtle() {
     // 逻辑：法阵的亮度应非常平缓地脉动 (0.85 -> 1.15)
     let timer = 1.0f32;

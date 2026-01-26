@@ -33,26 +33,49 @@ impl Plugin for ScreenEffectPlugin {
 fn handle_screen_effects(
     mut commands: Commands,
     mut events: EventReader<ScreenEffectEvent>,
-    camera_query: Query<(Entity, Option<&CameraShake>), With<Camera2d>>,
+    camera_query: Query<(Entity, &Transform, Option<&CameraShake>), With<Camera>>, 
 ) {
+    // 1. 预处理：找出本帧收到的最强震动请求
+    let mut max_trauma = 0.0f32;
+    let mut min_decay = 100.0f32;
+    let mut has_shake = false;
+
     for event in events.read() {
         match event {
             ScreenEffectEvent::Shake { trauma, decay } => {
-                if let Ok((entity, current_shake)) = camera_query.get_single() {
-                    let mut new_shake = CameraShake::new(*trauma).with_decay(*decay);
-                    if let Some(existing) = current_shake {
-                        // 叠加震动强度，但不超过 1.0
-                        new_shake.trauma = (existing.trauma + trauma).min(1.0);
-                    }
-                    commands.entity(entity).insert(new_shake);
-                    info!("触发屏幕震动: 强度={:.2}", trauma);
-                }
+                max_trauma = max_trauma.max(*trauma);
+                min_decay = min_decay.min(*decay);
+                has_shake = true;
             }
             ScreenEffectEvent::Flash { color, duration } => {
                 spawn_flash_overlay(&mut commands, *color, *duration);
                 info!("触发屏幕闪光: 颜色={:?}, 持续={:?}", color, duration);
             }
         }
+    }
+
+    // 2. 应用最强震动到所有相机
+    if has_shake {
+        for (entity, transform, current_shake) in camera_query.iter() {
+            let mut final_trauma = max_trauma;
+            let mut final_decay = min_decay;
+            
+            if let Some(existing) = current_shake {
+                // 如果当前正在震动，则进行增量合并
+                final_trauma = existing.trauma.max(max_trauma);
+                final_decay = existing.decay.min(min_decay);
+            }
+            
+            // 记录基础坐标并插入新震动
+            let base_pos = current_shake.and_then(|s| s.base_translation).unwrap_or(transform.translation);
+            commands.entity(entity).insert(CameraShake {
+                trauma: final_trauma,
+                decay: final_decay,
+                offset: Vec2::ZERO,
+                base_translation: Some(base_pos),
+            });
+        }
+        info!("【视觉】触发全场景强震: 强度={:.2}", max_trauma);
     }
 }
 
@@ -84,29 +107,31 @@ fn update_camera_shake(
     time: Res<Time>,
 ) {
     for (entity, mut shake, mut transform) in query.iter_mut() {
-        // 衰减震动强度
         shake.trauma -= shake.decay * time.delta_secs();
         shake.trauma = shake.trauma.max(0.0);
 
         if shake.trauma <= 0.0 {
-            // 震动结束，恢复相机位置
-            transform.translation.x = 0.0;
-            transform.translation.y = 0.0;
+            // 震动结束，精准恢复初始位置 (无论是 2D 还是 3D)
+            if let Some(base) = shake.base_translation {
+                transform.translation = base;
+            }
             commands.entity(entity).remove::<CameraShake>();
             continue;
         }
 
-        // 使用 Perlin 噪声生成平滑的震动
         let mut rng = rand::thread_rng();
         let angle = rng.gen::<f32>() * std::f32::consts::PI * 2.0;
-        let magnitude = shake.trauma * shake.trauma * 20.0; // 非线性增强
+        
+        // 大作级 3D 震动：调大位移系数到 1.2
+        let magnitude = shake.trauma * shake.trauma * 1.2; 
 
         shake.offset.x = angle.cos() * magnitude;
         shake.offset.y = angle.sin() * magnitude;
 
-        // 应用震动偏移
-        transform.translation.x = shake.offset.x;
-        transform.translation.y = shake.offset.y;
+        // 在基础位置上应用偏移
+        if let Some(base) = shake.base_translation {
+            transform.translation = base + Vec3::new(shake.offset.x, shake.offset.y, 0.0);
+        }
     }
 }
 

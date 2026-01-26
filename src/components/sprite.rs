@@ -108,6 +108,10 @@ pub enum AnimationState {
     SpiderAttack,
     /// 怨灵专属：灵体突袭
     SpiritAttack,
+    /// BOSS 专属：啸天 (全屏 AOE)
+    BossRoar,
+    /// BOSS 专属：瞬狱杀 (连击)
+    BossFrenzy,
     /// 施展妖术 (蓄力/护盾/强化)
     DemonCast,
     /// 受击

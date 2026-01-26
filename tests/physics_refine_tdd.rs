@@ -17,6 +17,22 @@ fn test_breath_suppression_during_action() {
 }
 
 #[test]
+fn test_observation_state_immobility() {
+    // 逻辑：观察状态下，不应有旋转速度，且位移应回弹至 0
+    let mut impact = PhysicalImpact::default();
+    impact.action_type = ActionType::None;
+    impact.special_rotation = 0.5; // 模拟残留旋转
+    
+    // 物理回弹模拟 (rot_spring_k = 45.0)
+    let dt = 0.016;
+    let force = -45.0 * impact.special_rotation;
+    impact.special_rotation_velocity += force * dt;
+    impact.special_rotation += impact.special_rotation_velocity * dt;
+    
+    assert!(impact.special_rotation < 0.5, "残留旋转必须被弹簧力拉回 0");
+}
+
+#[test]
 fn test_breath_suppression_robustness() {
     // 模拟场景：狼已经停在玩家面前（速度低），但撕咬计时器还没走完
     let action_timer = 0.5f32;

@@ -1181,10 +1181,15 @@ fn setup_combat_ui(
 
         for i in 0..num_enemies {
             let enemy_id = i as u32;
-            let (name, hp, e_type) = match rng.gen_range(0..3) {
-                0 => ("嗜血妖狼", 30, EnemyType::DemonicWolf),
-                1 => ("剧毒蛛", 20, EnemyType::PoisonSpider),
-                _ => ("怨灵", 40, EnemyType::CursedSpirit),
+            // 临时测试补丁：第一个敌人固定为 BOSS
+            let (name, hp, e_type) = if i == 0 {
+                ("幽冥白虎", 150, EnemyType::GreatDemon)
+            } else {
+                match rng.gen_range(0..3) {
+                    0 => ("嗜血妖狼", 30, EnemyType::DemonicWolf),
+                    1 => ("剧毒蛛", 20, EnemyType::PoisonSpider),
+                    _ => ("怨灵", 40, EnemyType::CursedSpirit),
+                }
             };
             let x_world = 250.0 + (i as f32 - (num_enemies as f32 - 1.0) / 2.0) * 220.0;
             commands.spawn(Enemy::with_type(enemy_id, name, hp, e_type));
@@ -1420,40 +1425,57 @@ fn process_enemy_turn_queue(
                         if marker.id == enemy_id {
                             found_render_entity = true;
                             let anim = match intent {
-                                EnemyIntent::Attack { .. } => {
-                                    match enemy.enemy_type {
-                                        EnemyType::DemonicWolf => crate::components::sprite::AnimationState::WolfAttack,
-                                        EnemyType::PoisonSpider => {
-                                            effect_events.send(SpawnEffectEvent::new(EffectType::WebShot, transform.translation));
-                                            
-                                            let web_texture = asset_server.load("textures/web_effect.png");
-                                            commands.spawn((
-                                                crate::components::sprite::Ghost { ttl: 1.5 },
-                                                Mesh3d(meshes.add(Rectangle::new(1.5, 1.5))),
-                                                MeshMaterial3d(materials.add(StandardMaterial {
-                                                    base_color: Color::WHITE,
-                                                    base_color_texture: Some(web_texture),
-                                                    alpha_mode: AlphaMode::Blend,
-                                                    unlit: true,
-                                                    ..default()
-                                                })),
-                                            // 落地后，蛛丝坐标修正 (从 1.2 降到 0.5)
-                                            Transform::from_xyz(-3.5, 0.5, 0.3)
-                                                .with_rotation(Quat::from_rotation_z(0.5)),
-                                                CombatUiRoot,
-                                            ));
-                                            crate::components::sprite::AnimationState::SpiderAttack
+                                                                EnemyIntent::Attack { .. } => {
+                                                                    match enemy.enemy_type {
+                                                                        EnemyType::DemonicWolf => crate::components::sprite::AnimationState::WolfAttack,
+                                                                        EnemyType::PoisonSpider => {
+                                                                            effect_events.send(SpawnEffectEvent::new(EffectType::WebShot, transform.translation));
+                                                                            
+                                                                            let web_texture = asset_server.load("textures/web_effect.png");
+                                                                            commands.spawn((
+                                                                                crate::components::sprite::Ghost { ttl: 1.5 },
+                                                                                Mesh3d(meshes.add(Rectangle::new(1.5, 1.5))),
+                                                                                MeshMaterial3d(materials.add(StandardMaterial {
+                                                                                    base_color: Color::WHITE,
+                                                                                    base_color_texture: Some(web_texture),
+                                                                                    alpha_mode: AlphaMode::Blend,
+                                                                                    unlit: true,
+                                                                                    ..default()
+                                                                                })),
+                                                                                // 落地后，蛛丝坐标修正
+                                                                                Transform::from_xyz(-3.5, 0.5, 0.3)
+                                                                                    .with_rotation(Quat::from_rotation_z(0.5)),
+                                                                                CombatUiRoot,
+                                                                            ));
+                                                                            crate::components::sprite::AnimationState::SpiderAttack
+                                                                        },
+                                                                        EnemyType::CursedSpirit => crate::components::sprite::AnimationState::SpiritAttack,
+                                        EnemyType::GreatDemon => {
+                                            // 关键修复：turn_count 在 choose_new_intent 里已经加 1 了
+                                            // 所以这里需要 -1 来对应刚刚生成的那个意图
+                                            let cycle_pos = (enemy.turn_count.saturating_sub(1)) % 3;
+                                            match cycle_pos {
+                                                0 => {
+                                                    info!("【系统】BOSS {} 触发：啸天", enemy_id);
+                                                    screen_events.send(ScreenEffectEvent::Shake { trauma: 1.0, decay: 0.5 });
+                                                    crate::components::sprite::AnimationState::BossRoar
+                                                },
+                                                1 => {
+                                                    info!("【系统】BOSS {} 触发：瞬狱杀", enemy_id);
+                                                    crate::components::sprite::AnimationState::BossFrenzy
+                                                },
+                                                _ => {
+                                                    info!("【系统】BOSS {} 触发：聚灵", enemy_id);
+                                                    crate::components::sprite::AnimationState::DemonCast
+                                                },
+                                            }
                                         },
-                                        EnemyType::CursedSpirit => crate::components::sprite::AnimationState::SpiritAttack,
-                                        _ => crate::components::sprite::AnimationState::DemonAttack,
-                                    }
-                                },
-                                _ => {
-                                    effect_events.send(SpawnEffectEvent::new(EffectType::DemonAura, transform.translation + Vec3::new(0.0, 0.5, 0.1)));
-                                    crate::components::sprite::AnimationState::DemonCast
-                                },
-                            };
-                            anim_events.send(CharacterAnimationEvent { target: render_entity, animation: anim });
+                                                                        _ => crate::components::sprite::AnimationState::DemonAttack,
+                                                                    }
+                                                                },
+                                                                // 关键修复：观察、防御、强化等全部触发灵气脉冲效果
+                                                                _ => crate::components::sprite::AnimationState::DemonCast,
+                                                            };                            anim_events.send(CharacterAnimationEvent { target: render_entity, animation: anim });
                         }
                     }
                     

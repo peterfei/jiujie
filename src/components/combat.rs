@@ -128,12 +128,13 @@ pub struct Enemy {
     pub max_hp: i32,
     /// 当前意图（下次行动）
     pub intent: EnemyIntent,
-    /// AI模式配置
     pub ai_pattern: AiPattern,
-    /// 当前攻击力加成（来自Buff）
+    /// 攻击力加成
     pub strength: i32,
     /// 当前护甲
     pub block: i32,
+    /// 行动轮次（用于 BOSS 固定招式循环）
+    pub turn_count: u32,
 }
 
 /// 敌人意图
@@ -230,6 +231,7 @@ impl Enemy {
             ai_pattern,
             strength: 0,
             block: 0,
+            turn_count: 0,
         }
     }
 
@@ -246,6 +248,7 @@ impl Enemy {
             ai_pattern,
             strength: 0,
             block: 0,
+            turn_count: 0,
         }
     }
 
@@ -268,6 +271,28 @@ impl Enemy {
     pub fn choose_new_intent(&mut self) {
         use rand::Rng;
         let mut rng = rand::thread_rng();
+
+        // BOSS 专属固定招式循环
+        if self.enemy_type == EnemyType::GreatDemon {
+            let cycle_pos = self.turn_count % 3;
+            let intent = match cycle_pos {
+                0 => {
+                    // 啸天：基准大伤害
+                    EnemyIntent::Attack { damage: 20 + self.strength }
+                },
+                1 => {
+                    // 瞬狱杀：中等伤害
+                    EnemyIntent::Attack { damage: 15 + self.strength }
+                },
+                _ => {
+                    // 聚灵：大幅提升攻击力
+                    EnemyIntent::Buff { strength: 5 }
+                }
+            };
+            self.intent = intent;
+            self.turn_count += 1;
+            return;
+        }
 
         let roll: f32 = rng.gen();
         let intent = if roll < self.ai_pattern.attack_chance {
