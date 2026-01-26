@@ -6,7 +6,8 @@ use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use crate::components::sprite::{
     CharacterSprite, AnimationState, CharacterType,
-    CharacterAnimationEvent, SpriteMarker, PlayerSpriteMarker, EnemySpriteMarker
+    CharacterAnimationEvent, SpriteMarker, PlayerSpriteMarker, EnemySpriteMarker,
+    Combatant3d, BreathAnimation
 };
 use crate::states::GameState;
 
@@ -21,8 +22,64 @@ impl Plugin for SpritePlugin {
             (
                 update_sprite_animations,
                 handle_animation_events,
+                update_breath_animations,
+                sync_2d_to_3d_render,
             ).run_if(in_state(GameState::Combat))
         );
+    }
+}
+
+/// 更新呼吸动画（2.5D 纸片人上下浮动）
+fn update_breath_animations(
+    mut query: Query<(&mut Transform, &mut BreathAnimation)>,
+    time: Res<Time>,
+) {
+    for (mut transform, mut breath) in query.iter_mut() {
+        breath.timer += time.delta_secs();
+        // 使用绝对值设置 Y 轴，而不是累加
+        // 频率调低到 1.0 (一秒一个周期)，幅度调低到 0.02 (2厘米)
+        let offset = (breath.timer * 1.0).sin() * 0.02;
+        transform.translation.y = offset; 
+    }
+}
+
+/// 同步系统：将 2D 纹理和颜色同步到 3D 纸片人上
+fn sync_2d_to_3d_render(
+    mut commands: Commands,
+    sprite_query: Query<(Entity, &CharacterSprite, &Sprite, &Transform, Option<&Combatant3d>), (With<SpriteMarker>, Changed<CharacterSprite>)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for (entity, char_sprite, sprite_data, transform, combatant_3d) in sprite_query.iter() {
+        if combatant_3d.is_none() {
+            // 将 2D 像素位置转换为 3D 世界位置 (缩小 100 倍)
+            let mut x_3d = transform.translation.x / 100.0;
+            let z_3d = transform.translation.y / 100.0; // 将 2D 的 Y 映射到 3D 的深度 Z
+            
+            // 修正：玩家在左，敌人在右
+            // 我们稍微拉近一点距离
+            if x_3d < -5.0 { x_3d = -3.0; }
+            if x_3d > 5.0 { x_3d = 3.0; }
+
+            let mesh = meshes.add(Rectangle::new(char_sprite.size.x / 100.0, char_sprite.size.y / 100.0));
+            
+            let material = materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(char_sprite.texture.clone()),
+                alpha_mode: AlphaMode::Blend,
+                unlit: true,
+                ..default()
+            });
+
+            commands.entity(entity).insert((
+                Combatant3d { facing_right: true },
+                BreathAnimation::default(),
+                Mesh3d(mesh),
+                MeshMaterial3d(material),
+                // 强制更新 3D 位置
+                Transform::from_xyz(x_3d, 0.0, z_3d),
+            )).remove::<Sprite>(); // 移除旧的 2D 占位块
+        }
     }
 }
 

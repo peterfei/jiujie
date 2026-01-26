@@ -105,7 +105,11 @@ impl Plugin for MenuPlugin {
         app.add_systems(Update, handle_map_button_clicks.run_if(in_state(GameState::Map)));
 
         // 在进入Combat状态时设置战斗UI
-        app.add_systems(OnEnter(GameState::Combat), setup_combat_ui);
+        // 在进入Combat状态时设置战斗UI
+        app.add_systems(OnEnter(GameState::Combat), (
+            setup_combat_ui, 
+            setup_combat_environment, // 新增 3D 环境设置
+        ));
         // 在进入Combat状态时重置玩家状态（能量、护甲等）
         app.add_systems(OnEnter(GameState::Combat), reset_player_on_combat_start);
         // 在进入Combat状态时抽牌
@@ -209,9 +213,52 @@ impl Plugin for GamePlugin {
 // 核心系统
 // ============================================================================
 
-/// 设置2D相机（用于渲染UI和游戏场景）
+/// 相机设置
 fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2d);
+    // 2D 相机 (用于 UI 渲染)
+    commands.spawn((Camera2d, Msaa::Sample4));
+    
+    // 3D 相机 (用于战斗场景渲染)
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 2.5, 8.0).looking_at(Vec3::new(0.0, 0.5, 0.0), Vec3::Y),
+    ));
+}
+
+/// 设置战斗环境（3D 地板和灯光）
+fn setup_combat_environment(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    // 1. 灵气地板 (3D 平面)
+    commands.spawn((
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(20.0, 20.0))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgba(0.1, 0.2, 0.1, 0.8),
+            perceptual_roughness: 0.5,
+            ..default()
+        })),
+        Transform::from_xyz(0.0, -1.0, 0.0),
+        CombatUiRoot, // 复用清理标记
+    ));
+
+    // 2. 环境灯光 (灵光)
+    commands.spawn((
+        PointLight {
+            intensity: 1500.0,
+            shadows_enabled: true,
+            color: Color::srgb(0.8, 1.0, 0.8),
+            ..default()
+        },
+        Transform::from_xyz(0.0, 4.0, 0.0),
+        CombatUiRoot,
+    ));
+    
+    commands.insert_resource(AmbientLight {
+        color: Color::WHITE,
+        brightness: 200.0,
+    });
 }
 
 // ============================================================================

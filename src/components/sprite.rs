@@ -153,6 +153,34 @@ pub struct CharacterAnimationEvent {
     pub animation: AnimationState,
 }
 
+/// 3D 战斗角色标记组件 (2.5D 纸片人模式)
+#[derive(Component)]
+pub struct Combatant3d {
+    /// 角色面向 (true 为面向右侧)
+    pub facing_right: bool,
+}
+
+/// 呼吸动画组件（用于 3D 空间中的上下浮动感）
+#[derive(Component)]
+pub struct BreathAnimation {
+    /// 动画计时
+    pub timer: f32,
+    /// 浮动频率
+    pub frequency: f32,
+    /// 浮动幅度
+    pub amplitude: f32,
+}
+
+impl Default for BreathAnimation {
+    fn default() -> Self {
+        Self {
+            timer: 0.0,
+            frequency: 1.0,
+            amplitude: 0.02,
+        }
+    }
+}
+
 /// 精灵图标记组件
 #[derive(Component)]
 pub struct SpriteMarker;
