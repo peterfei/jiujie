@@ -1204,6 +1204,13 @@ fn handle_combat_button_clicks(
                             player.take_damage(damage);
                             attack_events.send(EnemyAttackEvent::new(damage, broken));
                             effect_events.send(SpawnEffectEvent::new(EffectType::Hit, Vec3::new(-350.0, -80.0, 999.0)));
+                            
+                            // 触发屏幕特效 (震动 + 红色闪光)
+                            screen_events.send(ScreenEffectEvent::Shake { trauma: 0.4, decay: 4.0 });
+                            screen_events.send(ScreenEffectEvent::Flash { 
+                                color: Color::srgba(1.0, 0.0, 0.0, 0.6), 
+                                duration: 0.15 
+                            });
                         }
                     }
                     EnemyIntent::Defend { block } => {
@@ -1647,7 +1654,7 @@ fn apply_card_effect(
                     position: Vec3::new(300.0, 50.0, 999.0), // 简化：大致在敌方区域
                     burst: true, count: 30,
                 });
-                screen_events.send(ScreenEffectEvent::Shake { trauma: 0.2, decay: 6.0 });
+                screen_events.send(ScreenEffectEvent::Shake { trauma: 0.35, decay: 5.0 });
             } else {
                 warn!("【战斗】没有存活的目标可供攻击！");
             }

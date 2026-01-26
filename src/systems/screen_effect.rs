@@ -33,14 +33,19 @@ impl Plugin for ScreenEffectPlugin {
 fn handle_screen_effects(
     mut commands: Commands,
     mut events: EventReader<ScreenEffectEvent>,
-    camera_query: Query<Entity, (With<Camera2d>, Without<CameraShake>)>,
+    camera_query: Query<(Entity, Option<&CameraShake>), With<Camera2d>>,
 ) {
     for event in events.read() {
         match event {
             ScreenEffectEvent::Shake { trauma, decay } => {
-                if let Ok(camera) = camera_query.get_single() {
-                    commands.entity(camera).insert(CameraShake::new(*trauma).with_decay(*decay));
-                    info!("触发屏幕震动: 强度={}", trauma);
+                if let Ok((entity, current_shake)) = camera_query.get_single() {
+                    let mut new_shake = CameraShake::new(*trauma).with_decay(*decay);
+                    if let Some(existing) = current_shake {
+                        // 叠加震动强度，但不超过 1.0
+                        new_shake.trauma = (existing.trauma + trauma).min(1.0);
+                    }
+                    commands.entity(entity).insert(new_shake);
+                    info!("触发屏幕震动: 强度={:.2}", trauma);
                 }
             }
             ScreenEffectEvent::Flash { color, duration } => {
@@ -65,10 +70,10 @@ fn spawn_flash_overlay(commands: &mut Commands, color: Color, duration: f32) {
                 ..default()
             },
             BackgroundColor(flash_color),
-            GlobalTransform::default(),
-            Transform::from_translation(Vec3::new(0.0, 0.0, 1000.0)), // 使用Z轴位置而非z_index
+            ZIndex(2000), // 使用极高的 ZIndex 确保覆盖所有 UI 和粒子
             ScreenFlash::new(flash_color, duration),
             ScreenEffectMarker,
+            crate::plugins::CombatUiRoot, // 标记以便在清理战斗时自动移除
         ));
 }
 

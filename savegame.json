@@ -5,8 +5,10 @@
     "energy": 3,
     "max_energy": 3,
     "block": 0,
-    "gold": 0,
-    "turn": 17
+    "gold": 100,
+    "turn": 1,
+    "poison": 0,
+    "weakness": 0
   },
   "cultivation": {
     "realm": "QiRefining",
