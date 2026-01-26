@@ -7,7 +7,7 @@ use bevy::sprite::Anchor;
 use crate::components::sprite::{
     CharacterSprite, AnimationState, CharacterType,
     CharacterAnimationEvent, SpriteMarker, PlayerSpriteMarker, EnemySpriteMarker,
-    Combatant3d, BreathAnimation, PhysicalImpact, CharacterAssets, Rotating, Ghost
+    Combatant3d, BreathAnimation, PhysicalImpact, CharacterAssets, Rotating, Ghost, ActionType
 };
 use crate::states::GameState;
 
@@ -17,18 +17,23 @@ pub struct SpritePlugin;
 impl Plugin for SpritePlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<CharacterAnimationEvent>();
+        
+        // 使用 .chain() 确保逻辑顺序，彻底解决动画冲突
         app.add_systems(
             Update,
             (
-                update_sprite_animations,
                 handle_animation_events,
-                update_breath_animations,
-                sync_2d_to_3d_render,
-                update_physical_impacts,
                 trigger_hit_feedback,
+                // 下面这三个必须按顺序执行
+                (
+                    sync_2d_to_3d_render,
+                    update_breath_animations,
+                    update_physical_impacts,
+                ).chain(),
                 update_rotations,
                 spawn_ghosts,
                 cleanup_ghosts,
+                update_sprite_animations,
             ).run_if(in_state(GameState::Combat))
         );
     }
@@ -110,37 +115,55 @@ fn update_physical_impacts(
 ) {
     let dt = time.delta_secs();
     for (mut transform, mut impact, breath) in query.iter_mut() {
-        // 1. 模拟旋转弹簧力
+        // 1. 模拟旋转弹簧力 (Tilt)
         let spring_k = 25.0; 
         let damping = 6.0;
-        
         let force = -spring_k * impact.tilt_amount;
         impact.tilt_velocity += force * dt;
         impact.tilt_velocity *= 1.0 - (damping * dt);
         impact.tilt_amount += impact.tilt_velocity * dt;
 
-        // 3. 模拟位置弹簧力 (将位移拉回 0)
-        let mut pos_spring_k = 10.0; // 稍微提高刚度防止冲出屏幕
+        // 2. 模拟位置弹簧力 (将位移拉回 0)
+        let mut pos_spring_k = 10.0; 
         let mut pos_damping = 5.0;
         
-        // 3.5 处理动作计时器逻辑 (狼啃咬、蜘蛛吐丝)
+        // 3. 处理动作计时器逻辑 (特化动作：如狼撕咬)
         let mut action_tilt_offset = 0.0;
         let mut action_pos_offset = Vec3::ZERO;
+        
         if impact.action_timer > 0.0 {
             impact.action_timer -= dt;
-            
-            // 贪狼啃咬：精确 2 次大幅度甩头 (频率 12.5)
-            let action_phase = impact.action_timer * 12.5;
-            action_tilt_offset = action_phase.sin() * 0.8;
-            
-            // 增加一点向前的“冲咬”位移感
-            if action_tilt_offset < 0.0 {
-                action_pos_offset.x = action_tilt_offset * 0.3; 
+            let dir = impact.action_direction; 
+
+            match impact.action_type {
+                ActionType::WolfBite => {
+                    // 贪狼啃咬：大幅度左右甩头
+                    let action_phase = impact.action_timer * 12.5;
+                    action_tilt_offset = action_phase.sin() * 0.8;
+                    
+                    // 向前冲咬的位移感
+                    if (action_tilt_offset * dir) < 0.0 {
+                        action_pos_offset.x = action_tilt_offset * 0.3; 
+                    }
+                    
+                    // 关键优化：距离感知减速逻辑
+                    // 目标距离是 7.0 (敌我间距)
+                    let current_dist = impact.current_offset.x.abs();
+                    let dist_left = (7.0 - current_dist).max(0.0);
+                    
+                    // 当距离小于 1.0 时，线性降低速度，实现精准停留
+                    let speed_scalar = if dist_left < 1.0 { dist_left } else { 1.0 };
+                    
+                    pos_damping = 20.0;
+                    impact.offset_velocity = Vec3::new(8.5 * dir * speed_scalar, 0.0, 0.0); 
+                },
+                ActionType::SpiderWeb => {
+                    // 蜘蛛吐丝：匀速爬行一段距离
+                    pos_damping = 15.0;
+                    impact.offset_velocity = Vec3::new(4.5 * dir, 0.0, 0.0);
+                },
+                _ => {}
             }
-            
-            // 啃咬期间极大增加阻尼，锁死位移
-            pos_damping = 20.0;
-            impact.offset_velocity *= 0.8; 
         }
 
         let pos_force = -pos_spring_k * impact.current_offset;
@@ -150,36 +173,36 @@ fn update_physical_impacts(
         let delta_offset = impact.offset_velocity * dt;
         impact.current_offset += delta_offset;
 
-        // 3.6 模拟特殊回旋弹簧力 (修复：恢复被误删的角度累加逻辑)
-        let rot_spring_k = 60.0; // 提高刚度，加快回位
-        let rot_damping = 8.0;   // 提高阻尼，减少回位后的余震
+        // 3.6 模拟特殊回旋弹簧力 (御剑术自转)
+        let rot_spring_k = 45.0;
+        let rot_damping = 6.0;
         let rot_force = -rot_spring_k * impact.special_rotation;
         impact.special_rotation_velocity += rot_force * dt;
         impact.special_rotation_velocity *= 1.0 - (rot_damping * dt);
-        // 重要：将角速度应用到角度
         let delta_rot = impact.special_rotation_velocity * dt;
         impact.special_rotation += delta_rot;
 
         // 4. 限制倾斜角度
+        impact.tilt_amount = impact.tilt_amount.clamp(-1.0, 1.0);
 
-
-        // 5. 整合呼吸动画 Y 轴偏移
+        // 6. 整合呼吸动画 Y 轴偏移 (动态抑制 - 极致可靠版)
         let breath_cycle = (breath.timer * breath.frequency).sin();
-        let breath_y = breath_cycle * 0.05;
+        
+        // 关键逻辑：只要还在动作计时、或者位移没回弹到位，就绝对静止呼吸
+        let is_acting = impact.action_timer > 0.0 || impact.current_offset.length() > 0.05 || impact.offset_velocity.length() > 0.5;
+        let breath_y = if is_acting { 0.0 } else { breath_cycle * 0.05 };
 
-        // 6. 应用到变换
-        // 动态抑制 Tilt：当有特殊旋转时，减弱 Tilt 的影响，防止“斜着转”导致的倒挂感
+        // 7. 应用变换 (消除视觉晃动优化版)
         let tilt_suppression = 1.0 / (1.0 + impact.special_rotation.abs() * 5.0);
-        let effective_tilt = (impact.tilt_amount + action_tilt_offset) * tilt_suppression;
+        let effective_tilt = impact.tilt_amount * tilt_suppression;
 
-        // 旋转：
-        // - 俯视角 (-0.2) 
-        // - 物理倾斜 (Z轴，受抑制)
-        // - 招式特化 (Y轴自转)
+        // 关键逻辑：将 action_tilt_offset (狼的撕咬) 移到 Y 轴旋转中
+        // 这样它是水平摆头，而不是绕脚底倒下，从而消除俯视角下的上下抖动错觉
         transform.rotation = Quat::from_rotation_x(-0.2) 
             * Quat::from_rotation_z(effective_tilt)
-            * Quat::from_rotation_y(impact.special_rotation);
+            * Quat::from_rotation_y(impact.special_rotation + action_tilt_offset);
         
+        // 覆盖 translation：这是本帧最后的修改者，确保 Y 轴稳如泰山
         transform.translation = impact.home_position + impact.current_offset + action_pos_offset + Vec3::new(0.0, breath_y, 0.0);
     }
 }
@@ -192,42 +215,55 @@ fn trigger_hit_feedback(
     for event in events.read() {
         if let Ok((mut impact, is_player)) = query.get_mut(event.target) {
             let direction = if is_player.is_some() { 1.0 } else { -1.0 };
+            impact.action_direction = direction; // 记录方向
             
+            // 关键修复：如果正在执行长动作（如撕咬、吐丝），不要被普通的受击/攻击逻辑打断
+            if impact.action_timer > 0.0 {
+                continue;
+            }
+
             match event.animation {
                 AnimationState::Hit => {
+                    impact.action_type = ActionType::None;
                     // 受击：力道减半，呈现沉重的顿挫感
                     impact.tilt_velocity = 15.0 * direction; 
                     impact.offset_velocity = Vec3::new(-2.0 * direction, 0.0, 0.0);
                 }
                 AnimationState::Attack => {
+                    impact.action_type = ActionType::None;
                     // 普通攻击：略微削减速度
                     impact.tilt_velocity = -40.0 * direction;
                     impact.offset_velocity = Vec3::new(20.0 * direction, 0.0, 0.0);
                 }
                 AnimationState::ImperialSword => {
+                    impact.action_type = ActionType::None;
                     // 御剑术：极速冲锋 + 270 度逆时针暴力回旋 (velocity改为正)
-                    impact.tilt_velocity = -10.0 * direction; // 减少 Tilt 初速度，让位给 Y 轴自转
+                    impact.tilt_velocity = -10.0 * direction; 
                     impact.offset_velocity = Vec3::new(28.0 * direction, 0.0, 0.0);
-                    // 极速自转，配合残影形成剑刃风暴
+                    // 修正：正值代表逆时针
                     impact.special_rotation_velocity = 80.0 * direction; 
                 }
                 AnimationState::DemonAttack => {
+                    impact.action_type = ActionType::None;
                     // 妖物突袭：更具沉重感
                     impact.tilt_velocity = -20.0 * direction;
                     impact.offset_velocity = Vec3::new(12.0 * direction, 0.0, 0.0);
                 }
                 AnimationState::DemonCast => {
+                    impact.action_type = ActionType::None;
                     // 施展妖术：震颤力道微调
                     impact.tilt_velocity = 60.0; 
                 }
                 AnimationState::WolfAttack => {
                     // 嗜血妖狼
+                    impact.action_type = ActionType::WolfBite;
                     impact.tilt_velocity = -25.0 * direction;
                     impact.offset_velocity = Vec3::new(16.0 * direction, 0.0, 0.0);
                     impact.action_timer = 1.0; 
                 }
                 AnimationState::SpiderAttack => {
                     // 剧毒蛛
+                    impact.action_type = ActionType::SpiderWeb;
                     impact.tilt_velocity = -8.0 * direction;
                     impact.offset_velocity = Vec3::new(10.0 * direction, 0.0, 0.0);
                     impact.action_timer = 0.8;
@@ -240,19 +276,24 @@ fn trigger_hit_feedback(
 
 /// 更新呼吸动画（2.5D 纸片人：缩放计时 + 挤压伸展）
 fn update_breath_animations(
-    mut query: Query<(&mut Transform, &mut BreathAnimation)>,
+    mut query: Query<(&mut Transform, &mut BreathAnimation, &PhysicalImpact)>,
     time: Res<Time>,
 ) {
-    for (mut transform, mut breath) in query.iter_mut() {
+    for (mut transform, mut breath, impact) in query.iter_mut() {
         breath.timer += time.delta_secs();
         
-        let breath_cycle = (breath.timer * breath.frequency).sin();
+        let is_acting = impact.action_timer > 0.0 || impact.current_offset.length() > 0.01 || impact.offset_velocity.length() > 0.1;
         
-        // 2. 挤压与伸展 (Squash and Stretch)
-        let stretch_y = 1.0 + breath_cycle * 0.03; 
-        let squash_x = 1.0 - breath_cycle * 0.02;  
-        
-        transform.scale = Vec3::new(squash_x, stretch_y, 1.0);
+        if is_acting {
+            // 动作期间保持标准比例
+            transform.scale = Vec3::ONE;
+        } else {
+            let breath_cycle = (breath.timer * breath.frequency).sin();
+            // 2. 挤压与伸展 (Squash and Stretch)
+            let stretch_y = 1.0 + breath_cycle * 0.03; 
+            let squash_x = 1.0 - breath_cycle * 0.02;  
+            transform.scale = Vec3::new(squash_x, stretch_y, 1.0);
+        }
     }
 }
 
@@ -299,6 +340,8 @@ fn sync_2d_to_3d_render(
                 }, 
                 Mesh3d(mesh),
                 MeshMaterial3d(material),
+                // 关闭阴影投射，防止旋转时产生黑影 (Shadow Acne)
+                bevy::pbr::NotShadowCaster,
                 // 强制更新 3D 位置
                 Transform::from_translation(home_pos)
                     .with_rotation(Quat::from_rotation_x(-0.2)), 

@@ -1404,54 +1404,49 @@ fn process_enemy_turn_queue(
 
                     info!("【战斗】轮到 {} 行动，意图：{:?}", enemy.name, intent);
 
-                    // 1. 触发 3D 动画与特效
-                    // 这里我们通过 EnemySpriteMarker 查找对应的 3D 渲染实体
+                    // 1. 触发 3D 动画与特效 (极致可靠性升级)
+                    let mut found_render_entity = false;
                     for (render_entity, marker, transform) in enemy_sprite_query.iter() {
                         if marker.id == enemy_id {
+                            found_render_entity = true;
                             let anim = match intent {
                                 EnemyIntent::Attack { .. } => {
-                                    // Nano Banana 妖兽攻击多样化判别
                                     match enemy.enemy_type {
                                         EnemyType::DemonicWolf => crate::components::sprite::AnimationState::WolfAttack,
                                         EnemyType::PoisonSpider => {
-                                            // 1. 爆发瞬间喷射粒子
-                                            effect_events.send(SpawnEffectEvent::new(
-                                                EffectType::WebShot, 
-                                                transform.translation
-                                            ));
+                                            effect_events.send(SpawnEffectEvent::new(EffectType::WebShot, transform.translation));
                                             
-                                            // 2. 在玩家面前生成持久化蛛丝 (加载真实纹理)
                                             let web_texture = asset_server.load("textures/web_effect.png");
                                             commands.spawn((
                                                 crate::components::sprite::Ghost { ttl: 1.5 },
-                                                Mesh3d(meshes.add(Rectangle::new(1.5, 1.5))), // 稍微调大一点
+                                                Mesh3d(meshes.add(Rectangle::new(1.5, 1.5))),
                                                 MeshMaterial3d(materials.add(StandardMaterial {
                                                     base_color: Color::WHITE,
                                                     base_color_texture: Some(web_texture),
                                                     alpha_mode: AlphaMode::Blend,
-                                                    unlit: true, // 保持蛛丝的亮白色
+                                                    unlit: true,
                                                     ..default()
                                                 })),
-                                                Transform::from_xyz(-3.5, 1.2, 0.3) // 略微抬高，对准胸口
-                                                    .with_rotation(Quat::from_rotation_z(0.5)), // 随机旋转一下，更自然
+                                                Transform::from_xyz(-3.5, 1.2, 0.3)
+                                                    .with_rotation(Quat::from_rotation_z(0.5)),
                                                 CombatUiRoot,
                                             ));
-                                            
                                             crate::components::sprite::AnimationState::SpiderAttack
                                         },
                                         _ => crate::components::sprite::AnimationState::DemonAttack,
                                     }
                                 },
                                 _ => {
-                                    effect_events.send(SpawnEffectEvent::new(
-                                        EffectType::DemonAura, 
-                                        transform.translation + Vec3::new(0.0, 0.5, 0.1)
-                                    ));
+                                    effect_events.send(SpawnEffectEvent::new(EffectType::DemonAura, transform.translation + Vec3::new(0.0, 0.5, 0.1)));
                                     crate::components::sprite::AnimationState::DemonCast
                                 },
                             };
                             anim_events.send(CharacterAnimationEvent { target: render_entity, animation: anim });
                         }
+                    }
+                    
+                    if !found_render_entity {
+                        warn!("【战斗】未能找到敌人 {} 的 3D 渲染实体，动画可能丢失", enemy_id);
                     }
 
                     // 2. 结算逻辑

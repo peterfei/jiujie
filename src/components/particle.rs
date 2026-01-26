@@ -283,14 +283,17 @@ impl EmitterConfig {
 
     pub fn sword_energy() -> Self {
         Self {
-            lifetime: (0.3, 0.6),
-            size: (5.0, 15.0),
-            start_color: Color::srgba(0.8, 0.95, 1.0, 0.9), // 亮白色剑气
-            end_color: Color::srgba(0.2, 0.6, 1.0, 0.0),
-            speed: (200.0, 400.0), // 极速
+            lifetime: (0.3, 0.5),
+            size: (3.0, 10.0),
+            // 红莲剑气：炽热的红橙色
+            start_color: Color::srgba(1.0, 0.3, 0.1, 0.9), 
+            end_color: Color::srgba(0.8, 0.1, 0.0, 0.0),
+            speed: (100.0, 250.0), 
+            // 环绕型发射角度 (配合发射器自身的旋转)
             angle: (0.0, std::f32::consts::PI * 2.0),
             gravity: Vec2::ZERO,
-            rotation_speed: (5.0, 10.0),
+            // 极速自转，模拟陀螺
+            rotation_speed: (20.0, 40.0),
             shape: ParticleShape::Line,
         }
     }

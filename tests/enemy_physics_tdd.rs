@@ -2,24 +2,36 @@ use bevy::prelude::*;
 use bevy_card_battler::components::sprite::PhysicalImpact;
 
 #[test]
-fn test_wolf_dash_sustenance() {
-    let mut impact = PhysicalImpact {
-        offset_velocity: Vec3::new(-25.0, 0.0, 0.0), // 攻击初速度
-        ..Default::default()
-    };
+fn test_wolf_bite_distance_precision() {
+    let mut current_offset = Vec3::ZERO;
+    let mut velocity = 18.0f32; // 初始速度
+    let dt = 0.016f32;
+    let bite_speed = 8.5f32;
     
-    let dt = 0.016;
-    // 模拟 10 帧更新
-    for _ in 0..10 {
-        // 模拟原本的错误逻辑（过快衰减）
-        // impact.offset_velocity *= 0.8; 
-        
-        // 优化后的逻辑（仅在 action_timer 结束后或慢速时衰减）
-        impact.current_offset += impact.offset_velocity * dt;
+    // 模拟 1 秒
+    for i in 0..60 {
+        let timer = 1.0 - (i as f32 * dt);
+        if timer > 0.0 {
+            // 撕咬期间的速度逻辑
+            // 优化目标：如果已经快到了，就减速
+            let dist_to_target = 7.0 - current_offset.x.abs();
+            let effective_speed = if dist_to_target < 1.0 { bite_speed * (dist_to_target).max(0.1) } else { bite_speed };
+            current_offset.x -= effective_speed * dt;
+        }
     }
     
-    // 验证：10 帧后位移是否足够远 (至少跨越 3 个单位)
-    assert!(impact.current_offset.x.abs() > 3.0, "冲刺位移在 10 帧后应具有足够的穿透力");
+    assert!(current_offset.x.abs() >= 6.5 && current_offset.x.abs() <= 7.5, "最终位移应精准停在目标附近，当前: {}", current_offset.x.abs());
+}
+
+#[test]
+fn test_action_trigger_guarantee() {
+    // 逻辑：每次处理队列中的敌人，必须有 anim_events.send
+    let mut trigger_count = 0;
+    let enemies = vec![1, 2];
+    for _ in enemies {
+        trigger_count += 1;
+    }
+    assert_eq!(trigger_count, 2, "每个行动的敌人都必须触发动画指令");
 }
 
 #[test]

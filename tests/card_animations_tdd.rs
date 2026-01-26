@@ -21,6 +21,18 @@ fn test_card_animation_selection_logic() {
 }
 
 #[test]
+fn test_sword_energy_is_red() {
+    use bevy_card_battler::components::particle::{EffectType, EmitterConfig};
+    
+    let config = EffectType::SwordEnergy.config();
+    let color = config.start_color;
+    
+    // 验证红色分量是否主导 (红莲剑气)
+    let rgba: Srgba = color.into();
+    assert!(rgba.red > 0.8 && rgba.blue < 0.5, "剑气应该改为红色调");
+}
+
+#[test]
 fn test_sword_energy_particle_event() {
     use bevy_card_battler::components::particle::EffectType;
     

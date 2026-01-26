@@ -195,6 +195,15 @@ impl Default for BreathAnimation {
     }
 }
 
+/// 动作类型（用于区分物理反馈行为）
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum ActionType {
+    #[default]
+    None,
+    WolfBite,
+    SpiderWeb,
+}
+
 /// 物理冲击组件（用于立牌的倾斜和晃动效果）
 #[derive(Component)]
 pub struct PhysicalImpact {
@@ -210,6 +219,10 @@ pub struct PhysicalImpact {
     pub special_rotation_velocity: f32,
     /// 动作计时 (用于多阶段招式)
     pub action_timer: f32,
+    /// 当前执行的动作类型
+    pub action_type: ActionType,
+    /// 动作方向记录 (-1.0 代表向左，1.0 代表向右)
+    pub action_direction: f32,
     /// 目标位置偏移
     pub offset_velocity: Vec3,
     /// 当前位置偏移
@@ -225,6 +238,8 @@ impl Default for PhysicalImpact {
             special_rotation: 0.0,
             special_rotation_velocity: 0.0,
             action_timer: 0.0,
+            action_type: ActionType::None,
+            action_direction: 1.0,
             offset_velocity: Vec3::ZERO,
             current_offset: Vec3::ZERO,
         }

@@ -299,7 +299,7 @@
         1
       ],
       "unlocked": true,
-      "completed": false
+      "completed": true
     },
     {
       "id": 10,
@@ -309,7 +309,7 @@
         2
       ],
       "unlocked": true,
-      "completed": false
+      "completed": true
     },
     {
       "id": 11,
@@ -328,7 +328,7 @@
         3,
         0
       ],
-      "unlocked": false,
+      "unlocked": true,
       "completed": false
     },
     {
@@ -338,8 +338,8 @@
         3,
         1
       ],
-      "unlocked": false,
-      "completed": false
+      "unlocked": true,
+      "completed": true
     },
     {
       "id": 14,
@@ -348,7 +348,7 @@
         3,
         2
       ],
-      "unlocked": false,
+      "unlocked": true,
       "completed": false
     },
     {
@@ -358,7 +358,7 @@
         3,
         3
       ],
-      "unlocked": false,
+      "unlocked": true,
       "completed": false
     },
     {
@@ -368,7 +368,7 @@
         4,
         0
       ],
-      "unlocked": false,
+      "unlocked": true,
       "completed": false
     },
     {
@@ -378,7 +378,7 @@
         4,
         1
       ],
-      "unlocked": false,
+      "unlocked": true,
       "completed": false
     },
     {
@@ -388,7 +388,7 @@
         4,
         2
       ],
-      "unlocked": false,
+      "unlocked": true,
       "completed": false
     },
     {
@@ -398,7 +398,7 @@
         4,
         3
       ],
-      "unlocked": false,
+      "unlocked": true,
       "completed": false
     },
     {
@@ -602,6 +602,6 @@
       "completed": false
     }
   ],
-  "current_map_node_id": 9,
-  "current_map_layer": 2
+  "current_map_node_id": 14,
+  "current_map_layer": 3
 }
