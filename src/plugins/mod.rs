@@ -216,13 +216,34 @@ impl Plugin for GamePlugin {
 
 /// 相机设置
 fn setup_camera(mut commands: Commands) {
-    // 2D 相机 (用于 UI 渲染)
-    commands.spawn((Camera2d, Msaa::Sample4));
-    
     // 3D 相机 (用于战斗场景渲染)
     commands.spawn((
         Camera3d::default(),
+        Camera {
+            clear_color: ClearColorConfig::Custom(Color::srgba(0.005, 0.02, 0.005, 1.0)),
+            order: 0, // 先画 3D
+            ..default()
+        },
         Transform::from_xyz(0.0, 2.5, 8.0).looking_at(Vec3::new(0.0, 0.5, 0.0), Vec3::Y),
+        DistanceFog {
+            color: Color::srgba(0.005, 0.02, 0.005, 1.0), 
+            falloff: FogFalloff::Linear {
+                start: 2.0, 
+                end: 15.0,
+            },
+            ..default()
+        },
+    ));
+
+    // 2D 相机 (用于 UI 渲染)
+    commands.spawn((
+        Camera2d,
+        Camera {
+            order: 10, // 确保 UI 永远在最上层
+            // 这里至关重要：不要清除之前 3D 相机的背景，也不要继承它的深度
+            clear_color: ClearColorConfig::None,
+            ..default()
+        },
     ));
 }
 
@@ -237,17 +258,24 @@ fn setup_combat_environment(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>,
 ) {
-    // 1. 灵气地板 (3D 平面)
+    let floor_texture = asset_server.load("textures/magic_circle.png");
+
+    // 1. 聚灵法阵地板 (3D 平面)
     commands.spawn((
         Mesh3d(meshes.add(Plane3d::default().mesh().size(20.0, 20.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgba(0.05, 0.1, 0.05, 1.0),
-            perceptual_roughness: 0.8,
-            metallic: 0.1,
+            base_color: Color::srgba(1.0, 1.0, 1.0, 0.9),
+            base_color_texture: Some(floor_texture.clone()),
+            // 让法阵发光
+            emissive: LinearRgba::new(0.0, 0.8, 0.3, 1.0),
+            perceptual_roughness: 1.0,
+            // 使用 Opaque 模式配合纹理 Alpha 处理，可以获得最稳定的深度排序
+            alpha_mode: AlphaMode::Blend,
             ..default()
         })),
-        Transform::from_xyz(0.0, -1.5, 0.0), // 地板稍微调低一点
+        Transform::from_xyz(0.0, -1.5, 0.0), 
         CombatUiRoot, 
     ));
 
@@ -262,21 +290,21 @@ fn setup_combat_environment(
         CombatUiRoot,
     ));
 
-    // 3. 补充环境灯光 (灵光)
+    // 3. 补充环境灯光 (灵光) - 稍微调亮一点以显出雾气
     commands.spawn((
         PointLight {
-            intensity: 2000.0,
+            intensity: 4000.0,
             shadows_enabled: false,
-            color: Color::srgb(0.5, 1.0, 0.5),
+            color: Color::srgb(0.4, 0.8, 0.4),
             ..default()
         },
-        Transform::from_xyz(0.0, 3.0, 2.0),
+        Transform::from_xyz(0.0, 4.0, 4.0),
         CombatUiRoot,
     ));
     
     commands.insert_resource(AmbientLight {
-        color: Color::srgb(0.8, 0.9, 1.0),
-        brightness: 400.0,
+        color: Color::srgb(0.5, 0.6, 0.7),
+        brightness: 150.0, // 降低环境光，增加对比度
     });
 }
 

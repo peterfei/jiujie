@@ -123,12 +123,12 @@ fn sync_2d_to_3d_render(
             // 1. 创建角色立牌网格 (3:4 比例)
             let mesh = meshes.add(Rectangle::new(char_sprite.size.x / 50.0, char_sprite.size.y / 50.0));
             
-            // 2. 创建半受光材质 (保持鲜艳度但支持阴影)
+            // 2. 创建材质 (使用裁剪模式解决遮挡问题)
             let material = materials.add(StandardMaterial {
                 base_color: Color::WHITE,
                 base_color_texture: Some(char_sprite.texture.clone()),
-                alpha_mode: AlphaMode::Blend,
-                // 我们关闭 unlit 以启用阴影，但提高 emissive 以保持亮度
+                // 使用 Mask 模式可以让边缘非常干净，杜绝半透明重叠导致的黑边/遮挡
+                alpha_mode: AlphaMode::Mask(0.5), 
                 emissive: LinearRgba::new(0.5, 0.5, 0.5, 1.0), 
                 ..default()
             });
@@ -140,9 +140,10 @@ fn sync_2d_to_3d_render(
                 PhysicalImpact::default(), 
                 Mesh3d(mesh),
                 MeshMaterial3d(material),
-                // 强制更新 3D 位置，并增加轻微仰角正对相机
-                Transform::from_xyz(x_3d, 1.0, z_3d) // 稍微抬高一点，不陷入地板
-                    .with_rotation(Quat::from_rotation_x(-0.2)), // 向后微仰，正对俯视相机
+                // 强制更新 3D 位置
+                // 增加 z 轴 0.1 的偏移，确保立牌在视觉上领先于任何背景元素
+                Transform::from_xyz(x_3d, 1.0, z_3d + 0.1) 
+                    .with_rotation(Quat::from_rotation_x(-0.2)), 
             )).remove::<Sprite>()
             .with_children(|parent| {
                 // 4. 添加物理底座 (圆盘) - 降低亮度
