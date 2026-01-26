@@ -188,6 +188,8 @@ impl Default for BreathAnimation {
 /// 物理冲击组件（用于立牌的倾斜和晃动效果）
 #[derive(Component)]
 pub struct PhysicalImpact {
+    /// 角色初始位置 (回弹目标点)
+    pub home_position: Vec3,
     /// 当前倾斜角度 (弧度)
     pub tilt_velocity: f32,
     /// 当前倾斜量
@@ -201,6 +203,7 @@ pub struct PhysicalImpact {
 impl Default for PhysicalImpact {
     fn default() -> Self {
         Self {
+            home_position: Vec3::ZERO,
             tilt_velocity: 0.0,
             tilt_amount: 0.0,
             offset_velocity: Vec3::ZERO,
@@ -214,6 +217,13 @@ impl Default for PhysicalImpact {
 pub struct Rotating {
     /// 旋转速度 (弧度/秒)
     pub speed: f32,
+}
+
+/// 残影组件 (Ghost Afterimage)
+#[derive(Component)]
+pub struct Ghost {
+    /// 剩余存在时间
+    pub ttl: f32,
 }
 
 /// 精灵图标记组件

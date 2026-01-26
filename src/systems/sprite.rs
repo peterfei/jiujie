@@ -7,7 +7,7 @@ use bevy::sprite::Anchor;
 use crate::components::sprite::{
     CharacterSprite, AnimationState, CharacterType,
     CharacterAnimationEvent, SpriteMarker, PlayerSpriteMarker, EnemySpriteMarker,
-    Combatant3d, BreathAnimation, PhysicalImpact, CharacterAssets, Rotating
+    Combatant3d, BreathAnimation, PhysicalImpact, CharacterAssets, Rotating, Ghost
 };
 use crate::states::GameState;
 
@@ -27,8 +27,66 @@ impl Plugin for SpritePlugin {
                 update_physical_impacts,
                 trigger_hit_feedback,
                 update_rotations,
+                spawn_ghosts,
+                cleanup_ghosts,
             ).run_if(in_state(GameState::Combat))
         );
+    }
+}
+
+/// 生成残影
+fn spawn_ghosts(
+    mut commands: Commands,
+    query: Query<(&Transform, &PhysicalImpact, &Mesh3d, &MeshMaterial3d<StandardMaterial>)>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    time: Res<Time>,
+    mut last_spawn: Local<f32>,
+) {
+    if time.elapsed_secs() - *last_spawn < 0.03 { return; }
+
+    for (transform, impact, mesh, material_handle) in query.iter() {
+        if impact.offset_velocity.length() > 3.0 {
+            *last_spawn = time.elapsed_secs();
+            
+            // 关键修复：克隆材质而不是共用句柄
+            let ghost_material = if let Some(base_mat) = materials.get(material_handle) {
+                let mut m = base_mat.clone();
+                // 初始残影亮度降低一点
+                m.base_color.set_alpha(0.4);
+                materials.add(m)
+            } else {
+                material_handle.0.clone()
+            };
+
+            commands.spawn((
+                Mesh3d(mesh.0.clone()),
+                MeshMaterial3d(ghost_material),
+                Transform::from_translation(transform.translation)
+                    .with_rotation(transform.rotation)
+                    .with_scale(transform.scale),
+                Ghost { ttl: 0.3 }, 
+            ));
+        }
+    }
+}
+
+/// 残影淡出并销毁
+fn cleanup_ghosts(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut Ghost, &MeshMaterial3d<StandardMaterial>)>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    time: Res<Time>,
+) {
+    for (entity, mut ghost, mat_handle) in query.iter_mut() {
+        ghost.ttl -= time.delta_secs();
+        if ghost.ttl <= 0.0 {
+            commands.entity(entity).despawn_recursive();
+        } else {
+            // 让残影逐渐变透明 (如果材质允许)
+            if let Some(mat) = materials.get_mut(mat_handle) {
+                mat.base_color.set_alpha(ghost.ttl / 0.3 * 0.5);
+            }
+        }
     }
 }
 
@@ -44,52 +102,65 @@ fn update_rotations(
 
 /// 更新物理冲击效果（让立牌产生倾斜和弹回感）
 fn update_physical_impacts(
-    mut query: Query<(&mut Transform, &mut PhysicalImpact)>,
+    mut query: Query<(&mut Transform, &mut PhysicalImpact, &BreathAnimation)>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
-    for (mut transform, mut impact) in query.iter_mut() {
-        // 1. 模拟弹簧力将倾斜拉回 0
-        let spring_k = 15.0; 
-        let damping = 5.0;
+    for (mut transform, mut impact, breath) in query.iter_mut() {
+        // 1. 模拟旋转弹簧力
+        let spring_k = 25.0; 
+        let damping = 6.0;
         
         let force = -spring_k * impact.tilt_amount;
         impact.tilt_velocity += force * dt;
         impact.tilt_velocity *= 1.0 - (damping * dt);
         impact.tilt_amount += impact.tilt_velocity * dt;
 
-        // 2. 模拟位置偏移弹回
-        let pos_spring_k = 12.0;
+        // 2. 模拟位置弹簧力 (将位移拉回 0)
+        let pos_spring_k = 6.0; // 大幅降低刚度，允许长距离位移
+        let pos_damping = 4.0;  // 降低阻尼，让位移更顺滑
         let pos_force = -pos_spring_k * impact.current_offset;
         impact.offset_velocity += pos_force * dt;
-        impact.offset_velocity *= 1.0 - (damping * dt);
+        impact.offset_velocity *= 1.0 - (pos_damping * dt);
         
         let delta_offset = impact.offset_velocity * dt;
         impact.current_offset += delta_offset;
 
-        // 3. 应用到变换
-        // 保持垂直方向的呼吸动画与物理位移叠加
-        transform.rotation = Quat::from_rotation_z(impact.tilt_amount) * Quat::from_rotation_x(-0.2);
+        // 3. 限制倾斜角度，防止“倒转” (限制在正负 0.8 弧度，约 45度)
+        impact.tilt_amount = impact.tilt_amount.clamp(-0.8, 0.8);
+
+        // 4. 整合呼吸动画 Y 轴偏移
+        let breath_cycle = (breath.timer * breath.frequency).sin();
+        let breath_y = breath_cycle * 0.05;
+
+        // 5. 应用到变换
+        // 保持 3D 俯视微仰角 (-0.2)，并叠加物理倾斜
+        transform.rotation = Quat::from_rotation_x(-0.2) * Quat::from_rotation_z(impact.tilt_amount);
+        
+        // 最终位置 = 初始位置 + 物理偏移 + 呼吸偏移
+        transform.translation = impact.home_position + impact.current_offset + Vec3::new(0.0, breath_y, 0.0);
     }
 }
 
 /// 监听受击，触发物理反馈
 fn trigger_hit_feedback(
     mut events: EventReader<CharacterAnimationEvent>,
-    mut query: Query<&mut PhysicalImpact>,
+    mut query: Query<(&mut PhysicalImpact, Option<&PlayerSpriteMarker>)>,
 ) {
     for event in events.read() {
-        if let Ok(mut impact) = query.get_mut(event.target) {
+        if let Ok((mut impact, is_player)) = query.get_mut(event.target) {
+            let direction = if is_player.is_some() { 1.0 } else { -1.0 };
+            
             match event.animation {
                 AnimationState::Hit => {
-                    // 受击：立牌向后倒（正向倾斜），并伴随随机的小幅度震荡
-                    impact.tilt_velocity = 8.0; 
-                    impact.offset_velocity = Vec3::new(0.5, 0.2, 0.0);
+                    // 受击：立牌向后猛飞
+                    impact.tilt_velocity = 35.0 * direction; 
+                    impact.offset_velocity = Vec3::new(-3.0 * direction, 0.0, 0.0);
                 }
                 AnimationState::Attack => {
-                    // 攻击：立牌向前冲（负向倾斜）
-                    impact.tilt_velocity = -12.0;
-                    impact.offset_velocity = Vec3::new(-1.2, 0.0, 0.0);
+                    // 攻击：角色瞬移冲向对手！速度提回 25.0
+                    impact.tilt_velocity = -50.0 * direction;
+                    impact.offset_velocity = Vec3::new(25.0 * direction, 0.0, 0.0);
                 }
                 _ => {}
             }
@@ -97,17 +168,21 @@ fn trigger_hit_feedback(
     }
 }
 
-/// 更新呼吸动画（2.5D 纸片人上下浮动）
+/// 更新呼吸动画（2.5D 纸片人：缩放计时 + 挤压伸展）
 fn update_breath_animations(
     mut query: Query<(&mut Transform, &mut BreathAnimation)>,
     time: Res<Time>,
 ) {
     for (mut transform, mut breath) in query.iter_mut() {
         breath.timer += time.delta_secs();
-        // 使用绝对值设置 Y 轴，而不是累加
-        // 频率调低到 1.0 (一秒一个周期)，幅度调低到 0.02 (2厘米)
-        let offset = (breath.timer * 1.0).sin() * 0.02;
-        transform.translation.y = offset; 
+        
+        let breath_cycle = (breath.timer * breath.frequency).sin();
+        
+        // 2. 挤压与伸展 (Squash and Stretch)
+        let stretch_y = 1.0 + breath_cycle * 0.03; 
+        let squash_x = 1.0 - breath_cycle * 0.02;  
+        
+        transform.scale = Vec3::new(squash_x, stretch_y, 1.0);
     }
 }
 
@@ -144,15 +219,18 @@ fn sync_2d_to_3d_render(
             });
 
             // 3. 构造 3D 纸片人
+            let home_pos = Vec3::new(x_3d, 1.0, z_3d + 0.1);
             commands.entity(entity).insert((
                 Combatant3d { facing_right: true },
                 BreathAnimation::default(),
-                PhysicalImpact::default(), 
+                PhysicalImpact {
+                    home_position: home_pos,
+                    ..default()
+                }, 
                 Mesh3d(mesh),
                 MeshMaterial3d(material),
                 // 强制更新 3D 位置
-                // 增加 z 轴 0.1 的偏移，确保立牌在视觉上领先于任何背景元素
-                Transform::from_xyz(x_3d, 1.0, z_3d + 0.1) 
+                Transform::from_translation(home_pos)
                     .with_rotation(Quat::from_rotation_x(-0.2)), 
             )).remove::<Sprite>()
             .with_children(|parent| {
@@ -282,24 +360,23 @@ pub fn spawn_character_sprite(
 
     sprite.custom_size = Some(sprite_size);
 
-    commands
-        .spawn((
-            sprite,
-            Transform::from_translation(position),
-            GlobalTransform::default(),
-            CharacterSprite::new(texture.clone(), sprite_size), // 这里要传入真正的贴图
-            SpriteMarker,
-        ))
-        .with_children(|parent| {
-            // 根据角色类型添加不同的标记
-            match character_type {
-                CharacterType::Player => {
-                    parent.spawn(PlayerSpriteMarker);
-                }
-                _ => {
-                    parent.spawn(EnemySpriteMarker);
-                }
-            }
-        })
-        .id()
+    let mut entity_cmd = commands.spawn((
+        sprite,
+        Transform::from_translation(position),
+        GlobalTransform::default(),
+        CharacterSprite::new(texture.clone(), sprite_size), // 这里要传入真正的贴图
+        SpriteMarker,
+    ));
+
+    // 根据角色类型添加标记
+    match character_type {
+        CharacterType::Player => {
+            entity_cmd.insert(PlayerSpriteMarker);
+        }
+        _ => {
+            entity_cmd.insert(EnemySpriteMarker);
+        }
+    };
+
+    entity_cmd.id()
 }

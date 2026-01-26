@@ -12,7 +12,7 @@ use crate::components::{
     RelicObtainedEvent, RelicTriggeredEvent, DialogueLine,
     PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker, ParticleEmitter
 };
-use crate::components::sprite::{CharacterAssets, Rotating};
+use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, PlayerSpriteMarker};
 use crate::systems::sprite::{spawn_character_sprite};
 
 /// 核心游戏插件
@@ -1726,29 +1726,41 @@ fn handle_card_play(
     mut draw_pile_query: Query<&mut DrawPile>,
     mut discard_pile_query: Query<&mut DiscardPile>,
     mut enemy_query: Query<&mut Enemy>,
-    mut effect_events: EventWriter<SpawnEffectEvent>,
-    mut screen_events: EventWriter<ScreenEffectEvent>,
-    mut sfx_events: EventWriter<PlaySfxEvent>,
-) {
-    for (interaction, hand_card) in card_query.iter() {
-        if matches!(interaction, Interaction::Pressed) {
-            let player_energy = if let Ok(player) = player_query.get_single() {
-                player.energy
-            } else {
-                0
-            };
-
-            let card_opt = if let Ok(hand) = hand_query.get_single() {
-                let card_index = hand.cards.iter().position(|c| c.id == hand_card.card_id);
-                card_index.map(|i| hand.cards[i].clone())
-            } else {
-                None
-            };
-
-            if let Some(card) = card_opt {
-                if player_energy >= card.cost {
-                    info!("打出卡牌: {} (消耗: {})", card.name, card.cost);
-                    sfx_events.send(PlaySfxEvent::new(SfxType::CardPlay));
+        mut effect_events: EventWriter<SpawnEffectEvent>,
+        mut screen_events: EventWriter<ScreenEffectEvent>,
+        mut sfx_events: EventWriter<PlaySfxEvent>,
+        mut anim_events: EventWriter<CharacterAnimationEvent>,
+        player_sprite_query: Query<Entity, With<PlayerSpriteMarker>>,
+        enemy_sprite_query: Query<(Entity, &crate::components::sprite::EnemySpriteMarker)>,
+    ) {
+        for (interaction, hand_card) in card_query.iter() {
+            if matches!(interaction, Interaction::Pressed) {
+                let player_energy = if let Ok(player) = player_query.get_single() {
+                    player.energy
+                } else {
+                    0
+                };
+    
+                let card_opt = if let Ok(hand) = hand_query.get_single() {
+                    let card_index = hand.cards.iter().position(|c| c.id == hand_card.card_id);
+                    card_index.map(|i| hand.cards[i].clone())
+                } else {
+                    None
+                };
+    
+                if let Some(card) = card_opt {
+                    if player_energy >= card.cost {
+                        info!("打出卡牌: {} (消耗: {})", card.name, card.cost);
+                        
+                        // 触发玩家攻击动画 (3D 冲刺)
+                        if let Ok(player_entity) = player_sprite_query.get_single() {
+                            anim_events.send(CharacterAnimationEvent {
+                                target: player_entity,
+                                animation: crate::components::sprite::AnimationState::Attack,
+                            });
+                        }
+    
+                        sfx_events.send(PlaySfxEvent::new(SfxType::CardPlay));
 
                     if let Ok(mut player) = player_query.get_single_mut() {
                         player.energy -= card.cost;
@@ -1763,6 +1775,8 @@ fn handle_card_play(
                         &mut discard_pile_query,
                         &mut effect_events,
                         &mut screen_events,
+                        &mut anim_events,
+                        &enemy_sprite_query,
                     );
 
                     if let Ok(mut hand) = hand_query.get_single_mut() {
@@ -1791,18 +1805,31 @@ fn apply_card_effect(
     discard_pile_query: &mut Query<&mut DiscardPile>,
     effect_events: &mut EventWriter<SpawnEffectEvent>,
     screen_events: &mut EventWriter<ScreenEffectEvent>,
+    anim_events: &mut EventWriter<CharacterAnimationEvent>,
+    enemy_sprite_query: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker)>,
 ) {
     match effect {
         CardEffect::DealDamage { amount } => {
             // 找到第一个存活的敌人作为目标
             if let Some(mut enemy) = enemy_query.iter_mut().find(|e| e.hp > 0) {
+                let target_id = enemy.id;
                 enemy.take_damage(*amount);
                 info!("【卡牌】对 {} 造成 {} 点伤害，剩余 HP: {}", enemy.name, amount, enemy.hp);
+                
+                // 触发敌人受击动画 (3D 立牌晃动)
+                // 在当前版本中，我们简化匹配：给所有敌人精灵发受击 (如果是单体则以后精细匹配)
+                for (entity, _) in enemy_sprite_query.iter() {
+                    // TODO: 真正的根据 ID 匹配
+                    anim_events.send(CharacterAnimationEvent {
+                        target: entity,
+                        animation: crate::components::sprite::AnimationState::Hit,
+                    });
+                }
                 
                 // 触发特效
                 effect_events.send(SpawnEffectEvent {
                     effect_type: EffectType::Fire,
-                    position: Vec3::new(300.0, 50.0, 999.0), // 简化：大致在敌方区域
+                    position: Vec3::new(300.0, 50.0, 999.0), 
                     burst: true, count: 30,
                 });
                 screen_events.send(ScreenEffectEvent::Shake { trauma: 0.35, decay: 5.0 });
@@ -1816,13 +1843,19 @@ fn apply_card_effect(
                 if enemy.hp <= 0 { continue; }
                 enemy.take_damage(*amount);
                 hit_count += 1;
-                
-                // 为每个目标生成一个受击粒子 (位置大致偏移)
-                let x_offset = (enemy.id as f32 - 1.0) * 150.0;
-                effect_events.send(SpawnEffectEvent::new(EffectType::Hit, Vec3::new(250.0 + x_offset, 50.0, 999.0)));
             }
+            
             if hit_count > 0 {
                 info!("【卡牌】施展群体杀伤，重创 {} 名妖物", hit_count);
+                
+                // 触发所有敌人受击动画
+                for (entity, _) in enemy_sprite_query.iter() {
+                    anim_events.send(CharacterAnimationEvent {
+                        target: entity,
+                        animation: crate::components::sprite::AnimationState::Hit,
+                    });
+                }
+
                 screen_events.send(ScreenEffectEvent::Shake { trauma: 0.5, decay: 4.0 });
             }
         }

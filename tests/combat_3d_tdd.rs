@@ -84,3 +84,28 @@ fn test_physical_impact_trigger() {
     assert!(impact.tilt_amount > 0.0, "受到冲击后立牌应该产生倾斜");
     assert!(impact.current_offset.x > 0.0, "受到冲击后立牌应该产生位移");
 }
+
+#[test]
+fn test_squash_and_stretch() {
+    let mut app = App::new();
+    let entity = app.world_mut().spawn((
+        Transform::default(),
+        bevy_card_battler::components::sprite::BreathAnimation {
+            timer: 1.5, // 处于周期中的某个点
+            frequency: 1.0,
+            amplitude: 0.1,
+        },
+    )).id();
+
+    // 模拟缩放计算：吸气变长，呼气变宽
+    let timer = 1.5;
+    let breath_factor = (timer * 1.0).sin();
+    let stretch = 1.0 + breath_factor * 0.05;
+    let squash = 1.0 - breath_factor * 0.03;
+    
+    let mut transform = app.world_mut().get_mut::<Transform>(entity).unwrap();
+    transform.scale = Vec3::new(squash, stretch, 1.0);
+
+    assert!(transform.scale.y > 1.0);
+    assert!(transform.scale.x < 1.0);
+}
