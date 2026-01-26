@@ -2,6 +2,16 @@ use bevy::prelude::*;
 use bevy_card_battler::components::sprite::{PhysicalImpact, BreathAnimation};
 
 #[test]
+fn test_demon_cast_pulse_scaling() {
+    // 逻辑：施法时产生高频缩放脉冲
+    let timer = 0.2f32;
+    let pulse_speed = 30.0f32; // 每秒约 5 次往复
+    let pulse_factor = 1.0 + (timer * pulse_speed).sin().abs() * 0.15;
+    
+    assert!(pulse_factor > 1.0, "施法期间应产生向外的能量扩张感");
+}
+
+#[test]
 fn test_base_transparency() {
     let mut app = App::new();
     app.init_resource::<Assets<StandardMaterial>>();

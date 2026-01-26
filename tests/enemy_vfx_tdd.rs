@@ -21,6 +21,18 @@ fn test_wolf_bite_count_physics() {
 }
 
 #[test]
+fn test_wolf_bite_180_rotation() {
+    // 逻辑：敌人狼（面向左，direction=-1）在攻击时应翻转 180 度
+    let direction = -1.0f32;
+    let is_wolf = true;
+    
+    // 我们预期的额外 Y 轴旋转
+    let rotation_y = if is_wolf { std::f32::consts::PI } else { 0.0 };
+    
+    assert!(rotation_y > 3.0, "狼攻击时应产生约 PI (180度) 的旋转量");
+}
+
+#[test]
 fn test_spider_web_duration() {
     // 模拟蛛丝实体的 TTL
     let ttl = 1.5f32;

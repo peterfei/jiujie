@@ -1433,6 +1433,7 @@ fn process_enemy_turn_queue(
                                             ));
                                             crate::components::sprite::AnimationState::SpiderAttack
                                         },
+                                        EnemyType::CursedSpirit => crate::components::sprite::AnimationState::SpiritAttack,
                                         _ => crate::components::sprite::AnimationState::DemonAttack,
                                     }
                                 },

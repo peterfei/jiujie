@@ -106,6 +106,8 @@ pub enum AnimationState {
     WolfAttack,
     /// 剧毒蛛专属：爬行吐丝
     SpiderAttack,
+    /// 怨灵专属：灵体突袭
+    SpiritAttack,
     /// 施展妖术 (蓄力/护盾/强化)
     DemonCast,
     /// 受击
@@ -202,6 +204,7 @@ pub enum ActionType {
     None,
     WolfBite,
     SpiderWeb,
+    DemonCast,
 }
 
 /// 物理冲击组件（用于立牌的倾斜和晃动效果）

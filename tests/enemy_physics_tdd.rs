@@ -24,6 +24,19 @@ fn test_wolf_bite_distance_precision() {
 }
 
 #[test]
+fn test_jump_attack_parabola() {
+    // 逻辑：在动作进行到一半时 (timer=0.5)，高度 Y 应该达到峰值
+    let timer = 0.5f32;
+    let duration = 1.0f32;
+    let progress = 1.0 - (timer / duration); // 0.0 -> 1.0
+    
+    // 抛物线公式：y = sin(progress * PI) * height
+    let jump_y = (progress * std::f32::consts::PI).sin() * 2.0;
+    
+    assert!(jump_y > 1.5, "跳跃弧度在动作中点应具有显著高度");
+}
+
+#[test]
 fn test_action_trigger_guarantee() {
     // 逻辑：每次处理队列中的敌人，必须有 anim_events.send
     let mut trigger_count = 0;

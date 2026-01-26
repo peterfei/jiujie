@@ -134,33 +134,40 @@ fn update_physical_impacts(
         if impact.action_timer > 0.0 {
             impact.action_timer -= dt;
             let dir = impact.action_direction; 
+            
+            // 计算动作进度 0.0 (开始) -> 1.0 (结束)
+            let action_duration = match impact.action_type {
+                ActionType::WolfBite => 1.0,
+                ActionType::SpiderWeb => 0.8,
+                _ => 1.0,
+            };
+            let progress = (1.0 - (impact.action_timer / action_duration)).clamp(0.0, 1.0);
 
             match impact.action_type {
                 ActionType::WolfBite => {
-                    // 贪狼啃咬：大幅度左右甩头
+                    // 贪狼：抛物线跳跃 + 2 次撕咬
                     let action_phase = impact.action_timer * 12.5;
                     action_tilt_offset = action_phase.sin() * 0.8;
                     
-                    // 向前冲咬的位移感
+                    // 增加“扑杀”跳跃感 (Y轴弧线)
+                    action_pos_offset.y = (progress * std::f32::consts::PI).sin() * 1.5;
+                    
                     if (action_tilt_offset * dir) < 0.0 {
                         action_pos_offset.x = action_tilt_offset * 0.3; 
                     }
                     
-                    // 关键优化：距离感知减速逻辑
-                    // 目标距离是 7.0 (敌我间距)
-                    let current_dist = impact.current_offset.x.abs();
-                    let dist_left = (7.0 - current_dist).max(0.0);
-                    
-                    // 当距离小于 1.0 时，线性降低速度，实现精准停留
-                    let speed_scalar = if dist_left < 1.0 { dist_left } else { 1.0 };
-                    
-                    pos_damping = 20.0;
-                    impact.offset_velocity = Vec3::new(8.5 * dir * speed_scalar, 0.0, 0.0); 
+                    pos_damping = 10.0; // 降低阻尼让位移更顺滑
+                    impact.offset_velocity = Vec3::new(8.5 * dir, 0.0, 0.0); 
                 },
                 ActionType::SpiderWeb => {
-                    // 蜘蛛吐丝：匀速爬行一段距离
-                    pos_damping = 15.0;
-                    impact.offset_velocity = Vec3::new(4.5 * dir, 0.0, 0.0);
+                    // 蜘蛛：取消静止，保持匀速向前爬行
+                    pos_damping = 5.0;
+                    impact.offset_velocity = Vec3::new(5.0 * dir, 0.0, 0.0);
+                },
+                ActionType::DemonCast => {
+                    // 施法：完全锁定 X 轴位移，仅允许原地震颤
+                    pos_damping = 30.0;
+                    impact.offset_velocity = Vec3::ZERO;
                 },
                 _ => {}
             }
@@ -190,7 +197,8 @@ fn update_physical_impacts(
         
         // 关键逻辑：只要还在动作计时、或者位移没回弹到位，就绝对静止呼吸
         let is_acting = impact.action_timer > 0.0 || impact.current_offset.length() > 0.05 || impact.offset_velocity.length() > 0.5;
-        let breath_y = if is_acting { 0.0 } else { breath_cycle * 0.05 };
+        // 降低呼吸幅度到 0.02 (2厘米)，使其更真实
+        let breath_y = if is_acting { 0.0 } else { breath_cycle * 0.02 };
 
         // 7. 应用变换 (消除视觉晃动优化版)
         let tilt_suppression = 1.0 / (1.0 + impact.special_rotation.abs() * 5.0);
@@ -199,8 +207,8 @@ fn update_physical_impacts(
         // 关键逻辑：将 action_tilt_offset (狼的撕咬) 移到 Y 轴旋转中
         // 这样它是水平摆头，而不是绕脚底倒下，从而消除俯视角下的上下抖动错觉
         transform.rotation = Quat::from_rotation_x(-0.2) 
-            * Quat::from_rotation_z(effective_tilt)
-            * Quat::from_rotation_y(impact.special_rotation + action_tilt_offset);
+            * Quat::from_rotation_z(effective_tilt) // 基础受击晃动保留在 Z
+            * Quat::from_rotation_y(impact.special_rotation + action_tilt_offset); // 撕咬和施法震动均使用 Y 轴
         
         // 覆盖 translation：这是本帧最后的修改者，确保 Y 轴稳如泰山
         transform.translation = impact.home_position + impact.current_offset + action_pos_offset + Vec3::new(0.0, breath_y, 0.0);
@@ -244,15 +252,16 @@ fn trigger_hit_feedback(
                     impact.special_rotation_velocity = 80.0 * direction; 
                 }
                 AnimationState::DemonAttack => {
-                    impact.action_type = ActionType::None;
                     // 妖物突袭：更具沉重感
                     impact.tilt_velocity = -20.0 * direction;
                     impact.offset_velocity = Vec3::new(12.0 * direction, 0.0, 0.0);
                 }
                 AnimationState::DemonCast => {
-                    impact.action_type = ActionType::None;
-                    // 施展妖术：震颤力道微调
-                    impact.tilt_velocity = 60.0; 
+                    // 施展妖术：不再水平摇头，而是改为原地站立，通过后续逻辑实现能量脉冲缩放
+                    impact.action_type = ActionType::DemonCast;
+                    impact.tilt_velocity = 0.0; 
+                    impact.special_rotation_velocity = 0.0; 
+                    impact.action_timer = 0.6; // 稍微延长脉冲时长
                 }
                 AnimationState::WolfAttack => {
                     // 嗜血妖狼
@@ -267,6 +276,14 @@ fn trigger_hit_feedback(
                     impact.tilt_velocity = -8.0 * direction;
                     impact.offset_velocity = Vec3::new(10.0 * direction, 0.0, 0.0);
                     impact.action_timer = 0.8;
+                }
+                AnimationState::SpiritAttack => {
+                    // 怨灵：灵体突袭 (快速漂浮 + 不稳定颤动)
+                    impact.action_type = ActionType::None; // 幽灵暂不需要 action_timer 锁定
+                    impact.tilt_velocity = 50.0; // 原地快速左右摆动
+                    impact.offset_velocity = Vec3::new(22.0 * direction, 0.0, 0.0);
+                    // 给一个极高的特殊旋转初速度，让灵体看起来在旋转
+                    impact.special_rotation_velocity = 120.0; 
                 }
                 _ => {}
             }
@@ -284,16 +301,43 @@ fn update_breath_animations(
         
         let is_acting = impact.action_timer > 0.0 || impact.current_offset.length() > 0.01 || impact.offset_velocity.length() > 0.1;
         
-        if is_acting {
-            // 动作期间保持标准比例
-            transform.scale = Vec3::ONE;
-        } else {
-            let breath_cycle = (breath.timer * breath.frequency).sin();
-            // 2. 挤压与伸展 (Squash and Stretch)
-            let stretch_y = 1.0 + breath_cycle * 0.03; 
-            let squash_x = 1.0 - breath_cycle * 0.02;  
-            transform.scale = Vec3::new(squash_x, stretch_y, 1.0);
-        }
+                        if is_acting {
+        
+                            // 动作期间
+        
+                            if impact.action_type == ActionType::DemonCast {
+        
+                                // 大作级优化：能量脉冲脉动效果
+        
+                                // 频率 35.0 (极快)，幅度 1.15 倍缩放
+        
+                                let pulse = 1.0 + (impact.action_timer * 35.0).sin().abs() * 0.15;
+        
+                                transform.scale = Vec3::splat(pulse);
+        
+                            } else {
+        
+                                // 其他动作保持标准比例
+        
+                                transform.scale = Vec3::ONE;
+        
+                            }
+        
+                        } else {
+        
+                    let breath_cycle = (breath.timer * breath.frequency).sin();
+        
+                    // 2. 挤压与伸展 (Squash and Stretch) - 调低比例
+        
+                    let stretch_y = 1.0 + breath_cycle * 0.015; // 从 3% 降到 1.5%
+        
+                    let squash_x = 1.0 - breath_cycle * 0.01;   // 从 2% 降到 1%
+        
+                    
+        
+                    transform.scale = Vec3::new(squash_x, stretch_y, 1.0);
+        
+                }
     }
 }
 
@@ -395,7 +439,7 @@ fn update_sprite_animations(
 
                     // 非循环动画结束后，恢复待机状态
                     match sprite.state {
-                        AnimationState::Attack | AnimationState::Hit | AnimationState::ImperialSword | AnimationState::DemonAttack | AnimationState::DemonCast | AnimationState::WolfAttack | AnimationState::SpiderAttack => {
+                        AnimationState::Attack | AnimationState::Hit | AnimationState::ImperialSword | AnimationState::DemonAttack | AnimationState::DemonCast | AnimationState::WolfAttack | AnimationState::SpiderAttack | AnimationState::SpiritAttack => {
                             sprite.set_idle();
                         }
                         AnimationState::Death => {
@@ -444,6 +488,10 @@ fn handle_animation_events(
                 AnimationState::SpiderAttack => {
                     sprite.set_attack(8, 0.8);
                     info!("角色 {:?} 开始幽蛛吐丝", event.target);
+                }
+                AnimationState::SpiritAttack => {
+                    sprite.set_attack(6, 0.4); 
+                    info!("角色 {:?} 开始怨灵突袭", event.target);
                 }
                 AnimationState::Hit => {
                     sprite.set_hit(3, 0.2); // 3帧，0.2秒

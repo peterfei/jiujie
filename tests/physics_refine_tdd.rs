@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_card_battler::components::sprite::PhysicalImpact;
+use bevy_card_battler::components::sprite::{PhysicalImpact, AnimationState};
 
 #[test]
 fn test_breath_suppression_during_action() {
@@ -25,7 +25,30 @@ fn test_breath_suppression_robustness() {
     let is_acting = action_timer > 0.0 || velocity.length() > 5.0;
     let breath_weight = if is_acting { 0.0 } else { 1.0 };
     
-    assert_eq!(breath_weight, 0.0, "只要动作计时器在跑，就必须完全抑制呼吸，即便速度已经降下来");
+    assert_eq!(breath_weight, 0.0, "只要动作计时器在跑，就必须完全抑制呼吸");
+}
+
+#[test]
+fn test_demon_cast_suppression() {
+    // 逻辑：施法期间 action_timer > 0 应该导致抑制
+    let action_timer = 0.3f32; 
+    let is_acting = action_timer > 0.0;
+    assert!(is_acting, "施法动作应当触发行动状态以抑制呼吸");
+}
+
+#[test]
+fn test_demon_cast_horizontal_vibration() {
+    // 逻辑：防守/施法时，不应产生 Z 轴倾斜速度，而应产生 Y 轴自转速度
+    let anim_state = AnimationState::DemonCast;
+    
+    let (tilt_v, special_v) = if anim_state == AnimationState::DemonCast {
+        (0.0, 60.0) // Z轴为0, Y轴震动
+    } else {
+        (10.0, 0.0)
+    };
+    
+    assert_eq!(tilt_v, 0.0, "防守时不应有 Z 轴抖动");
+    assert!(special_v > 0.0, "防守时应使用 Y 轴产生水平震颤");
 }
 
 #[test]

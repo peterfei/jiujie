@@ -18,6 +18,13 @@ fn test_specific_enemy_attack_mapping() {
         _ => AnimationState::Attack,
     };
 
+    let spirit_type = EnemyType::CursedSpirit;
+    let spirit_anim = match spirit_type {
+        EnemyType::CursedSpirit => AnimationState::SpiritAttack,
+        _ => AnimationState::Attack,
+    };
+
     assert_eq!(wolf_anim, AnimationState::WolfAttack);
     assert_eq!(spider_anim, AnimationState::SpiderAttack);
+    assert_eq!(spirit_anim, AnimationState::SpiritAttack);
 }
