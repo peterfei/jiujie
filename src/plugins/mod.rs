@@ -12,7 +12,7 @@ use crate::components::{
     RelicObtainedEvent, RelicTriggeredEvent, DialogueLine,
     PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker, ParticleEmitter
 };
-use crate::components::sprite::{CharacterAssets};
+use crate::components::sprite::{CharacterAssets, Rotating};
 use crate::systems::sprite::{spawn_character_sprite};
 
 /// 核心游戏插件
@@ -277,6 +277,7 @@ fn setup_combat_environment(
         })),
         Transform::from_xyz(0.0, -1.5, 0.0), 
         CombatUiRoot, 
+        Rotating { speed: 0.05 }, // 进一步降低速度，使其更加沉稳
     ));
 
     // 2. 主光源 (模拟太阳/大阵光芒) - 支持阴影
@@ -306,6 +307,13 @@ fn setup_combat_environment(
         color: Color::srgb(0.5, 0.6, 0.7),
         brightness: 150.0, // 降低环境光，增加对比度
     });
+
+    // 4. 环境灵气粒子
+    commands.spawn((
+        ParticleEmitter::new(5.0, EffectType::AmbientSpirit.config()),
+        Transform::from_xyz(0.0, 0.0, 0.0),
+        CombatUiRoot,
+    ));
 }
 
 // ============================================================================

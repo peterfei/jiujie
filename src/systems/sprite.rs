@@ -7,7 +7,7 @@ use bevy::sprite::Anchor;
 use crate::components::sprite::{
     CharacterSprite, AnimationState, CharacterType,
     CharacterAnimationEvent, SpriteMarker, PlayerSpriteMarker, EnemySpriteMarker,
-    Combatant3d, BreathAnimation, PhysicalImpact, CharacterAssets
+    Combatant3d, BreathAnimation, PhysicalImpact, CharacterAssets, Rotating
 };
 use crate::states::GameState;
 
@@ -26,8 +26,19 @@ impl Plugin for SpritePlugin {
                 sync_2d_to_3d_render,
                 update_physical_impacts,
                 trigger_hit_feedback,
+                update_rotations,
             ).run_if(in_state(GameState::Combat))
         );
+    }
+}
+
+/// 更新持续旋转逻辑
+fn update_rotations(
+    mut query: Query<(&mut Transform, &Rotating)>,
+    time: Res<Time>,
+) {
+    for (mut transform, rotating) in query.iter_mut() {
+        transform.rotate_y(rotating.speed * time.delta_secs());
     }
 }
 
@@ -39,7 +50,7 @@ fn update_physical_impacts(
     let dt = time.delta_secs();
     for (mut transform, mut impact) in query.iter_mut() {
         // 1. 模拟弹簧力将倾斜拉回 0
-        let spring_k = 15.0; // 降低刚度，让晃动更自然
+        let spring_k = 15.0; 
         let damping = 5.0;
         
         let force = -spring_k * impact.tilt_amount;
@@ -57,12 +68,8 @@ fn update_physical_impacts(
         impact.current_offset += delta_offset;
 
         // 3. 应用到变换
-        // 旋转：绕 Z 轴倾斜
-        transform.rotation = Quat::from_rotation_z(impact.tilt_amount);
-        
-        // 注意：不直接覆盖 translation.x/y，因为同步系统和呼吸系统也在修改它们
-        // 我们只在当前位置基础上增加偏移量的增量（或者在 sync 系统里处理基准值）
-        // 简单处理：这里直接应用偏移
+        // 保持垂直方向的呼吸动画与物理位移叠加
+        transform.rotation = Quat::from_rotation_z(impact.tilt_amount) * Quat::from_rotation_x(-0.2);
     }
 }
 

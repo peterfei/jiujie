@@ -267,6 +267,20 @@ impl EmitterConfig {
         }
     }
 
+    pub fn ambient_spirit() -> Self {
+        Self {
+            lifetime: (3.0, 5.0),
+            size: (5.0, 15.0),
+            start_color: Color::srgba(0.5, 1.0, 0.8, 0.4),
+            end_color: Color::srgba(0.1, 0.4, 0.3, 0.0),
+            speed: (10.0, 40.0),
+            angle: (0.0, std::f32::consts::PI * 2.0),
+            gravity: Vec2::new(0.0, 5.0),
+            rotation_speed: (-1.0, 1.0),
+            shape: ParticleShape::Circle,
+        }
+    }
+
     pub fn spawn_particle(&self, position: Vec3) -> Particle {
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -288,7 +302,7 @@ impl EmitterConfig {
 pub enum ParticleShape { Circle, Square, Line, Triangle, Star }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum EffectType { Fire, Ice, Hit, Lightning, Victory, ManaFlow, Heal, Coin }
+pub enum EffectType { Fire, Ice, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit }
 
 impl EffectType {
     pub fn config(&self) -> EmitterConfig {
@@ -301,6 +315,7 @@ impl EffectType {
             EffectType::Coin => EmitterConfig::coin(),
             EffectType::Victory => EmitterConfig::victory(),
             EffectType::ManaFlow => EmitterConfig::mana_flow(),
+            EffectType::AmbientSpirit => EmitterConfig::ambient_spirit(),
         }
     }
 }
