@@ -43,8 +43,10 @@ pub enum CardType {
 /// 卡牌效果
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum CardEffect {
-    /// 造成伤害
+    /// 造成单体伤害
     DealDamage { amount: i32 },
+    /// 造成群体伤害（攻击所有存活敌人）
+    DealAoEDamage { amount: i32 },
     /// 获得护甲
     GainBlock { amount: i32 },
     /// 治疗生命
@@ -392,6 +394,9 @@ impl CardPool {
             Card::new(100, "雷法·掌心雷", "造成12点雷击伤害", CardType::Attack, 2, CardEffect::DealDamage { amount: 12 }, CardRarity::Common),
             Card::new(101, "不动明王", "获得8点护盾", CardType::Defense, 1, CardEffect::GainBlock { amount: 8 }, CardRarity::Common),
             Card::new(102, "疾风刺", "造成4点快速伤害", CardType::Attack, 0, CardEffect::DealDamage { amount: 4 }, CardRarity::Common),
+            // === 群体功法 ===
+            Card::new(150, "横扫千军", "对所有妖兽造成6点伤害", CardType::Attack, 1, CardEffect::DealAoEDamage { amount: 6 }, CardRarity::Uncommon),
+            Card::new(151, "万剑归宗", "剑气纵横！对全场造成10点伤害", CardType::Attack, 2, CardEffect::DealAoEDamage { amount: 10 }, CardRarity::Rare),
             // === 稀有功法 ===
             Card::new(200, "御剑·流云", "造成8点伤害，抽2张牌", CardType::Attack, 2, CardEffect::AttackAndDraw { damage: 8, cards: 2 }, CardRarity::Uncommon),
             Card::new(201, "太极图", "获得12点护盾", CardType::Defense, 2, CardEffect::GainBlock { amount: 12 }, CardRarity::Uncommon),

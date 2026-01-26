@@ -1674,6 +1674,22 @@ fn apply_card_effect(
                 warn!("【战斗】没有存活的目标可供攻击！");
             }
         }
+        CardEffect::DealAoEDamage { amount } => {
+            let mut hit_count = 0;
+            for mut enemy in enemy_query.iter_mut() {
+                if enemy.hp <= 0 { continue; }
+                enemy.take_damage(*amount);
+                hit_count += 1;
+                
+                // 为每个目标生成一个受击粒子 (位置大致偏移)
+                let x_offset = (enemy.id as f32 - 1.0) * 150.0;
+                effect_events.send(SpawnEffectEvent::new(EffectType::Hit, Vec3::new(250.0 + x_offset, 50.0, 999.0)));
+            }
+            if hit_count > 0 {
+                info!("【卡牌】施展群体杀伤，重创 {} 名妖物", hit_count);
+                screen_events.send(ScreenEffectEvent::Shake { trauma: 0.5, decay: 4.0 });
+            }
+        }
         CardEffect::GainBlock { amount } => {
             if let Ok(mut player) = player_query.get_single_mut() {
                 player.gain_block(*amount);
@@ -2601,21 +2617,31 @@ fn teardown_tribulation(
         if player.hp > 0 {
             if cultivation.breakthrough() {
                 // 1. 属性质变
-                let hp_bonus = match cultivation.realm {
-                    crate::components::cultivation::Realm::FoundationEstablishment => 50,
-                    _ => 20,
+                let (hp_bonus, stone_bonus) = match cultivation.realm {
+                    crate::components::cultivation::Realm::FoundationEstablishment => (50, 100),
+                    crate::components::cultivation::Realm::GoldenCore => (100, 200),
+                    _ => (20, 50),
                 };
                 player.max_hp += hp_bonus;
                 player.hp = player.max_hp; // 状态全回满
-                player.gold += 100; // 天道赏赐灵石
+                player.gold += stone_bonus; // 天道赏赐灵石
                 
-                info!("✨【破境成功】成功晋升至 {:?}！道行大进，上限增加 {} 点，获灵石 100 块", cultivation.realm, hp_bonus);
+                info!("✨【破境成功】成功晋升至 {:?}！道行大进，上限增加 {} 点，获灵石 {} 块", cultivation.realm, hp_bonus, stone_bonus);
                 
                 // 2. 功法质变：发放本命功法
                 if cultivation.realm == crate::components::cultivation::Realm::FoundationEstablishment {
                     let innate_spell = crate::components::cards::CardPool::get_innate_spell();
                     deck.add_card(innate_spell.clone());
                     info!("📖【本命功法】获得筑基期本命功法：{}", innate_spell.name);
+                } else if cultivation.realm == crate::components::cultivation::Realm::GoldenCore {
+                    // 金丹期自动领悟万剑归宗
+                    let aoe_spell = Card::new(
+                        151, "万剑归宗", "金丹大能之怒！对全场造成10点伤害",
+                        CardType::Attack, 2, CardEffect::DealAoEDamage { amount: 10 },
+                        CardRarity::Rare
+                    );
+                    deck.add_card(aoe_spell.clone());
+                    info!("📖【大能神通】晋升金丹，领悟群体攻伐：{}", aoe_spell.name);
                 }
 
                 // 3. 视听反馈
