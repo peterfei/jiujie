@@ -284,6 +284,7 @@ pub fn handle_shop_interactions(
     current_items: Res<CurrentShopItems>,
     mut deck: ResMut<PlayerDeck>,
     mut relic_collection: ResMut<RelicCollection>,
+    mut map_progress: ResMut<MapProgress>, // 引入地图进度
     card_buttons: Query<(&Interaction, &ShopCardButton), Changed<Interaction>>,
     relic_buttons: Query<(&Interaction, &ShopRelicButton), Changed<Interaction>>,
     remove_buttons: Query<(&Interaction, &ShopRemoveCardButton), Changed<Interaction>>,
@@ -292,7 +293,9 @@ pub fn handle_shop_interactions(
     // 处理返回地图按钮
     for (interaction, _) in exit_buttons.iter() {
         if matches!(interaction, Interaction::Pressed) {
-            info!("【商店系统】返回地图");
+            info!("【商店系统】离开坊市，因缘已了");
+            // 关键修复：离开商店时标记节点完成
+            map_progress.complete_current_node();
             next_state.set(GameState::Map);
             return;
         }

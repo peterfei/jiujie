@@ -163,6 +163,7 @@ pub fn setup_rest_ui(
 pub fn handle_rest_interactions(
     mut next_state: ResMut<NextState<GameState>>,
     mut player_query: Query<(&mut Player, &mut crate::components::Cultivation)>,
+    mut map_progress: ResMut<crate::components::map::MapProgress>, // 引入地图进度
     breath_buttons: Query<&Interaction, (Changed<Interaction>, With<BreathButton>)>,
     insight_buttons: Query<&Interaction, (Changed<Interaction>, With<InsightButton>)>,
 ) {
@@ -174,6 +175,7 @@ pub fn handle_rest_interactions(
             let heal_amount = (player.max_hp as f32 * 0.3) as i32;
             player.heal(heal_amount);
             info!("【洞府闭关】调息恢复: 恢复 {} 点道行", heal_amount);
+            map_progress.complete_current_node();
             next_state.set(GameState::Map);
             return;
         }
@@ -184,6 +186,7 @@ pub fn handle_rest_interactions(
         if matches!(interaction, Interaction::Pressed) {
             cultivation.gain_insight(20);
             info!("【洞府闭关】打坐感悟: 获得 20 点感悟");
+            map_progress.complete_current_node();
             next_state.set(GameState::Map);
             return;
         }

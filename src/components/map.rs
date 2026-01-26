@@ -172,11 +172,7 @@ pub fn generate_map_nodes(config: &MapConfig, _current_layer: u32) -> Vec<MapNod
 
             // 随机节点类型（大作级关底唯一 BOSS 逻辑）
             let node_type = if layer == config.layers - 1 {
-                if node_idx == config.nodes_per_layer / 2 {
-                    NodeType::Boss // 仅中心位置为 BOSS
-                } else {
-                    continue; // 其它节点在该层不生成，确保 BOSS 唯一
-                }
+                NodeType::Boss // 最后一层全员 BOSS，确保无论走哪条线都能通关
             } else if layer == config.layers - 2 {
                 // 倒数第二层增加精英怪作为守门人
                 NodeType::Elite
