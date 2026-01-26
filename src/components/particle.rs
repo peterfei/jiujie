@@ -7,6 +7,8 @@ use bevy::prelude::*;
 /// 粒子组件
 #[derive(Component)]
 pub struct Particle {
+    /// 逻辑位置
+    pub position: Vec2,
     /// 速度
     pub velocity: Vec2,
     /// 生命周期（秒）
@@ -33,6 +35,7 @@ impl Particle {
     /// 创建一个新粒子
     pub fn new(lifetime: f32) -> Self {
         Self {
+            position: Vec2::ZERO,
             velocity: Vec2::ZERO,
             lifetime,
             elapsed: 0.0,
@@ -264,7 +267,7 @@ impl EmitterConfig {
         }
     }
 
-    pub fn spawn_particle(&self, _position: Vec3) -> Particle {
+    pub fn spawn_particle(&self, position: Vec3) -> Particle {
         use rand::Rng;
         let mut rng = rand::thread_rng();
         let lifetime = self.lifetime.0 + rng.gen::<f32>() * (self.lifetime.1 - self.lifetime.0);
@@ -274,6 +277,7 @@ impl EmitterConfig {
         let rotation_speed = self.rotation_speed.0 + rng.gen::<f32>() * (self.rotation_speed.1 - self.rotation_speed.0);
         let velocity = Vec2::new(angle.cos(), angle.sin()) * speed;
         Particle {
+            position: position.truncate(),
             velocity, lifetime, elapsed: 0.0, start_size: size, end_size: size * 0.3,
             start_color: self.start_color, end_color: self.end_color, rotation_speed, rotation: 0.0, gravity: self.gravity,
         }

@@ -28,32 +28,26 @@ pub enum TurnPhase {
 /// 玩家战斗属性
 #[derive(Component, Resource, Debug, Clone, Serialize, Deserialize)]
 pub struct Player {
-    /// 当前生命值
     pub hp: i32,
-    /// 最大生命值
     pub max_hp: i32,
-    /// 当前能量
     pub energy: i32,
-    /// 最大能量
     pub max_energy: i32,
-    /// 当前护甲
     pub block: i32,
-    /// 当前金币
     pub gold: i32,
-    /// 当前回合（从1开始）
     pub turn: u32,
+    /// 中毒层数 (每回合开始扣血)
+    pub poison: i32,
+    /// 虚弱层数 (攻击力降低)
+    pub weakness: i32,
 }
 
 impl Default for Player {
     fn default() -> Self {
         Self {
-            hp: 80,
-            max_hp: 80,
-            energy: 3,
-            max_energy: 3,
-            block: 0,
-            gold: 0,
-            turn: 1,
+            hp: 80, max_hp: 80,
+            energy: 3, max_energy: 3,
+            block: 0, gold: 100, turn: 1,
+            poison: 0, weakness: 0,
         }
     }
 }
@@ -143,7 +137,7 @@ pub struct Enemy {
 }
 
 /// 敌人意图
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EnemyIntent {
     /// 攻击
     Attack { damage: i32 },
@@ -151,95 +145,71 @@ pub enum EnemyIntent {
     Defend { block: i32 },
     /// 强化（给自身攻击力增益）
     Buff { strength: i32 },
+    /// 减益（给玩家施加负面效果）
+    Debuff { poison: i32, weakness: i32 },
     /// 等待
     Wait,
 }
 
 /// 敌人类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EnemyType {
-    /// 嗜血妖狼 - 攻击型，高攻击概率
+    /// 嗜血妖狼 - 激进攻击
     DemonicWolf,
-    /// 巡逻阴兵 - 均衡型
-    GhostSoldier,
-    /// 地府幽火 - 防御型，高防御概率
-    SpiritFire,
-    /// 筑基大妖 - 强力型，多种攻击模式
+    /// 剧毒蛛 - 施加中毒
+    PoisonSpider,
+    /// 怨灵 - 施加虚弱
+    CursedSpirit,
+    /// 筑基大妖 - 强力首领
     GreatDemon,
 }
 
 /// AI模式配置 - 定义敌人选择意图的概率
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiPattern {
-    /// 攻击概率 (0.0-1.0)
     pub attack_chance: f32,
-    /// 防御概率 (0.0-1.0)
     pub defend_chance: f32,
-    /// 强化概率 (0.0-1.0)
     pub buff_chance: f32,
-    /// 伤害范围
+    pub debuff_chance: f32,
     pub damage_range: (i32, i32),
-    /// 防御范围
     pub block_range: (i32, i32),
-    /// 强化范围
     pub buff_range: (i32, i32),
 }
 
 impl AiPattern {
-    /// 嗜血妖狼模式 - 激进攻击型
     pub fn demonic_wolf() -> Self {
         Self {
-            attack_chance: 0.7,
-            defend_chance: 0.1,
-            buff_chance: 0.2,
-            damage_range: (8, 12),
-            block_range: (3, 5),
-            buff_range: (1, 2),
+            attack_chance: 0.7, defend_chance: 0.1, buff_chance: 0.2, debuff_chance: 0.0,
+            damage_range: (8, 12), block_range: (3, 5), buff_range: (1, 3),
         }
     }
 
-    /// 巡逻阴兵模式 - 均衡型
-    pub fn ghost_soldier() -> Self {
+    pub fn poison_spider() -> Self {
         Self {
-            attack_chance: 0.5,
-            defend_chance: 0.3,
-            buff_chance: 0.2,
-            damage_range: (6, 10),
-            block_range: (5, 8),
-            buff_range: (2, 3),
+            attack_chance: 0.4, defend_chance: 0.2, buff_chance: 0.0, debuff_chance: 0.4,
+            damage_range: (5, 8), block_range: (4, 6), buff_range: (0, 0),
         }
     }
 
-    /// 地府幽火模式 - 防御型
-    pub fn spirit_fire() -> Self {
+    pub fn cursed_spirit() -> Self {
         Self {
-            attack_chance: 0.3,
-            defend_chance: 0.5,
-            buff_chance: 0.2,
-            damage_range: (4, 7),
-            block_range: (8, 12),
-            buff_range: (1, 2),
+            attack_chance: 0.3, defend_chance: 0.3, buff_chance: 0.0, debuff_chance: 0.4,
+            damage_range: (10, 15), block_range: (5, 10), buff_range: (0, 0),
         }
     }
 
-    /// 筑基大妖模式 - 强力型
     pub fn great_demon() -> Self {
         Self {
-            attack_chance: 0.6,
-            defend_chance: 0.2,
-            buff_chance: 0.2,
-            damage_range: (12, 18),
-            block_range: (6, 10),
-            buff_range: (3, 5),
+            attack_chance: 0.6, defend_chance: 0.2, buff_chance: 0.2, debuff_chance: 0.0,
+            damage_range: (12, 18), block_range: (6, 10), buff_range: (3, 5),
         }
     }
 
-    /// 根据敌人类型获取AI模式
     pub fn from_enemy_type(enemy_type: EnemyType) -> Self {
         match enemy_type {
             EnemyType::DemonicWolf => Self::demonic_wolf(),
-            EnemyType::GhostSoldier => Self::ghost_soldier(),
-            EnemyType::SpiritFire => Self::spirit_fire(),
+            EnemyType::PoisonSpider => Self::poison_spider(),
+            EnemyType::CursedSpirit => Self::cursed_spirit(),
             EnemyType::GreatDemon => Self::great_demon(),
         }
     }
@@ -336,6 +306,10 @@ impl Enemy {
                 self.strength += strength;
                 info!("{} 获得了 {} 点攻击力", self.name, strength);
                 EnemyIntent::Buff { strength }
+            }
+            EnemyIntent::Debuff { poison, weakness } => {
+                info!("{} 正在准备邪术...", self.name);
+                EnemyIntent::Debuff { poison, weakness }
             }
             EnemyIntent::Wait => {
                 info!("{} 等待中", self.name);

@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use crate::states::GameState;
 use crate::components::{
-    MapNode, NodeType, MapProgress, Player, Enemy, EnemyIntent, CombatState, TurnPhase, 
+    MapNode, NodeType, MapProgress, Player, Enemy, EnemyIntent, EnemyType, CombatState, TurnPhase, 
     Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, CardType, CardRarity, 
     CardPool, PlayerDeck, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent, CharacterType, 
     SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, 
@@ -973,6 +973,12 @@ struct EnemyHpText;
 #[derive(Component)]
 struct EnemyIntentText;
 
+/// 绑定到特定妖兽的UI面板
+#[derive(Component)]
+struct EnemyStatusUi {
+    pub enemy_id: u32,
+}
+
 #[derive(Component)]
 struct TurnText;
 
@@ -1031,53 +1037,76 @@ struct BackToMapButton;
 /// 设置战斗UI
 fn setup_combat_ui(
     mut commands: Commands, 
-    asset_server: Res<AssetServer>, 
-    player_deck: Res<PlayerDeck>, 
+    asset_server: Res<AssetServer>,
+    player_deck: Res<PlayerDeck>,
     mut victory_delay: ResMut<VictoryDelay>,
-    player_query: Query<(&Player, &crate::components::Cultivation)>,
-) {
-    info!("setup_combat_ui: 开始重构尖塔风格布局");
-    if victory_delay.active {
-        victory_delay.active = false;
-        victory_delay.elapsed = 0.0;
-    }
-    
+    player_query: Query<(&Player, &crate::components::Cultivation)>)
+{
+    info!("【战斗】进入战场，众妖环伺");
+    if victory_delay.active { victory_delay.active = false; victory_delay.elapsed = 0.0; }
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
-    commands.spawn(Enemy::new(0, "嗜血妖狼", 30));
-    spawn_character_sprite(&mut commands, CharacterType::NormalEnemy, Vec3::new(300.0, 50.0, 10.0), Vec2::new(120.0, 150.0));
+
+    // 创建根容器
+    let root_entity = commands.spawn((
+        Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+        PickingBehavior::IGNORE, CombatUiRoot,
+    )).id();
+
+    // --- 多敌人生成 ---
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    let num_enemies = rng.gen_range(1..=3);
+
+    for i in 0..num_enemies {
+        let enemy_id = i as u32;
+        let (name, hp, e_type) = match rng.gen_range(0..3) {
+            0 => ("嗜血妖狼", 30, EnemyType::DemonicWolf),
+            1 => ("剧毒蛛", 20, EnemyType::PoisonSpider),
+            _ => ("怨灵", 40, EnemyType::CursedSpirit),
+        };
+        let x_world = 250.0 + (i as f32 - (num_enemies as f32 - 1.0) / 2.0) * 220.0;
+        commands.spawn(Enemy::with_type(enemy_id, name, hp, e_type));
+        spawn_character_sprite(&mut commands, CharacterType::NormalEnemy, Vec3::new(x_world, 50.0, 10.0), Vec2::new(100.0, 120.0));
+
+        let ui_left = 640.0 + x_world - 80.0;
+        commands.entity(root_entity).with_children(|root| {
+            root.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(ui_left), bottom: Val::Px(480.0),
+                    flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default()
+                },
+                EnemyStatusUi { enemy_id },
+            )).with_children(|p| {
+                p.spawn((Text::new(name), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE)));
+                p.spawn((Text::new(format!("HP: {}/{}", hp, hp)), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(Color::srgb(1.0, 0.3, 0.3)), EnemyHpText));
+                p.spawn((Text::new("意图: 观察"), TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() }, TextColor(Color::srgb(1.0, 0.8, 0.4)), EnemyIntentText));
+            });
+        });
+    }
+
     spawn_character_sprite(&mut commands, CharacterType::Player, Vec3::new(-350.0, -80.0, 10.0), Vec2::new(100.0, 140.0));
     commands.insert_resource(CombatState::default());
     let deck_cards = player_deck.cards.clone();
     commands.insert_resource(DeckConfig { starting_deck: deck_cards.clone(), ..default() });
-    let initial_draw = 5.min(deck_cards.len());
-    let drawn_cards: Vec<Card> = deck_cards.iter().take(initial_draw).cloned().collect();
-    let remaining_deck: Vec<Card> = deck_cards.iter().skip(initial_draw).cloned().collect();
-    commands.spawn(DrawPile::new(remaining_deck));
-    commands.spawn(DiscardPile::new());
+    let drawn = 5.min(deck_cards.len());
     let mut hand = Hand::new(10);
-    for card in drawn_cards { hand.add_card(card); }
+    for card in deck_cards.iter().take(drawn) { hand.add_card(card.clone()); }
+    commands.spawn(DrawPile::new(deck_cards.iter().skip(drawn).cloned().collect()));
+    commands.spawn(DiscardPile::new());
     commands.spawn(hand);
     let player_data = player_query.get_single().ok();
 
-    commands.spawn((
-        Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
-        PickingBehavior::IGNORE,
-        CombatUiRoot,
-    )).with_children(|root| {
+    commands.entity(root_entity).with_children(|root| {
         root.spawn((
             Node { position_type: PositionType::Absolute, top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Px(45.0), flex_direction: FlexDirection::Row, align_items: AlignItems::Center, padding: UiRect::horizontal(Val::Px(20.0)), column_gap: Val::Px(30.0), ..default() },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.85)),
-            TopBar,
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.85)), TopBar,
         )).with_children(|bar| {
-            if let Some((player, cultivation)) = player_data {
-                let realm_name = match cultivation.realm {
-                    crate::components::cultivation::Realm::QiRefining => "炼气期",
-                    crate::components::cultivation::Realm::FoundationEstablishment => "筑基期",
-                    _ => "修仙者",
-                };
-                bar.spawn((Text::new(format!("境界: {}", realm_name)), TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() }, TextColor(Color::srgb(0.4, 1.0, 0.4))));
-                bar.spawn((Text::new(format!("道行: {}/{}", player.hp, player.max_hp)), TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() }, TextColor(Color::srgb(1.0, 0.4, 0.4)), TopBarHpText));
-                bar.spawn((Text::new(format!("灵石: {}", player.gold)), TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() }, TextColor(Color::srgb(1.0, 0.8, 0.2)), TopBarGoldText));
+            if let Some((p, c)) = player_data {
+                let r_name = match c.realm { crate::components::cultivation::Realm::QiRefining => "炼气期", crate::components::cultivation::Realm::FoundationEstablishment => "筑基期", crate::components::cultivation::Realm::GoldenCore => "金丹期", _ => "修仙者" };
+                bar.spawn((Text::new(format!("境界: {}", r_name)), TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() }, TextColor(Color::srgb(0.4, 1.0, 0.4))));
+                bar.spawn((Text::new(format!("道行: {}/{}", p.hp, p.max_hp)), TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() }, TextColor(Color::srgb(1.0, 0.4, 0.4)), TopBarHpText));
+                bar.spawn((Text::new(format!("灵石: {}", p.gold)), TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() }, TextColor(Color::srgb(1.0, 0.8, 0.2)), TopBarGoldText));
             }
         });
         root.spawn(Node { position_type: PositionType::Absolute, left: Val::Px(150.0), bottom: Val::Px(280.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() }).with_children(|p| {
@@ -1086,85 +1115,36 @@ fn setup_combat_ui(
                 p.spawn((Text::new(format!("护甲: {}", player.block)), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(Color::srgb(0.4, 0.7, 1.0)), PlayerBlockText));
             }
         });
-        root.spawn((Node { position_type: PositionType::Absolute, right: Val::Px(250.0), bottom: Val::Px(350.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: Val::Px(5.0), ..default() }, EnemyUiMarker)).with_children(|e| {
-            e.spawn((Text::new("嗜血妖狼"), TextFont { font: chinese_font.clone(), font_size: 24.0, ..default() }, TextColor(Color::WHITE)));
-            e.spawn((Text::new("HP: 30/30"), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::srgb(1.0, 0.3, 0.3)), EnemyHpText));
-            e.spawn((Text::new("意图: 等待"), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(Color::srgb(1.0, 0.8, 0.4)), EnemyIntentText));
+        root.spawn((
+            Node { position_type: PositionType::Absolute, left: Val::Px(100.0), bottom: Val::Px(120.0), width: Val::Px(90.0), height: Val::Px(90.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
+            ZIndex(10), BackgroundColor(Color::srgba(0.1, 0.2, 0.5, 0.9)), EnergyOrb
+        )).with_children(|orb| {
+            if let Some((p, _)) = player_data {
+                orb.spawn((Text::new(format!("{}/{}", p.energy, p.max_energy)), TextFont { font: chinese_font.clone(), font_size: 32.0, ..default() }, TextColor(Color::WHITE), PlayerEnergyText));
+            }
         });
-            // --- Energy Orb ---
-            root.spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(100.0),
-                    bottom: Val::Px(120.0),
-                    width: Val::Px(90.0),
-                    height: Val::Px(90.0),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-                ZIndex(10),
-                BackgroundColor(Color::srgba(0.1, 0.2, 0.5, 0.9)),
-                EnergyOrb,
-            )).with_children(|orb| {
-                if let Some((player, _)) = player_data {
-                    orb.spawn((
-                        Text::new(format!("{}/{}", player.energy, player.max_energy)),
-                        TextFont { font: chinese_font.clone(), font_size: 32.0, ..default() },
-                        TextColor(Color::WHITE),
-                        PlayerEnergyText,
-                    ));
-                }
-            });
-
-            // --- 5. 交互控制 ---
-            root.spawn((
-                Button,
-                Node {
-                    position_type: PositionType::Absolute,
-                    right: Val::Px(100.0),
-                    bottom: Val::Px(140.0),
-                    width: Val::Px(160.0),
-                    height: Val::Px(50.0),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    border: UiRect::all(Val::Px(2.0)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgb(0.2, 0.4, 0.2)),
-                BorderColor(Color::BLACK),
-                EndTurnButton,
-            )).with_children(|btn| {
-                btn.spawn((
-                    Text::new("结束回合"),
-                    TextFont { font: chinese_font.clone(), font_size: 24.0, ..default() },
-                    TextColor(Color::WHITE),
-                ));
-            });
-
-            
+        root.spawn((
+            Button, Node { position_type: PositionType::Absolute, right: Val::Px(100.0), bottom: Val::Px(140.0), width: Val::Px(160.0), height: Val::Px(50.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: UiRect::all(Val::Px(2.0)), ..default() },
+            BackgroundColor(Color::srgb(0.2, 0.4, 0.2)), BorderColor(Color::BLACK), EndTurnButton
+        )).with_children(|btn| { btn.spawn((Text::new("结束回合"), TextFont { font: chinese_font.clone(), font_size: 24.0, ..default() }, TextColor(Color::WHITE))); });
         root.spawn((Node { position_type: PositionType::Absolute, left: Val::Percent(0.0), bottom: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Px(250.0), justify_content: JustifyContent::Center, ..default() }, HandArea)).with_children(|parent| {
             parent.spawn((Text::new("手牌: 0/10"), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::srgba(1.0, 1.0, 1.0, 0.5)), Node { position_type: PositionType::Absolute, top: Val::Px(10.0), ..default() }, HandCountText));
         });
-        root.spawn((Node { position_type: PositionType::Absolute, left: Val::Px(30.0), bottom: Val::Px(30.0), ..default() })).with_children(|p| {
+        root.spawn(Node { position_type: PositionType::Absolute, left: Val::Px(30.0), bottom: Val::Px(30.0), ..default() }).with_children(|p| {
             p.spawn((Text::new("剑冢: 0"), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE), DrawPileText));
         });
-        root.spawn((Node { position_type: PositionType::Absolute, right: Val::Px(30.0), bottom: Val::Px(30.0), ..default() })).with_children(|p| {
+        root.spawn(Node { position_type: PositionType::Absolute, right: Val::Px(30.0), bottom: Val::Px(30.0), ..default() }).with_children(|p| {
             p.spawn((Text::new("归墟: 0"), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE), DiscardPileText));
         });
     });
 
-    // --- 独立于 UI 树之外的灵力粒子发射器 ---
-    // 1280x720 屏幕, Orb 在 Left 100, Bottom 120
     commands.spawn((
         ParticleEmitter::new(25.0, EffectType::ManaFlow.config()),
-        Transform::from_xyz(-495.0, -195.0, 950.0),
-        GlobalTransform::default(),
-        EmitterMarker,
-        CombatUiRoot,
+        Transform::from_xyz(-495.0, -195.0, 950.0), GlobalTransform::default(), EmitterMarker, CombatUiRoot,
     ));
 }
 
+/// 清理战斗UI
 pub fn cleanup_combat_ui(
     mut commands: Commands,
     ui_query: Query<Entity, With<CombatUiRoot>>,
@@ -1198,7 +1178,7 @@ fn handle_combat_button_clicks(
     _commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
     mut combat_state: ResMut<CombatState>,
-    mut player_query: Query<&mut Player>,
+    mut player_query: Query<(&mut Player, &crate::components::Cultivation)>,
     mut enemy_query: Query<&mut Enemy>,
     mut attack_events: EventWriter<EnemyAttackEvent>,
     mut effect_events: EventWriter<SpawnEffectEvent>,
@@ -1208,118 +1188,43 @@ fn handle_combat_button_clicks(
         Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<ReturnToMapButton>)>,
     )>,
 ) {
-    // 处理结束回合按钮
     for (interaction, mut color) in button_queries.p0().iter_mut() {
         if matches!(interaction, Interaction::Pressed) {
-            info!("结束回合按钮被点击");
-            // 简单实现：切换到敌人回合
+            info!("【战斗】玩家结束回合，众妖开始行动");
             combat_state.phase = TurnPhase::EnemyTurn;
 
-            // 敌人AI行动逻辑
-            if let Ok(mut enemy) = enemy_query.get_single_mut() {
-                // 先让敌人选择新意图（清空护甲并选择新行动）
+            for mut enemy in enemy_query.iter_mut() {
+                if enemy.hp <= 0 { continue; }
                 enemy.start_turn();
-                info!("敌人意图: {:?}", enemy.intent);
-
-                // 然后执行意图
-                let executed_intent = enemy.execute_intent();
-
-                match executed_intent {
+                let intent = enemy.execute_intent();
+                match intent {
                     EnemyIntent::Attack { damage } => {
-                        if let Ok(mut player) = player_query.get_single_mut() {
-                            // 检查是否破甲（护甲被完全击破）
-                            let block_broken = player.block > 0 && damage >= player.block;
-
+                        if let Ok((mut player, _)) = player_query.get_single_mut() {
+                            let broken = player.block > 0 && damage >= player.block;
                             player.take_damage(damage);
-                            info!("玩家受到{}点伤害，剩余HP: {}", damage, player.hp);
-
-                            // 发送攻击事件，触发动画
-                            attack_events.send(EnemyAttackEvent::new(damage, block_broken));
-
-                            // 触发粒子特效（火焰+受击）
-                            effect_events.send(SpawnEffectEvent {
-                                effect_type: EffectType::Fire,
-                                position: Vec3::new(0.0, 100.0, 999.0),
-                                burst: true,
-                                count: 30,
-                            });
-                            effect_events.send(SpawnEffectEvent {
-                                effect_type: EffectType::Hit,
-                                position: Vec3::new(0.0, -200.0, 999.0),
-                                burst: true,
-                                count: 20,
-                            });
-
-                            // 触发屏幕特效（震动+红色闪光）
-                            screen_events.send(ScreenEffectEvent::Shake {
-                                trauma: 0.4,
-                                decay: 4.0,
-                            });
-                            screen_events.send(ScreenEffectEvent::Flash {
-                                color: Color::srgba(1.0, 0.0, 0.0, 0.6),
-                                duration: 0.15,
-                            });
+                            attack_events.send(EnemyAttackEvent::new(damage, broken));
+                            effect_events.send(SpawnEffectEvent::new(EffectType::Hit, Vec3::new(-350.0, -80.0, 999.0)));
                         }
                     }
                     EnemyIntent::Defend { block } => {
-                        info!("{} 获得了 {} 点护甲", enemy.name, block);
-                        // 触发冰霜特效
-                        effect_events.send(SpawnEffectEvent {
-                            effect_type: EffectType::Ice,
-                            position: Vec3::new(0.0, 100.0, 999.0),
-                            burst: true,
-                            count: 25,
-                        });
+                        effect_events.send(SpawnEffectEvent::new(EffectType::Ice, Vec3::new(300.0, 50.0, 999.0)));
                     }
-                    EnemyIntent::Buff { strength } => {
-                        info!("{} 获得了 {} 点攻击力", enemy.name, strength);
-                        // 触发强化特效（紫色）
-                        effect_events.send(SpawnEffectEvent {
-                            effect_type: EffectType::Victory,
-                            position: Vec3::new(0.0, 100.0, 999.0),
-                            burst: true,
-                            count: 20,
-                        });
+                    EnemyIntent::Debuff { poison, weakness } => {
+                        if let Ok((mut player, _)) = player_query.get_single_mut() {
+                            player.poison += poison;
+                            player.weakness += weakness;
+                            info!("【战斗】妖物施法：玩家中毒({})/虚弱({})", poison, weakness);
+                        }
                     }
-                    EnemyIntent::Wait => {
-                        info!("{} 等待中", enemy.name);
-                    }
-                }
-
-                // 检查战斗是否结束
-                if let Ok(player) = player_query.get_single() {
-                    if player.hp <= 0 {
-                        info!("玩家败北！");
-                        // TODO: 游戏结束逻辑
-                    }
+                    _ => {}
                 }
             }
 
-            // 新回合开始
-            if let Ok(mut player) = player_query.get_single_mut() {
+            if let Ok((mut player, _)) = player_query.get_single_mut() {
                 player.start_turn();
-                info!("玩家新回合：护甲清零");
             }
-
-            // 重置抽牌标志，允许本回合抽牌
             combat_state.cards_drawn_this_turn = false;
             combat_state.phase = TurnPhase::PlayerAction;
-        } else if matches!(interaction, Interaction::Hovered) {
-            *color = BackgroundColor(Color::srgb(0.4, 0.6, 0.4));
-        } else {
-            *color = BackgroundColor(Color::srgb(0.3, 0.5, 0.3));
-        }
-    }
-
-    // 处理返回地图按钮
-    for (interaction, mut color) in button_queries.p1().iter_mut() {
-        if matches!(interaction, Interaction::Pressed) {
-            info!("返回地图按钮被点击");
-            next_state.set(GameState::Map);
-        } else if matches!(interaction, Interaction::Hovered) {
-            *color = BackgroundColor(Color::srgb(0.4, 0.4, 0.4));
-        } else {
-            *color = BackgroundColor(Color::srgb(0.3, 0.3, 0.3));
         }
     }
 }
@@ -1328,49 +1233,48 @@ fn handle_combat_button_clicks(
 fn update_combat_ui(
     player_query: Query<&Player, Changed<Player>>,
     enemy_query: Query<&Enemy, Changed<Enemy>>,
+    ui_panel_query: Query<(&EnemyStatusUi, &Children)>,
+    hp_marker_query: Query<Entity, With<EnemyHpText>>,
+    intent_marker_query: Query<Entity, With<EnemyIntentText>>,
     mut text_queries: ParamSet<(
         Query<&mut Text, With<PlayerHpText>>,
         Query<&mut Text, With<PlayerEnergyText>>,
         Query<&mut Text, With<PlayerBlockText>>,
-        Query<&mut Text, With<EnemyHpText>>,
-        Query<&mut Text, With<EnemyIntentText>>,
         Query<&mut Text, With<TopBarHpText>>,
         Query<&mut Text, With<TopBarGoldText>>,
+        Query<&mut Text>, // 索引 5: 通用 Text 查询用于更新多敌人面板
     )>,
 ) {
-    // 更新玩家信息
-    if let Ok(player) = player_query.get_single() {
-        if let Ok(mut text) = text_queries.p0().get_single_mut() {
-            text.0 = format!("{}/{}", player.hp, player.max_hp);
-        }
-        if let Ok(mut text) = text_queries.p1().get_single_mut() {
-            text.0 = format!("{}/{}", player.energy, player.max_energy);
-        }
-        if let Ok(mut text) = text_queries.p2().get_single_mut() {
-            text.0 = format!("护甲: {}", player.block);
-        }
-        // 同步更新顶部状态栏
-        if let Ok(mut text) = text_queries.p5().get_single_mut() {
-            text.0 = format!("道行: {}/{}", player.hp, player.max_hp);
-        }
-        if let Ok(mut text) = text_queries.p6().get_single_mut() {
-            text.0 = format!("灵石: {}", player.gold);
-        }
+    if let Ok(p) = player_query.get_single() {
+        if let Ok(mut t) = text_queries.p0().get_single_mut() { t.0 = format!("{}/{}", p.hp, p.max_hp); }
+        if let Ok(mut t) = text_queries.p1().get_single_mut() { t.0 = format!("{}/{}", p.energy, p.max_energy); }
+        if let Ok(mut t) = text_queries.p2().get_single_mut() { t.0 = format!("护甲: {}", p.block); }
+        if let Ok(mut t) = text_queries.p3().get_single_mut() { t.0 = format!("道行: {}/{}", p.hp, p.max_hp); }
+        if let Ok(mut t) = text_queries.p4().get_single_mut() { t.0 = format!("灵石: {}", p.gold); }
     }
 
-    // 更新敌人信息
-    if let Ok(enemy) = enemy_query.get_single() {
-        if let Ok(mut text) = text_queries.p3().get_single_mut() {
-            text.0 = format!("HP: {}/{}", enemy.hp, enemy.max_hp);
-        }
-        if let Ok(mut text) = text_queries.p4().get_single_mut() {
-            let intent_text = match &enemy.intent {
-                EnemyIntent::Attack { damage } => format!("意图: 攻击({})", damage),
-                EnemyIntent::Defend { block } => format!("意图: 防御({})", block),
-                EnemyIntent::Buff { strength } => format!("意图: 强化({})", strength),
-                EnemyIntent::Wait => "意图: 等待".to_string(),
-            };
-            text.0 = intent_text;
+    // 遍历所有敌人，同步更新它们对应的 UI 面板
+    for enemy in enemy_query.iter() {
+        for (panel, children) in ui_panel_query.iter() {
+            if panel.enemy_id == enemy.id {
+                for &child in children.iter() {
+                    if hp_marker_query.contains(child) {
+                        if let Ok(mut text) = text_queries.p5().get_mut(child) {
+                            text.0 = format!("HP: {}/{}", enemy.hp, enemy.max_hp);
+                        }
+                    }
+                    if intent_marker_query.contains(child) {
+                        if let Ok(mut text) = text_queries.p5().get_mut(child) {
+                            text.0 = match &enemy.intent {
+                                EnemyIntent::Attack { damage } => format!("意图: 攻击({} + {})", damage, enemy.strength),
+                                EnemyIntent::Defend { block } => format!("意图: 防御({})", block),
+                                EnemyIntent::Debuff { poison, weakness } => format!("意图: 邪术(毒{}/弱{})", poison, weakness),
+                                _ => "意图: 观察".to_string(),
+                            };
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -1732,42 +1636,41 @@ fn apply_card_effect(
 ) {
     match effect {
         CardEffect::DealDamage { amount } => {
-            if let Ok(mut enemy) = enemy_query.get_single_mut() {
+            // 找到第一个存活的敌人作为目标
+            if let Some(mut enemy) = enemy_query.iter_mut().find(|e| e.hp > 0) {
                 enemy.take_damage(*amount);
-                info!("卡牌效果：对敌人造成 {} 点伤害，敌人剩余HP: {}", amount, enemy.hp);
+                info!("【卡牌】对 {} 造成 {} 点伤害，剩余 HP: {}", enemy.name, amount, enemy.hp);
+                
+                // 触发特效
                 effect_events.send(SpawnEffectEvent {
                     effect_type: EffectType::Fire,
-                    position: Vec3::new(0.0, 100.0, 999.0),
-                    burst: true,
-                    count: 30,
+                    position: Vec3::new(300.0, 50.0, 999.0), // 简化：大致在敌方区域
+                    burst: true, count: 30,
                 });
-                screen_events.send(ScreenEffectEvent::Shake {
-                    trauma: 0.2,
-                    decay: 6.0,
-                });
+                screen_events.send(ScreenEffectEvent::Shake { trauma: 0.2, decay: 6.0 });
+            } else {
+                warn!("【战斗】没有存活的目标可供攻击！");
             }
         }
         CardEffect::GainBlock { amount } => {
             if let Ok(mut player) = player_query.get_single_mut() {
                 player.gain_block(*amount);
-                info!("卡牌效果：获得 {} 点护甲，当前护甲: {}", amount, player.block);
+                info!("【卡牌】获得 {} 点护甲，当前: {}", amount, player.block);
                 effect_events.send(SpawnEffectEvent {
                     effect_type: EffectType::Ice,
-                    position: Vec3::new(0.0, -200.0, 999.0),
-                    burst: true,
-                    count: 25,
+                    position: Vec3::new(-350.0, -80.0, 999.0),
+                    burst: true, count: 25,
                 });
             }
         }
         CardEffect::Heal { amount } => {
             if let Ok(mut player) = player_query.get_single_mut() {
                 player.hp = (player.hp + amount).min(player.max_hp);
-                info!("卡牌效果：回复 {} 点生命，当前道行: {}", amount, player.hp);
+                info!("【卡牌】回复 {} 点生命，当前道行: {}", amount, player.hp);
                 effect_events.send(SpawnEffectEvent {
                     effect_type: EffectType::Heal,
-                    position: Vec3::new(0.0, -200.0, 999.0),
-                    burst: true,
-                    count: 20,
+                    position: Vec3::new(-350.0, -80.0, 999.0),
+                    burst: true, count: 20,
                 });
             }
         }
@@ -1777,26 +1680,18 @@ fn apply_card_effect(
                 if draw_pile.count == 0 {
                     if let Ok(mut discard_pile) = discard_pile_query.get_single_mut() {
                         let cards = discard_pile.clear();
-                        if !cards.is_empty() {
-                            draw_pile.shuffle_from_discard(cards);
-                        }
+                        if !cards.is_empty() { draw_pile.shuffle_from_discard(cards); }
                     }
                 }
                 for _ in 0..*amount {
                     if let Some(card) = draw_pile.draw_card() {
                         if let Ok(mut hand) = hand_query.get_single_mut() {
-                            if hand.add_card(card) {
-                                drawn += 1;
-                            }
+                            if hand.add_card(card) { drawn += 1; }
                         }
-                    } else {
-                        break;
-                    }
+                    } else { break; }
                 }
             }
-            if drawn > 0 {
-                info!("卡牌效果：抽了 {} 张牌", drawn);
-            }
+            if drawn > 0 { info!("【卡牌】抽了 {} 张牌", drawn); }
         }
         _ => {}
     }
@@ -1811,89 +1706,39 @@ fn check_combat_end(
     state: Res<State<GameState>>,
     mut player_query: Query<(&mut Player, &mut crate::components::Cultivation)>,
     enemy_query: Query<&Enemy>,
-    _sprite_query: Query<(Entity, &Sprite, &Children)>,
-    _enemy_sprite_marker_query: Query<&EnemySpriteMarker>,
     mut next_state: ResMut<NextState<GameState>>,
-    _commands: Commands,
-    mut effect_events: EventWriter<SpawnEffectEvent>,
-    mut screen_events: EventWriter<ScreenEffectEvent>,
     mut victory_events: EventWriter<VictoryEvent>,
     mut victory_delay: ResMut<VictoryDelay>,
 ) {
-    // 额外检查：确保当前确实是Combat状态
-    // 防止在同一帧内状态切换后仍执行此系统
-    if **state != GameState::Combat {
-        return;
-    }
+    if **state != GameState::Combat { return; }
 
-    // 检查敌人是否死亡
-    if let Ok(enemy) = enemy_query.get_single() {
-        if enemy.is_dead() {
-            // 检查是否已经触发过胜利（防止重复触发）
-            if victory_delay.active {
-                // 已经触发，等待延迟结束（每帧都会到这里，不打印日志）
-                return;
-            }
-
-            info!("敌人被击败！战斗胜利！");
-
-            // 获得感悟（移除自动突破）
-            if let Ok((_player, mut cultivation)) = player_query.get_single_mut() {
-                let insight_gain = 50; // 基础获得50感悟
-                cultivation.gain_insight(insight_gain);
-                info!("【修仙】获得 {} 点感悟，当前总感悟: {}/{}", insight_gain, cultivation.insight, cultivation.get_threshold());
-                
-                if cultivation.can_breakthrough() {
-                    info!("✨【机缘已至】感悟已满，可在地图界面开启“渡劫”！");
-                }
-            } else {
-                warn!("⚠️【警告】战斗胜利但未能获取玩家修为数据！请检查 Player 是否正确绑定了 Cultivation 组件。");
-            }
-
-            // 触发胜利粒子特效（金色星形）
-            effect_events.send(SpawnEffectEvent {
-                effect_type: EffectType::Victory,
-                position: Vec3::new(0.0, 100.0, 999.0),
-                burst: true,
-                count: 50,
-            });
-            // 多次触发形成爆发效果
-            effect_events.send(SpawnEffectEvent {
-                effect_type: EffectType::Victory,
-                position: Vec3::new(-50.0, 80.0, 999.0),
-                burst: true,
-                count: 30,
-            });
-            effect_events.send(SpawnEffectEvent {
-                effect_type: EffectType::Victory,
-                position: Vec3::new(50.0, 80.0, 999.0),
-                burst: true,
-                count: 30,
-            });
-
-            // 触发金色边缘闪光
-            screen_events.send(ScreenEffectEvent::Flash {
-                color: Color::srgba(1.0, 0.9, 0.3, 0.5),
-                duration: 0.4,
-            });
-
-            // 触发胜利事件（可用于其他系统）
-            victory_events.send(VictoryEvent);
-
-            // 启动胜利延迟计时器，不立即切换状态
-            victory_delay.active = true;
-            victory_delay.elapsed = 0.0;
-            info!("启动胜利延迟，{}秒后进入奖励界面", victory_delay.duration);
+    // 1. 检查玩家是否败北
+    if let Ok((player, _)) = player_query.get_single() {
+        if player.hp <= 0 {
+            info!("【战斗】身陨道消，由于道行耗尽...");
+            next_state.set(GameState::GameOver);
             return;
         }
     }
 
-    // 检查玩家是否死亡
-    if let Ok(player_data) = player_query.get_single() {
-        if player_data.0.hp <= 0 {
-            info!("玩家败北！身陨道消...");
-            next_state.set(GameState::GameOver);
+    // 2. 检查众妖是否伏诛 (全歼判定)
+    let any_alive = enemy_query.iter().any(|e| e.hp > 0);
+    
+    if !any_alive && !enemy_query.is_empty() {
+        if victory_delay.active { return; }
+
+        info!("【战斗】众妖肃清，机缘显现！");
+        
+        // 获得感悟
+        if let Ok((_, mut cultivation)) = player_query.get_single_mut() {
+            let insight_gain = 50;
+            cultivation.gain_insight(insight_gain);
+            info!("【修仙】获得 {} 点感悟，当前: {}/{}", insight_gain, cultivation.insight, cultivation.get_threshold());
         }
+
+        victory_events.send(VictoryEvent);
+        victory_delay.active = true;
+        victory_delay.elapsed = 0.0;
     }
 }
 
