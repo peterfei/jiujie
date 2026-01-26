@@ -126,16 +126,26 @@ fn update_physical_impacts(
         let delta_offset = impact.offset_velocity * dt;
         impact.current_offset += delta_offset;
 
-        // 3. 限制倾斜角度，防止“倒转” (限制在正负 0.8 弧度，约 45度)
+        // 3. 模拟特殊回旋弹簧力
+        let rot_spring_k = 40.0;
+        let rot_damping = 5.0;
+        let rot_force = -rot_spring_k * impact.special_rotation;
+        impact.special_rotation_velocity += rot_force * dt;
+        impact.special_rotation_velocity *= 1.0 - (rot_damping * dt);
+        impact.special_rotation += impact.special_rotation_velocity * dt;
+
+        // 4. 限制倾斜角度，防止“倒转”
         impact.tilt_amount = impact.tilt_amount.clamp(-0.8, 0.8);
 
-        // 4. 整合呼吸动画 Y 轴偏移
+        // 5. 整合呼吸动画 Y 轴偏移
         let breath_cycle = (breath.timer * breath.frequency).sin();
         let breath_y = breath_cycle * 0.05;
 
-        // 5. 应用到变换
-        // 保持 3D 俯视微仰角 (-0.2)，并叠加物理倾斜
-        transform.rotation = Quat::from_rotation_x(-0.2) * Quat::from_rotation_z(impact.tilt_amount);
+        // 6. 应用到变换
+        // 旋转：俯视角 (-0.2) * 物理倾斜 (Tilt) * 特殊回旋 (Special)
+        transform.rotation = Quat::from_rotation_x(-0.2) 
+            * Quat::from_rotation_z(impact.tilt_amount)
+            * Quat::from_rotation_z(impact.special_rotation);
         
         // 最终位置 = 初始位置 + 物理偏移 + 呼吸偏移
         transform.translation = impact.home_position + impact.current_offset + Vec3::new(0.0, breath_y, 0.0);
@@ -161,6 +171,13 @@ fn trigger_hit_feedback(
                     // 攻击：角色瞬移冲向对手！速度提回 25.0
                     impact.tilt_velocity = -50.0 * direction;
                     impact.offset_velocity = Vec3::new(25.0 * direction, 0.0, 0.0);
+                }
+                AnimationState::ImperialSword => {
+                    // 御剑术：极速冲锋 + 270 度暴力回旋
+                    impact.tilt_velocity = -30.0 * direction;
+                    impact.offset_velocity = Vec3::new(32.0 * direction, 0.0, 0.0);
+                    // 给一个强大的回旋初速度 (方向根据角色面向)
+                    impact.special_rotation_velocity = -45.0 * direction; 
                 }
                 _ => {}
             }
@@ -278,7 +295,7 @@ fn update_sprite_animations(
 
                     // 非循环动画结束后，恢复待机状态
                     match sprite.state {
-                        AnimationState::Attack | AnimationState::Hit => {
+                        AnimationState::Attack | AnimationState::Hit | AnimationState::ImperialSword => {
                             sprite.set_idle();
                         }
                         AnimationState::Death => {
@@ -307,6 +324,10 @@ fn handle_animation_events(
                 AnimationState::Attack => {
                     sprite.set_attack(4, 0.3); // 4帧，0.3秒
                     info!("角色 {:?} 开始攻击动画", event.target);
+                }
+                AnimationState::ImperialSword => {
+                    sprite.set_attack(8, 0.5); // 御剑术稍长，8帧，0.5秒
+                    info!("角色 {:?} 开始御剑术回旋斩", event.target);
                 }
                 AnimationState::Hit => {
                     sprite.set_hit(3, 0.2); // 3帧，0.2秒

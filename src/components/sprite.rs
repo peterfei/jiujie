@@ -98,6 +98,8 @@ pub enum AnimationState {
     Idle,
     /// 攻击
     Attack,
+    /// 御剑术 (270度回旋斩)
+    ImperialSword,
     /// 受击
     Hit,
     /// 死亡
@@ -194,6 +196,10 @@ pub struct PhysicalImpact {
     pub tilt_velocity: f32,
     /// 当前倾斜量
     pub tilt_amount: f32,
+    /// 招式回旋角度 (用于特殊招式，如 270 度旋转)
+    pub special_rotation: f32,
+    /// 招式回旋速度
+    pub special_rotation_velocity: f32,
     /// 目标位置偏移
     pub offset_velocity: Vec3,
     /// 当前位置偏移
@@ -206,6 +212,8 @@ impl Default for PhysicalImpact {
             home_position: Vec3::ZERO,
             tilt_velocity: 0.0,
             tilt_amount: 0.0,
+            special_rotation: 0.0,
+            special_rotation_velocity: 0.0,
             offset_velocity: Vec3::ZERO,
             current_offset: Vec3::ZERO,
         }

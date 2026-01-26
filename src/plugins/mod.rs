@@ -1748,20 +1748,25 @@ fn handle_card_play(
                     None
                 };
     
-                if let Some(card) = card_opt {
-                    if player_energy >= card.cost {
-                        info!("打出卡牌: {} (消耗: {})", card.name, card.cost);
-                        
-                        // 触发玩家攻击动画 (3D 冲刺)
-                        if let Ok(player_entity) = player_sprite_query.get_single() {
-                            anim_events.send(CharacterAnimationEvent {
-                                target: player_entity,
-                                animation: crate::components::sprite::AnimationState::Attack,
-                            });
-                        }
-    
-                        sfx_events.send(PlaySfxEvent::new(SfxType::CardPlay));
-
+                            if let Some(card) = card_opt {
+                                if player_energy >= card.cost {
+                                    info!("打出卡牌: {} (消耗: {})", card.name, card.cost);
+                                    
+                                    // 触发玩家攻击动画 (Nano Banana 特化招式)
+                                    if let Ok(player_entity) = player_sprite_query.get_single() {
+                                        let anim = if card.name == "御剑术" {
+                                            crate::components::sprite::AnimationState::ImperialSword
+                                        } else {
+                                            crate::components::sprite::AnimationState::Attack
+                                        };
+                
+                                        anim_events.send(CharacterAnimationEvent {
+                                            target: player_entity,
+                                            animation: anim,
+                                        });
+                                    }
+                
+                                    sfx_events.send(PlaySfxEvent::new(SfxType::CardPlay));
                     if let Ok(mut player) = player_query.get_single_mut() {
                         player.energy -= card.cost;
                     }
