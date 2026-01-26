@@ -230,6 +230,8 @@ pub struct PhysicalImpact {
     pub action_type: ActionType,
     /// 动作方向记录 (-1.0 代表向左，1.0 代表向右)
     pub action_direction: f32,
+    /// 目标位移总距离 (动态计算，解决多敌人位置偏差)
+    pub target_offset_dist: f32,
     /// 目标位置偏移
     pub offset_velocity: Vec3,
     /// 当前位置偏移
@@ -247,6 +249,7 @@ impl Default for PhysicalImpact {
             action_timer: 0.0,
             action_type: ActionType::None,
             action_direction: 1.0,
+            target_offset_dist: 0.0,
             offset_velocity: Vec3::ZERO,
             current_offset: Vec3::ZERO,
         }

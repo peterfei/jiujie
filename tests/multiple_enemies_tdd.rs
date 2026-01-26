@@ -1,30 +1,30 @@
-#[cfg(test)]
-mod tests {
-    use bevy::prelude::*;
-    use bevy_card_battler::components::{Enemy, Player};
+use bevy::prelude::*;
+use bevy_card_battler::components::sprite::PhysicalImpact;
 
-    #[test]
-    fn test_victory_requires_all_enemies_dead() {
-        // 模拟有两个敌人的战场
-        let mut enemy1 = Enemy::new(1, "幼狼", 10);
-        let mut enemy2 = Enemy::new(2, "幼狼", 10);
-        
-        // 击败其中一个
-        enemy1.hp = 0;
-        
-        // 逻辑断言：如果还有一个生命值 > 0 的敌人，战斗不应结束
-        let any_alive = enemy1.hp > 0 || enemy2.hp > 0;
-        assert!(any_alive, "仍有敌人存活，战斗不应判定胜利");
-        
-        // 全部击败
-        enemy2.hp = 0;
-        let none_alive = !(enemy1.hp > 0 || enemy2.hp > 0);
-        assert!(none_alive, "所有敌人已伏诛，应当判定胜利");
-    }
+#[test]
+fn test_wolf_dash_distance_multi_enemy() {
+    // 玩家始终在 -3.5
+    let player_x = -3.5f32;
+    
+    // 场景 A：怪在最右侧 (3.5)
+    let enemy_a_x = 3.5f32;
+    let required_offset_a = player_x - enemy_a_x;
+    assert_eq!(required_offset_a.abs(), 7.0, "右侧敌人位移应为 7.0");
+    
+    // 场景 B：怪在中间靠近玩家 (0.5)
+    let enemy_b_x = 0.5f32;
+    let required_offset_b = player_x - enemy_b_x;
+    assert_eq!(required_offset_b.abs(), 4.0, "中间敌人位移应为 4.0");
+}
 
-    #[test]
-    fn test_multiple_enemy_intents_processing() {
-        // 验证系统是否能处理多个敌人的不同意图
-        // 实际逻辑中我们将使用 iter() 代替 get_single()
-    }
+#[test]
+fn test_deceleration_with_dynamic_target() {
+    // 模拟一个较近的敌人 (位移目标 4.0)
+    let target_dist = 4.0f32;
+    let current_offset = 3.5f32; // 已经快到了
+    
+    let dist_left = (target_dist - current_offset).max(0.0);
+    let speed_scalar = if dist_left < 1.0 { dist_left } else { 1.0 };
+    
+    assert!(speed_scalar < 1.0, "接近动态目标时应正确减速");
 }

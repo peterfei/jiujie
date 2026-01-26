@@ -84,9 +84,13 @@ fn update_physical_impacts(
                     // 扑杀弧线
                     action_pos_offset.y = (progress * std::f32::consts::PI).sin() * 1.5;
                     
-                    // 距离感知减速
+                    // 关键优化：动态距离感知减速逻辑
+                    // 使用存储的动态目标距离解决多敌人位移偏差
+                    let target_dist = impact.target_offset_dist;
                     let current_dist = impact.current_offset.x.abs();
-                    let dist_left = (7.0 - current_dist).max(0.0);
+                    let dist_left = (target_dist - current_dist).max(0.0);
+                    
+                    // 当距离小于 1.0 时，线性降低速度，实现精准停留
                     let speed_scalar = if dist_left < 1.0 { dist_left } else { 1.0 };
                     
                     pos_damping = 10.0;
@@ -159,22 +163,39 @@ fn trigger_hit_feedback(
             match event.animation {
                 AnimationState::Hit => {
                     impact.action_type = ActionType::None;
+                    // 受击：力道减半，呈现沉重的顿挫感
                     impact.tilt_velocity = 15.0 * direction; 
                     impact.offset_velocity = Vec3::new(-2.0 * direction, 0.0, 0.0);
                 }
+                AnimationState::Death => {
+                    // 死亡：向后猛倒 + 向上飘起一小段
+                    impact.action_type = ActionType::None;
+                    impact.tilt_velocity = 45.0 * direction; 
+                    impact.offset_velocity = Vec3::new(-5.0 * direction, 2.0, 0.0);
+                }
                 AnimationState::Attack => {
                     impact.action_type = ActionType::None;
+                    let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
+                    impact.target_offset_dist = (target_x - impact.home_position.x).abs();
+                    // 普通攻击：略微削减速度
                     impact.tilt_velocity = -40.0 * direction;
                     impact.offset_velocity = Vec3::new(20.0 * direction, 0.0, 0.0);
                 }
                 AnimationState::ImperialSword => {
                     impact.action_type = ActionType::None;
+                    let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
+                    impact.target_offset_dist = (target_x - impact.home_position.x).abs();
+                    // 御剑术：极速冲锋 + 270 度逆时针暴力回旋 (velocity改为正)
                     impact.tilt_velocity = -10.0 * direction; 
                     impact.offset_velocity = Vec3::new(28.0 * direction, 0.0, 0.0);
+                    // 修正：正值代表逆时针
                     impact.special_rotation_velocity = 80.0 * direction; 
                 }
                 AnimationState::DemonAttack => {
                     impact.action_type = ActionType::None;
+                    let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
+                    impact.target_offset_dist = (target_x - impact.home_position.x).abs();
+                    // 妖物突袭：更具沉重感
                     impact.tilt_velocity = -20.0 * direction;
                     impact.offset_velocity = Vec3::new(12.0 * direction, 0.0, 0.0);
                 }
@@ -194,6 +215,11 @@ fn trigger_hit_feedback(
                     impact.special_rotation_velocity = 0.0;
                 }
                 AnimationState::WolfAttack => {
+                    // 嗜血妖狼：动态计算位移距离
+                    // 敌人(dir=-1)的目标是玩家(x=-3.5)，玩家(dir=1)的目标是敌人(x=3.5)
+                    let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
+                    impact.target_offset_dist = (target_x - impact.home_position.x).abs();
+                    
                     impact.action_type = ActionType::WolfBite;
                     impact.tilt_velocity = -25.0 * direction;
                     impact.offset_velocity = Vec3::new(16.0 * direction, 0.0, 0.0);
@@ -207,12 +233,14 @@ fn trigger_hit_feedback(
                 }
                 AnimationState::SpiritAttack => {
                     impact.action_type = ActionType::None;
+                    let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
+                    impact.target_offset_dist = (target_x - impact.home_position.x).abs();
+                    // 怨灵：灵体突袭 (快速漂浮 + 不稳定颤动)
                     impact.tilt_velocity = 50.0; 
                     impact.offset_velocity = Vec3::new(22.0 * direction, 0.0, 0.0);
                     impact.special_rotation_velocity = 120.0; 
                 }
                 AnimationState::BossRoar => {
-                    // BOSS 啸天：高频脉冲 + 强力 Y 轴震颤 (摇头)
                     impact.action_type = ActionType::DemonCast; 
                     impact.tilt_velocity = 0.0;
                     impact.special_rotation_velocity = 100.0; // 剧烈摆头
@@ -220,6 +248,9 @@ fn trigger_hit_feedback(
                 }
                 AnimationState::BossFrenzy => {
                     impact.action_type = ActionType::None;
+                    let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
+                    impact.target_offset_dist = (target_x - impact.home_position.x).abs();
+                    // BOSS 瞬狱杀：极速三连闪 (大幅位移 + 高阻尼)
                     impact.offset_velocity = Vec3::new(35.0 * direction, 0.0, 0.0);
                     impact.action_timer = 0.8;
                 }
@@ -311,10 +342,11 @@ fn sync_2d_to_3d_render(
 
 /// 更新精灵动画
 fn update_sprite_animations(
-    mut query: Query<&mut CharacterSprite>,
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut CharacterSprite)>,
     time: Res<Time>,
 ) {
-    for mut sprite in query.iter_mut() {
+    for (entity, mut sprite) in query.iter_mut() {
         if sprite.total_frames <= 1 { continue; }
         sprite.elapsed += time.delta_secs();
         if sprite.elapsed >= sprite.frame_duration {
@@ -325,10 +357,17 @@ fn update_sprite_animations(
                 else {
                     sprite.current_frame = sprite.total_frames - 1;
                     match sprite.state {
+                        AnimationState::Death => {
+                            // 死亡动画结束，销毁实体
+                            info!("角色实体 {:?} 已彻底消散", entity);
+                            commands.entity(entity).despawn_recursive();
+                        }
                         AnimationState::Attack | AnimationState::Hit | AnimationState::ImperialSword | 
                         AnimationState::DemonAttack | AnimationState::DemonCast | AnimationState::WolfAttack | 
                         AnimationState::SpiderAttack | AnimationState::SpiritAttack | AnimationState::BossRoar | 
-                        AnimationState::BossFrenzy => { sprite.set_idle(); }
+                        AnimationState::BossFrenzy => {
+                            sprite.set_idle();
+                        }
                         _ => {}
                     }
                 }

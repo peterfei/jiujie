@@ -1394,7 +1394,7 @@ fn process_enemy_turn_queue(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>, // 补全资源引用
+    asset_server: Res<AssetServer>,
     mut queue: ResMut<EnemyActionQueue>,
     mut combat_state: ResMut<CombatState>,
     mut player_query: Query<(&mut Player, &crate::components::Cultivation)>,
@@ -1403,7 +1403,7 @@ fn process_enemy_turn_queue(
     mut effect_events: EventWriter<SpawnEffectEvent>,
     mut screen_events: EventWriter<ScreenEffectEvent>,
     mut attack_events: EventWriter<EnemyAttackEvent>,
-    enemy_sprite_query: Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>, // 加入 Transform
+    enemy_sprite_query: Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
     time: Res<Time>,
 ) {
     if !queue.processing || combat_state.phase != TurnPhase::EnemyTurn {
@@ -1417,107 +1417,100 @@ fn process_enemy_turn_queue(
             let enemy_entity = queue.enemies[queue.current_index];
             
             if let Ok(mut enemy) = enemy_query.get_mut(enemy_entity) {
-                if enemy.hp > 0 {
-                    enemy.start_turn();
-                    let intent = enemy.execute_intent();
-                    let enemy_id = enemy.id;
+                // 1. 实时死亡检查
+                if enemy.hp <= 0 {
+                    info!("【战斗】{} 已伏诛，跳过其回合", enemy.name);
+                    queue.current_index += 1;
+                    queue.timer = Timer::from_seconds(0.1, TimerMode::Once);
+                    return;
+                }
 
-                    info!("【战斗】轮到 {} 行动，意图：{:?}", enemy.name, intent);
+                // 2. 正常回合启动
+                enemy.start_turn();
+                let intent = enemy.execute_intent();
+                let enemy_id = enemy.id;
+                info!("【战斗】轮到 {} 行动，意图：{:?}", enemy.name, intent);
 
-                    // 1. 触发 3D 动画与特效 (极致可靠性升级)
-                    let mut found_render_entity = false;
-                    for (render_entity, marker, transform) in enemy_sprite_query.iter() {
-                        if marker.id == enemy_id {
-                            found_render_entity = true;
-                            let anim = match intent {
-                                                                EnemyIntent::Attack { .. } => {
-                                                                    match enemy.enemy_type {
-                                                                        EnemyType::DemonicWolf => crate::components::sprite::AnimationState::WolfAttack,
-                                                                        EnemyType::PoisonSpider => {
-                                                                            effect_events.send(SpawnEffectEvent::new(EffectType::WebShot, transform.translation));
-                                                                            
-                                                                            let web_texture = asset_server.load("textures/web_effect.png");
-                                                                            commands.spawn((
-                                                                                crate::components::sprite::Ghost { ttl: 1.5 },
-                                                                                Mesh3d(meshes.add(Rectangle::new(1.5, 1.5))),
-                                                                                MeshMaterial3d(materials.add(StandardMaterial {
-                                                                                    base_color: Color::WHITE,
-                                                                                    base_color_texture: Some(web_texture),
-                                                                                    alpha_mode: AlphaMode::Blend,
-                                                                                    unlit: true,
-                                                                                    ..default()
-                                                                                })),
-                                                                                // 落地后，蛛丝坐标修正
-                                                                                Transform::from_xyz(-3.5, 0.5, 0.3)
-                                                                                    .with_rotation(Quat::from_rotation_z(0.5)),
-                                                                                CombatUiRoot,
-                                                                            ));
-                                                                            crate::components::sprite::AnimationState::SpiderAttack
-                                                                        },
-                                                                        EnemyType::CursedSpirit => crate::components::sprite::AnimationState::SpiritAttack,
-                                        EnemyType::GreatDemon => {
-                                            // 关键修复：turn_count 在 choose_new_intent 里已经加 1 了
-                                            // 所以这里需要 -1 来对应刚刚生成的那个意图
-                                            let cycle_pos = (enemy.turn_count.saturating_sub(1)) % 3;
-                                            match cycle_pos {
-                                                0 => {
-                                                    info!("【系统】BOSS {} 触发：啸天", enemy_id);
-                                                    screen_events.send(ScreenEffectEvent::Shake { trauma: 1.0, decay: 0.5 });
-                                                    crate::components::sprite::AnimationState::BossRoar
-                                                },
-                                                1 => {
-                                                    info!("【系统】BOSS {} 触发：瞬狱杀", enemy_id);
-                                                    crate::components::sprite::AnimationState::BossFrenzy
-                                                },
-                                                _ => {
-                                                    info!("【系统】BOSS {} 触发：聚灵", enemy_id);
-                                                    crate::components::sprite::AnimationState::DemonCast
-                                                },
-                                            }
-                                        },
-                                                                        _ => crate::components::sprite::AnimationState::DemonAttack,
-                                                                    }
-                                                                },
-                                                                // 关键修复：观察、防御、强化等全部触发灵气脉冲效果
-                                                                _ => crate::components::sprite::AnimationState::DemonCast,
-                                                            };                            anim_events.send(CharacterAnimationEvent { target: render_entity, animation: anim });
-                        }
-                    }
-                    
-                    if !found_render_entity {
-                        warn!("【战斗】未能找到敌人 {} 的 3D 渲染实体，动画可能丢失", enemy_id);
-                    }
-
-                    // 2. 结算逻辑
-                    match intent {
-                        EnemyIntent::Attack { damage } => {
-                            if let Ok((mut player, _)) = player_query.get_single_mut() {
-                                let broken = player.block > 0 && damage >= player.block;
-                                player.take_damage(damage);
-                                attack_events.send(EnemyAttackEvent::new(damage, broken));
-                                effect_events.send(SpawnEffectEvent::new(EffectType::Hit, Vec3::new(-3.5, 0.0, 0.2)));
-                                screen_events.send(ScreenEffectEvent::Shake { trauma: 0.4, decay: 4.0 });
-                            }
-                        }
-                        EnemyIntent::Defend { block: _ } => {
-                            effect_events.send(SpawnEffectEvent::new(EffectType::Ice, Vec3::new(2.5, 1.0, 0.2)));
-                        }
-                        EnemyIntent::Debuff { poison, weakness } => {
-                            if let Ok((mut player, _)) = player_query.get_single_mut() {
-                                player.poison += poison;
-                                player.weakness += weakness;
-                            }
-                        }
-                        _ => {}
+                // 3. 触发 3D 动画与特效
+                let mut found_render_entity = false;
+                for (render_entity, marker, transform) in enemy_sprite_query.iter() {
+                    if marker.id == enemy_id {
+                        found_render_entity = true;
+                        let anim = match intent {
+                            EnemyIntent::Attack { .. } => {
+                                match enemy.enemy_type {
+                                    EnemyType::DemonicWolf => crate::components::sprite::AnimationState::WolfAttack,
+                                    EnemyType::PoisonSpider => {
+                                        effect_events.send(SpawnEffectEvent::new(EffectType::WebShot, transform.translation));
+                                        let web_texture = asset_server.load("textures/web_effect.png");
+                                        commands.spawn((
+                                            crate::components::sprite::Ghost { ttl: 1.5 },
+                                            Mesh3d(meshes.add(Rectangle::new(1.5, 1.5))),
+                                            MeshMaterial3d(materials.add(StandardMaterial {
+                                                base_color: Color::WHITE,
+                                                base_color_texture: Some(web_texture),
+                                                alpha_mode: AlphaMode::Blend,
+                                                unlit: true,
+                                                ..default()
+                                            })),
+                                            Transform::from_xyz(-3.5, 0.5, 0.3).with_rotation(Quat::from_rotation_z(0.5)),
+                                            CombatUiRoot,
+                                        ));
+                                        crate::components::sprite::AnimationState::SpiderAttack
+                                    },
+                                    EnemyType::CursedSpirit => crate::components::sprite::AnimationState::SpiritAttack,
+                                    EnemyType::GreatDemon => {
+                                        let cycle_pos = (enemy.turn_count.saturating_sub(1)) % 3;
+                                        match cycle_pos {
+                                            0 => {
+                                                info!("【系统】BOSS {} 触发：啸天", enemy_id);
+                                                screen_events.send(ScreenEffectEvent::Shake { trauma: 1.0, decay: 0.5 });
+                                                crate::components::sprite::AnimationState::BossRoar
+                                            },
+                                            1 => {
+                                                info!("【系统】BOSS {} 触发：瞬狱杀", enemy_id);
+                                                crate::components::sprite::AnimationState::BossFrenzy
+                                            },
+                                            _ => {
+                                                info!("【系统】BOSS {} 触发：聚灵", enemy_id);
+                                                crate::components::sprite::AnimationState::DemonCast
+                                            },
+                                        }
+                                    },
+                                    _ => crate::components::sprite::AnimationState::DemonAttack,
+                                }
+                            },
+                            _ => crate::components::sprite::AnimationState::DemonCast,
+                        };
+                        anim_events.send(CharacterAnimationEvent { target: render_entity, animation: anim });
                     }
                 }
-            }
+                
+                if !found_render_entity {
+                    warn!("【战斗】未能找到敌人 {} 的 3D 渲染实体", enemy_id);
+                }
 
-            // 准备处理下一个敌人
+                // 4. 结算逻辑
+                match intent {
+                    EnemyIntent::Attack { damage } => {
+                        if let Ok((mut player, _)) = player_query.get_single_mut() {
+                            let broken = player.block > 0 && damage >= player.block;
+                            player.take_damage(damage);
+                            attack_events.send(EnemyAttackEvent::new(damage, broken));
+                            effect_events.send(SpawnEffectEvent::new(EffectType::Hit, Vec3::new(-3.5, 0.0, 0.2)));
+                            screen_events.send(ScreenEffectEvent::Shake { trauma: 0.4, decay: 4.0 });
+                        }
+                    }
+                    EnemyIntent::Defend { .. } => {
+                        effect_events.send(SpawnEffectEvent::new(EffectType::Ice, Vec3::new(2.5, 1.0, 0.2)));
+                    }
+                    _ => {}
+                }
+            }
+            
             queue.current_index += 1;
-            queue.timer = Timer::from_seconds(1.2, TimerMode::Once); // 设置 1.2 秒动作间隔
+            queue.timer = Timer::from_seconds(1.2, TimerMode::Once);
         } else {
-            // 所有敌人处理完毕，切回玩家回合
             info!("【战斗】众妖行动结束，轮到修仙者");
             queue.processing = false;
             if let Ok((mut player, _)) = player_query.get_single_mut() {
@@ -1881,59 +1874,55 @@ fn handle_card_play(
     mut draw_pile_query: Query<&mut DrawPile>,
     mut discard_pile_query: Query<&mut DiscardPile>,
     mut enemy_query: Query<&mut Enemy>,
-        mut effect_events: EventWriter<SpawnEffectEvent>,
-        mut screen_events: EventWriter<ScreenEffectEvent>,
-        mut sfx_events: EventWriter<PlaySfxEvent>,
-        mut anim_events: EventWriter<CharacterAnimationEvent>,
-        player_sprite_query: Query<Entity, With<PlayerSpriteMarker>>,
-        enemy_sprite_query: Query<(Entity, &crate::components::sprite::EnemySpriteMarker)>,
-    ) {
-        for (interaction, hand_card) in card_query.iter() {
-            if matches!(interaction, Interaction::Pressed) {
-                let player_energy = if let Ok(player) = player_query.get_single() {
-                    player.energy
-                } else {
-                    0
-                };
-    
-                let card_opt = if let Ok(hand) = hand_query.get_single() {
-                    let card_index = hand.cards.iter().position(|c| c.id == hand_card.card_id);
-                    card_index.map(|i| hand.cards[i].clone())
-                } else {
-                    None
-                };
-    
-                            if let Some(card) = card_opt {
-                                if player_energy >= card.cost {
-                                    info!("打出卡牌: {} (消耗: {})", card.name, card.cost);
-                                    
-                                                        // 触发玩家动画 (Nano Banana 特化判别)
-                                                        if let Ok(player_entity) = player_sprite_query.get_single() {
-                                                            // 1. 只有攻击类卡牌才触发冲刺
-                                                            if card.card_type == CardType::Attack {
-                                                                let anim = if card.name == "御剑术" {
-                                                                    // 御剑术：额外爆发剑气
-                                                                    effect_events.send(SpawnEffectEvent {
-                                                                        effect_type: EffectType::SwordEnergy,
-                                                                        position: Vec3::new(-3.5, 1.0, 0.2), // 玩家大致位置
-                                                                        burst: true, count: 50,
-                                                                    });
-                                                                    crate::components::sprite::AnimationState::ImperialSword
-                                                                } else {
-                                                                    crate::components::sprite::AnimationState::Attack
-                                                                };
-                                    
-                                                                anim_events.send(CharacterAnimationEvent {
-                                                                    target: player_entity,
-                                                                    animation: anim,
-                                                                });
-                                                            }
-                                                        }
-                                    
-                                                        sfx_events.send(PlaySfxEvent::new(SfxType::CardPlay));                    if let Ok(mut player) = player_query.get_single_mut() {
+    mut effect_events: EventWriter<SpawnEffectEvent>,
+    mut screen_events: EventWriter<ScreenEffectEvent>,
+    mut sfx_events: EventWriter<PlaySfxEvent>,
+    mut anim_events: EventWriter<CharacterAnimationEvent>,
+    player_sprite_query: Query<Entity, With<PlayerSpriteMarker>>,
+    enemy_sprite_query: Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
+) {
+    for (interaction, hand_card) in card_query.iter() {
+        if matches!(interaction, Interaction::Pressed) {
+            let player_energy = if let Ok(player) = player_query.get_single() {
+                player.energy
+            } else {
+                0
+            };
+
+            let card_opt = if let Ok(hand) = hand_query.get_single() {
+                let card_index = hand.cards.iter().position(|c| c.id == hand_card.card_id);
+                card_index.map(|i| hand.cards[i].clone())
+            } else {
+                None
+            };
+
+            if let Some(card) = card_opt {
+                if player_energy >= card.cost {
+                    info!("打出卡牌: {} (消耗: {})", card.name, card.cost);
+                    
+                    // 1. 触发玩家动画 (Nano Banana 特化判别)
+                    if let Ok(player_entity) = player_sprite_query.get_single() {
+                        if card.card_type == CardType::Attack {
+                            let anim = if card.name == "御剑术" {
+                                effect_events.send(SpawnEffectEvent::new(EffectType::SwordEnergy, Vec3::new(-3.5, 1.0, 0.2)));
+                                crate::components::sprite::AnimationState::ImperialSword
+                            } else {
+                                crate::components::sprite::AnimationState::Attack
+                            };
+
+                            anim_events.send(CharacterAnimationEvent {
+                                target: player_entity,
+                                animation: anim,
+                            });
+                        }
+                    }
+
+                    sfx_events.send(PlaySfxEvent::new(SfxType::CardPlay));
+                    if let Ok(mut player) = player_query.get_single_mut() {
                         player.energy -= card.cost;
                     }
 
+                    // 2. 应用效果并触发即时死亡检查
                     apply_card_effect(
                         &card.effect,
                         &mut player_query,
@@ -1947,6 +1936,7 @@ fn handle_card_play(
                         &enemy_sprite_query,
                     );
 
+                    // 3. 移出手牌
                     if let Ok(mut hand) = hand_query.get_single_mut() {
                         if let Some(index) = hand.cards.iter().position(|c| c.id == card.id) {
                             let played_card = hand.remove_card(index).unwrap();
@@ -1974,7 +1964,7 @@ fn apply_card_effect(
     effect_events: &mut EventWriter<SpawnEffectEvent>,
     screen_events: &mut EventWriter<ScreenEffectEvent>,
     anim_events: &mut EventWriter<CharacterAnimationEvent>,
-    enemy_sprite_query: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker)>,
+    enemy_sprite_query: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
 ) {
     match effect {
         CardEffect::DealDamage { amount } => {
@@ -1982,24 +1972,32 @@ fn apply_card_effect(
             if let Some(mut enemy) = enemy_query.iter_mut().find(|e| e.hp > 0) {
                 let target_id = enemy.id;
                 enemy.take_damage(*amount);
+                let is_dead = enemy.hp <= 0;
                 info!("【卡牌】对 {} 造成 {} 点伤害，剩余 HP: {}", enemy.name, amount, enemy.hp);
                 
-                // 触发敌人受击动画 (3D 立牌晃动)
-                // 在当前版本中，我们简化匹配：给所有敌人精灵发受击 (如果是单体则以后精细匹配)
-                for (entity, _) in enemy_sprite_query.iter() {
-                    // TODO: 真正的根据 ID 匹配
-                    anim_events.send(CharacterAnimationEvent {
-                        target: entity,
-                        animation: crate::components::sprite::AnimationState::Hit,
-                    });
+                // 触发 3D 表现
+                for (entity, marker, transform) in enemy_sprite_query.iter() {
+                    if marker.id == target_id {
+                        // 在敌人精准位置触发特效
+                        effect_events.send(SpawnEffectEvent::new(EffectType::Fire, transform.translation));
+
+                        if is_dead {
+                            // 精准触发死亡动画
+                            anim_events.send(CharacterAnimationEvent {
+                                target: entity,
+                                animation: crate::components::sprite::AnimationState::Death,
+                            });
+                            info!("【战斗】敌人 {} 灰飞烟灭", enemy.name);
+                        } else {
+                            // 触发受击动画
+                            anim_events.send(CharacterAnimationEvent {
+                                target: entity,
+                                animation: crate::components::sprite::AnimationState::Hit,
+                            });
+                        }
+                    }
                 }
                 
-                // 触发特效
-                effect_events.send(SpawnEffectEvent {
-                    effect_type: EffectType::Fire,
-                    position: Vec3::new(300.0, 50.0, 999.0), 
-                    burst: true, count: 30,
-                });
                 screen_events.send(ScreenEffectEvent::Shake { trauma: 0.35, decay: 5.0 });
             } else {
                 warn!("【战斗】没有存活的目标可供攻击！");
@@ -2016,8 +2014,8 @@ fn apply_card_effect(
             if hit_count > 0 {
                 info!("【卡牌】施展群体杀伤，重创 {} 名妖物", hit_count);
                 
-                // 触发所有敌人受击动画
-                for (entity, _) in enemy_sprite_query.iter() {
+                // 触发敌人受击动画 (3D 立牌晃动)
+                for (entity, _, _) in enemy_sprite_query.iter() {
                     anim_events.send(CharacterAnimationEvent {
                         target: entity,
                         animation: crate::components::sprite::AnimationState::Hit,
