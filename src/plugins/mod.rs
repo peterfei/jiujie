@@ -12,7 +12,8 @@ use crate::components::{
     RelicObtainedEvent, RelicTriggeredEvent, DialogueLine,
     PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker, ParticleEmitter
 };
-use crate::systems::sprite::spawn_character_sprite;
+use crate::components::sprite::{CharacterAssets};
+use crate::systems::sprite::{spawn_character_sprite};
 
 /// 核心游戏插件
 pub struct CorePlugin;
@@ -21,7 +22,7 @@ impl Plugin for CorePlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<GameState>();
         // 应用启动时设置2D相机（用于渲染UI）
-        app.add_systems(Startup, setup_camera);
+        app.add_systems(Startup, (setup_camera, init_character_assets));
         // 初始化胜利延迟计时器
         app.insert_resource(VictoryDelay::new(2.0)); // 延迟2.0秒让粒子特效播放
 
@@ -225,6 +226,12 @@ fn setup_camera(mut commands: Commands) {
     ));
 }
 
+/// 初始化角色资源
+fn init_character_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands.insert_resource(CharacterAssets::load(&asset_server));
+    info!("CharacterAssets 已加载");
+}
+
 /// 设置战斗环境（3D 地板和灯光）
 fn setup_combat_environment(
     mut commands: Commands,
@@ -235,29 +242,41 @@ fn setup_combat_environment(
     commands.spawn((
         Mesh3d(meshes.add(Plane3d::default().mesh().size(20.0, 20.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgba(0.1, 0.2, 0.1, 0.8),
-            perceptual_roughness: 0.5,
+            base_color: Color::srgba(0.05, 0.1, 0.05, 1.0),
+            perceptual_roughness: 0.8,
+            metallic: 0.1,
             ..default()
         })),
-        Transform::from_xyz(0.0, -1.0, 0.0),
-        CombatUiRoot, // 复用清理标记
+        Transform::from_xyz(0.0, -1.5, 0.0), // 地板稍微调低一点
+        CombatUiRoot, 
     ));
 
-    // 2. 环境灯光 (灵光)
+    // 2. 主光源 (模拟太阳/大阵光芒) - 支持阴影
     commands.spawn((
-        PointLight {
-            intensity: 1500.0,
+        DirectionalLight {
             shadows_enabled: true,
-            color: Color::srgb(0.8, 1.0, 0.8),
+            illuminance: 5000.0,
             ..default()
         },
-        Transform::from_xyz(0.0, 4.0, 0.0),
+        Transform::from_xyz(5.0, 10.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+        CombatUiRoot,
+    ));
+
+    // 3. 补充环境灯光 (灵光)
+    commands.spawn((
+        PointLight {
+            intensity: 2000.0,
+            shadows_enabled: false,
+            color: Color::srgb(0.5, 1.0, 0.5),
+            ..default()
+        },
+        Transform::from_xyz(0.0, 3.0, 2.0),
         CombatUiRoot,
     ));
     
     commands.insert_resource(AmbientLight {
-        color: Color::WHITE,
-        brightness: 200.0,
+        color: Color::srgb(0.8, 0.9, 1.0),
+        brightness: 400.0,
     });
 }
 
@@ -1083,12 +1102,13 @@ struct BackToMapButton;
 
 /// 设置战斗UI
 fn setup_combat_ui(
-    mut commands: Commands, 
+    mut commands: Commands,
     asset_server: Res<AssetServer>,
+    character_assets: Res<CharacterAssets>,
     player_deck: Res<PlayerDeck>,
+    enemy_query: Query<&Enemy>,
     mut victory_delay: ResMut<VictoryDelay>,
     player_query: Query<(&Player, &crate::components::Cultivation)>,
-    enemy_query: Query<&Enemy>,
 ) {
     info!("【战斗】进入战场，众妖环伺");
     if victory_delay.active { victory_delay.active = false; victory_delay.elapsed = 0.0; }
@@ -1115,7 +1135,7 @@ fn setup_combat_ui(
             };
             let x_world = 250.0 + (i as f32 - (num_enemies as f32 - 1.0) / 2.0) * 220.0;
             commands.spawn(Enemy::with_type(enemy_id, name, hp, e_type));
-            spawn_character_sprite(&mut commands, CharacterType::NormalEnemy, Vec3::new(x_world, 50.0, 10.0), Vec2::new(100.0, 120.0));
+            spawn_character_sprite(&mut commands, &character_assets, CharacterType::NormalEnemy, Vec3::new(x_world, 50.0, 10.0), Vec2::new(100.0, 120.0));
 
             let ui_left = 640.0 + x_world - 80.0;
             commands.entity(root_entity).with_children(|root| {
@@ -1147,7 +1167,7 @@ fn setup_combat_ui(
         }
     }
 
-    spawn_character_sprite(&mut commands, CharacterType::Player, Vec3::new(-350.0, -80.0, 10.0), Vec2::new(100.0, 140.0));
+    spawn_character_sprite(&mut commands, &character_assets, CharacterType::Player, Vec3::new(-350.0, -80.0, 10.0), Vec2::new(100.0, 140.0));
     commands.insert_resource(CombatState::default());
     let deck_cards = player_deck.cards.clone();
     commands.insert_resource(DeckConfig { starting_deck: deck_cards.clone(), ..default() });

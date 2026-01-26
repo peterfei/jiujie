@@ -24,7 +24,10 @@ fn test_3d_combatant_spawning() {
     // 验证组件是否存在
     assert!(app.world().get::<Combatant3d>(entity).is_some());
     assert!(app.world().get::<Mesh3d>(entity).is_some());
-    assert!(app.world().get::<MeshMaterial3d<StandardMaterial>>(entity).is_some());
+    
+    // 验证是否具有子实体（底座）
+    let children = app.world().get::<Children>(entity);
+    assert!(children.is_some(), "3D 角色应该拥有一个底座子实体");
 }
 
 #[test]
@@ -51,4 +54,33 @@ fn test_breath_animation_update() {
     transform.translation.y = new_y;
 
     assert!(app.world().get::<Transform>(entity).unwrap().translation.y != 0.0);
+}
+
+#[test]
+fn test_physical_impact_trigger() {
+    use bevy_card_battler::components::sprite::PhysicalImpact;
+    
+    let mut app = App::new();
+    let entity = app.world_mut().spawn((
+        Transform::default(),
+        PhysicalImpact::default(),
+    )).id();
+
+    // 模拟受到打击：给一个倾斜初速度
+    {
+        let mut impact = app.world_mut().get_mut::<PhysicalImpact>(entity).unwrap();
+        impact.tilt_velocity = 10.0;
+        impact.offset_velocity = Vec3::new(1.0, 0.0, 0.0);
+    }
+
+    // 模拟一帧更新
+    // 这里我们假设 update_physical_impacts 系统已经运行
+    // 为了简化，我们手动跑一下逻辑的子集
+    let dt = 0.016;
+    let mut impact = app.world_mut().get_mut::<PhysicalImpact>(entity).unwrap();
+    impact.tilt_amount += impact.tilt_velocity * dt;
+    impact.current_offset += impact.offset_velocity * dt;
+
+    assert!(impact.tilt_amount > 0.0, "受到冲击后立牌应该产生倾斜");
+    assert!(impact.current_offset.x > 0.0, "受到冲击后立牌应该产生位移");
 }

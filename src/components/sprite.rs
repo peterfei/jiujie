@@ -133,15 +133,15 @@ pub struct CharacterAssets {
 }
 
 impl CharacterAssets {
-    /// 从资源服务器加载（暂时使用颜色占位）
-    pub fn load(_asset_server: &AssetServer) -> Self {
-        // TODO: 后续加载真实图片资源
+    /// 从资源服务器加载
+    pub fn load(asset_server: &AssetServer) -> Self {
         Self {
-            player_idle: Handle::default(),
-            player_attack: Handle::default(),
-            normal_enemy: Handle::default(),
-            elite_enemy: Handle::default(),
-            boss: Handle::default(),
+            // 暂时映射到我们已有的插画上
+            player_idle: asset_server.load("textures/cards/attack.png"),
+            player_attack: asset_server.load("textures/cards/attack.png"),
+            normal_enemy: asset_server.load("textures/cards/defense.png"),
+            elite_enemy: asset_server.load("textures/cards/defense.png"),
+            boss: asset_server.load("textures/cards/special.png"),
         }
     }
 }
@@ -177,6 +177,30 @@ impl Default for BreathAnimation {
             timer: 0.0,
             frequency: 1.0,
             amplitude: 0.02,
+        }
+    }
+}
+
+/// 物理冲击组件（用于立牌的倾斜和晃动效果）
+#[derive(Component)]
+pub struct PhysicalImpact {
+    /// 当前倾斜角度 (弧度)
+    pub tilt_velocity: f32,
+    /// 当前倾斜量
+    pub tilt_amount: f32,
+    /// 目标位置偏移
+    pub offset_velocity: Vec3,
+    /// 当前位置偏移
+    pub current_offset: Vec3,
+}
+
+impl Default for PhysicalImpact {
+    fn default() -> Self {
+        Self {
+            tilt_velocity: 0.0,
+            tilt_amount: 0.0,
+            offset_velocity: Vec3::ZERO,
+            current_offset: Vec3::ZERO,
         }
     }
 }
