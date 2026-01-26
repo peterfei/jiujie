@@ -53,6 +53,9 @@ fn spawn_ghosts(
                 let mut m = base_mat.clone();
                 // 初始残影亮度降低一点
                 m.base_color.set_alpha(0.4);
+                // 确保残影也是双面的
+                m.cull_mode = None; 
+                m.double_sided = true;
                 materials.add(m)
             } else {
                 material_handle.0.clone()
@@ -116,9 +119,30 @@ fn update_physical_impacts(
         impact.tilt_velocity *= 1.0 - (damping * dt);
         impact.tilt_amount += impact.tilt_velocity * dt;
 
-        // 2. 模拟位置弹簧力 (将位移拉回 0)
-        let pos_spring_k = 6.0; // 大幅降低刚度，允许长距离位移
-        let pos_damping = 4.0;  // 降低阻尼，让位移更顺滑
+        // 3. 模拟位置弹簧力 (将位移拉回 0)
+        let mut pos_spring_k = 10.0; // 稍微提高刚度防止冲出屏幕
+        let mut pos_damping = 5.0;
+        
+        // 3.5 处理动作计时器逻辑 (狼啃咬、蜘蛛吐丝)
+        let mut action_tilt_offset = 0.0;
+        let mut action_pos_offset = Vec3::ZERO;
+        if impact.action_timer > 0.0 {
+            impact.action_timer -= dt;
+            
+            // 贪狼啃咬：精确 2 次大幅度甩头 (频率 12.5)
+            let action_phase = impact.action_timer * 12.5;
+            action_tilt_offset = action_phase.sin() * 0.8;
+            
+            // 增加一点向前的“冲咬”位移感
+            if action_tilt_offset < 0.0 {
+                action_pos_offset.x = action_tilt_offset * 0.3; 
+            }
+            
+            // 啃咬期间极大增加阻尼，锁死位移
+            pos_damping = 20.0;
+            impact.offset_velocity *= 0.8; 
+        }
+
         let pos_force = -pos_spring_k * impact.current_offset;
         impact.offset_velocity += pos_force * dt;
         impact.offset_velocity *= 1.0 - (pos_damping * dt);
@@ -126,29 +150,37 @@ fn update_physical_impacts(
         let delta_offset = impact.offset_velocity * dt;
         impact.current_offset += delta_offset;
 
-        // 3. 模拟特殊回旋弹簧力
-        let rot_spring_k = 40.0;
-        let rot_damping = 5.0;
+        // 3.6 模拟特殊回旋弹簧力 (修复：恢复被误删的角度累加逻辑)
+        let rot_spring_k = 60.0; // 提高刚度，加快回位
+        let rot_damping = 8.0;   // 提高阻尼，减少回位后的余震
         let rot_force = -rot_spring_k * impact.special_rotation;
         impact.special_rotation_velocity += rot_force * dt;
         impact.special_rotation_velocity *= 1.0 - (rot_damping * dt);
-        impact.special_rotation += impact.special_rotation_velocity * dt;
+        // 重要：将角速度应用到角度
+        let delta_rot = impact.special_rotation_velocity * dt;
+        impact.special_rotation += delta_rot;
 
-        // 4. 限制倾斜角度，防止“倒转”
-        impact.tilt_amount = impact.tilt_amount.clamp(-0.8, 0.8);
+        // 4. 限制倾斜角度
+
 
         // 5. 整合呼吸动画 Y 轴偏移
         let breath_cycle = (breath.timer * breath.frequency).sin();
         let breath_y = breath_cycle * 0.05;
 
         // 6. 应用到变换
-        // 旋转：俯视角 (-0.2) * 物理倾斜 (Tilt) * 特殊回旋 (Special)
+        // 动态抑制 Tilt：当有特殊旋转时，减弱 Tilt 的影响，防止“斜着转”导致的倒挂感
+        let tilt_suppression = 1.0 / (1.0 + impact.special_rotation.abs() * 5.0);
+        let effective_tilt = (impact.tilt_amount + action_tilt_offset) * tilt_suppression;
+
+        // 旋转：
+        // - 俯视角 (-0.2) 
+        // - 物理倾斜 (Z轴，受抑制)
+        // - 招式特化 (Y轴自转)
         transform.rotation = Quat::from_rotation_x(-0.2) 
-            * Quat::from_rotation_z(impact.tilt_amount)
-            * Quat::from_rotation_z(impact.special_rotation);
+            * Quat::from_rotation_z(effective_tilt)
+            * Quat::from_rotation_y(impact.special_rotation);
         
-        // 最终位置 = 初始位置 + 物理偏移 + 呼吸偏移
-        transform.translation = impact.home_position + impact.current_offset + Vec3::new(0.0, breath_y, 0.0);
+        transform.translation = impact.home_position + impact.current_offset + action_pos_offset + Vec3::new(0.0, breath_y, 0.0);
     }
 }
 
@@ -163,30 +195,42 @@ fn trigger_hit_feedback(
             
             match event.animation {
                 AnimationState::Hit => {
-                    // 受击：立牌向后猛飞
-                    impact.tilt_velocity = 35.0 * direction; 
-                    impact.offset_velocity = Vec3::new(-3.0 * direction, 0.0, 0.0);
+                    // 受击：力道减半，呈现沉重的顿挫感
+                    impact.tilt_velocity = 15.0 * direction; 
+                    impact.offset_velocity = Vec3::new(-2.0 * direction, 0.0, 0.0);
                 }
                 AnimationState::Attack => {
-                    // 攻击：角色瞬移冲向对手！速度提回 25.0
-                    impact.tilt_velocity = -50.0 * direction;
-                    impact.offset_velocity = Vec3::new(25.0 * direction, 0.0, 0.0);
+                    // 普通攻击：略微削减速度
+                    impact.tilt_velocity = -40.0 * direction;
+                    impact.offset_velocity = Vec3::new(20.0 * direction, 0.0, 0.0);
                 }
                 AnimationState::ImperialSword => {
-                    // 御剑术：极速冲锋 + 270 度暴力回旋
-                    impact.tilt_velocity = -30.0 * direction;
-                    impact.offset_velocity = Vec3::new(32.0 * direction, 0.0, 0.0);
-                    // 给一个强大的回旋初速度 (方向根据角色面向)
-                    impact.special_rotation_velocity = -45.0 * direction; 
+                    // 御剑术：极速冲锋 + 270 度逆时针暴力回旋 (velocity改为正)
+                    impact.tilt_velocity = -10.0 * direction; // 减少 Tilt 初速度，让位给 Y 轴自转
+                    impact.offset_velocity = Vec3::new(28.0 * direction, 0.0, 0.0);
+                    // 极速自转，配合残影形成剑刃风暴
+                    impact.special_rotation_velocity = 80.0 * direction; 
                 }
                 AnimationState::DemonAttack => {
-                    // 妖物突袭：速度稍慢但倾斜幅度极大，展现力量感
-                    impact.tilt_velocity = -25.0 * direction;
-                    impact.offset_velocity = Vec3::new(18.0 * direction, 0.0, 0.0);
+                    // 妖物突袭：更具沉重感
+                    impact.tilt_velocity = -20.0 * direction;
+                    impact.offset_velocity = Vec3::new(12.0 * direction, 0.0, 0.0);
                 }
                 AnimationState::DemonCast => {
-                    // 施展妖术：原地高频震颤
-                    impact.tilt_velocity = 80.0; // 极高角速度产生的震荡效果
+                    // 施展妖术：震颤力道微调
+                    impact.tilt_velocity = 60.0; 
+                }
+                AnimationState::WolfAttack => {
+                    // 嗜血妖狼
+                    impact.tilt_velocity = -25.0 * direction;
+                    impact.offset_velocity = Vec3::new(16.0 * direction, 0.0, 0.0);
+                    impact.action_timer = 1.0; 
+                }
+                AnimationState::SpiderAttack => {
+                    // 剧毒蛛
+                    impact.tilt_velocity = -8.0 * direction;
+                    impact.offset_velocity = Vec3::new(10.0 * direction, 0.0, 0.0);
+                    impact.action_timer = 0.8;
                 }
                 _ => {}
             }
@@ -235,12 +279,12 @@ fn sync_2d_to_3d_render(
             let material = materials.add(StandardMaterial {
                 base_color: Color::WHITE,
                 base_color_texture: Some(char_sprite.texture.clone()),
-                // 移除自发光，改用强光照或完全不发光以保持对比度
                 emissive: LinearRgba::BLACK, 
-                // 禁用反射，防止灯光让立牌发白
                 reflectance: 0.0,
-                // 使用 Mask 模式保持边缘锐利
                 alpha_mode: AlphaMode::Mask(0.5), 
+                // 双重保险：开启双面渲染
+                cull_mode: None,
+                double_sided: true,
                 ..default()
             });
 
@@ -260,13 +304,17 @@ fn sync_2d_to_3d_render(
                     .with_rotation(Quat::from_rotation_x(-0.2)), 
             )).remove::<Sprite>()
             .with_children(|parent| {
-                // 4. 添加物理底座 (圆盘) - 降低亮度
+                // 4. 添加物理底座 (墨翠玉盘) - 优化为半透明发光质感
                 parent.spawn((
-                    Mesh3d(meshes.add(Cylinder::new(0.8, 0.05))),
+                    Mesh3d(meshes.add(Cylinder::new(0.8, 0.02))), // 更薄一点
                     MeshMaterial3d(materials.add(StandardMaterial {
-                        base_color: Color::srgb(0.1, 0.1, 0.1), // 深色底座
-                        metallic: 0.5,
-                        perceptual_roughness: 0.8, // 增加粗糙度，减少反光
+                        // 半透明墨绿色
+                        base_color: Color::srgba(0.0, 0.05, 0.0, 0.4),
+                        // 边缘发光，增加灵气感
+                        emissive: LinearRgba::new(0.0, 0.2, 0.1, 1.0),
+                        metallic: 0.9,
+                        perceptual_roughness: 0.1, // 产生抛光感
+                        alpha_mode: AlphaMode::Blend,
                         ..default()
                     })),
                     Transform::from_xyz(0.0, -char_sprite.size.y / 100.0, 0.0),
@@ -304,7 +352,7 @@ fn update_sprite_animations(
 
                     // 非循环动画结束后，恢复待机状态
                     match sprite.state {
-                        AnimationState::Attack | AnimationState::Hit | AnimationState::ImperialSword | AnimationState::DemonAttack | AnimationState::DemonCast => {
+                        AnimationState::Attack | AnimationState::Hit | AnimationState::ImperialSword | AnimationState::DemonAttack | AnimationState::DemonCast | AnimationState::WolfAttack | AnimationState::SpiderAttack => {
                             sprite.set_idle();
                         }
                         AnimationState::Death => {
@@ -346,6 +394,14 @@ fn handle_animation_events(
                     sprite.set_attack(4, 0.3);
                     info!("角色 {:?} 开始施展妖术", event.target);
                 }
+                AnimationState::WolfAttack => {
+                    sprite.set_attack(10, 1.0); // 狼的啃咬动作较长
+                    info!("角色 {:?} 开始贪狼撕咬", event.target);
+                }
+                AnimationState::SpiderAttack => {
+                    sprite.set_attack(8, 0.8);
+                    info!("角色 {:?} 开始幽蛛吐丝", event.target);
+                }
                 AnimationState::Hit => {
                     sprite.set_hit(3, 0.2); // 3帧，0.2秒
                     info!("角色 {:?} 开始受击动画", event.target);
@@ -366,12 +422,13 @@ fn handle_animation_events(
 /// 创建角色精灵实体（带占位图）
 pub fn spawn_character_sprite(
     commands: &mut Commands,
-    character_assets: &CharacterAssets, // 增加参数
+    character_assets: &CharacterAssets, 
     character_type: CharacterType,
     position: Vec3,
     size: Vec2,
+    enemy_id: Option<u32>, // 增加可选 ID 参数
 ) -> Entity {
-    // 根据角色类型选择颜色和贴图
+    // ... 保持原有逻辑 ...
     let (color, texture) = match character_type {
         CharacterType::Player => (Color::WHITE, character_assets.player_idle.clone()),
         CharacterType::DemonicWolf => (Color::WHITE, character_assets.wolf.clone()),
@@ -387,7 +444,6 @@ pub fn spawn_character_sprite(
         ..default()
     };
 
-    // 根据类型设置不同尺寸
     let sprite_size = match character_type {
         CharacterType::Player => Vec2::new(80.0, 120.0),
         CharacterType::DemonicWolf => Vec2::new(70.0, 100.0),
@@ -396,13 +452,11 @@ pub fn spawn_character_sprite(
         CharacterType::GreatDemon => Vec2::new(150.0, 200.0),
     };
 
-    sprite.custom_size = Some(sprite_size);
-
     let mut entity_cmd = commands.spawn((
         sprite,
         Transform::from_translation(position),
         GlobalTransform::default(),
-        CharacterSprite::new(texture.clone(), sprite_size), // 这里要传入真正的贴图
+        CharacterSprite::new(texture.clone(), sprite_size), 
         SpriteMarker,
     ));
 
@@ -412,7 +466,9 @@ pub fn spawn_character_sprite(
             entity_cmd.insert(PlayerSpriteMarker);
         }
         _ => {
-            entity_cmd.insert(EnemySpriteMarker);
+            if let Some(id) = enemy_id {
+                entity_cmd.insert(EnemySpriteMarker { id });
+            }
         }
     };
 

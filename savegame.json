@@ -259,7 +259,7 @@
         1
       ],
       "unlocked": true,
-      "completed": false
+      "completed": true
     },
     {
       "id": 6,
@@ -602,6 +602,6 @@
       "completed": false
     }
   ],
-  "current_map_node_id": 5,
-  "current_map_layer": 1
+  "current_map_node_id": 9,
+  "current_map_layer": 2
 }

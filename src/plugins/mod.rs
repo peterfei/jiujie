@@ -1186,7 +1186,7 @@ fn setup_combat_ui(
                 EnemyType::CursedSpirit => CharacterType::CursedSpirit,
                 EnemyType::GreatDemon => CharacterType::GreatDemon,
             };
-            spawn_character_sprite(&mut commands, &character_assets, char_type, Vec3::new(x_world, 50.0, 10.0), Vec2::new(100.0, 120.0));
+            spawn_character_sprite(&mut commands, &character_assets, char_type, Vec3::new(x_world, 50.0, 10.0), Vec2::new(100.0, 120.0), Some(enemy_id));
 
             let ui_left = 640.0 + x_world - 80.0;
             commands.entity(root_entity).with_children(|root| {
@@ -1212,7 +1212,7 @@ fn setup_combat_ui(
                 EnemyType::CursedSpirit => CharacterType::CursedSpirit,
                 EnemyType::GreatDemon => CharacterType::GreatDemon,
             };
-            spawn_character_sprite(&mut commands, &character_assets, char_type, Vec3::new(x_world, 50.0, 10.0), Vec2::new(100.0, 120.0));
+            spawn_character_sprite(&mut commands, &character_assets, char_type, Vec3::new(x_world, 50.0, 10.0), Vec2::new(100.0, 120.0), Some(enemy.id));
 
             commands.entity(root_entity).with_children(|root| {
                 root.spawn((
@@ -1227,7 +1227,7 @@ fn setup_combat_ui(
         }
     }
 
-    spawn_character_sprite(&mut commands, &character_assets, CharacterType::Player, Vec3::new(-350.0, -80.0, 10.0), Vec2::new(100.0, 140.0));
+    spawn_character_sprite(&mut commands, &character_assets, CharacterType::Player, Vec3::new(-350.0, -80.0, 10.0), Vec2::new(100.0, 140.0), None);
     commands.insert_resource(CombatState::default());
     let deck_cards = player_deck.cards.clone();
     commands.insert_resource(DeckConfig { starting_deck: deck_cards.clone(), ..default() });
@@ -1371,6 +1371,10 @@ fn handle_combat_button_clicks(
 
 /// 核心系统：逐个处理敌人回合动作
 fn process_enemy_turn_queue(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>, // 补全资源引用
     mut queue: ResMut<EnemyActionQueue>,
     mut combat_state: ResMut<CombatState>,
     mut player_query: Query<(&mut Player, &crate::components::Cultivation)>,
@@ -1379,7 +1383,7 @@ fn process_enemy_turn_queue(
     mut effect_events: EventWriter<SpawnEffectEvent>,
     mut screen_events: EventWriter<ScreenEffectEvent>,
     mut attack_events: EventWriter<EnemyAttackEvent>,
-    enemy_sprite_query: Query<(Entity, &EnemyStatusUi)>, // 利用 UI 映射到 3D 实体
+    enemy_sprite_query: Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>, // 加入 Transform
     time: Res<Time>,
 ) {
     if !queue.processing || combat_state.phase != TurnPhase::EnemyTurn {
@@ -1400,15 +1404,50 @@ fn process_enemy_turn_queue(
 
                     info!("【战斗】轮到 {} 行动，意图：{:?}", enemy.name, intent);
 
-                    // 1. 触发 3D 动画
-                    // 这里我们通过 EnemyStatusUi 查找对应的 3D 渲染实体
-                    for (render_entity, ui) in enemy_sprite_query.iter() {
-                        if ui.enemy_id == enemy_id {
+                    // 1. 触发 3D 动画与特效
+                    // 这里我们通过 EnemySpriteMarker 查找对应的 3D 渲染实体
+                    for (render_entity, marker, transform) in enemy_sprite_query.iter() {
+                        if marker.id == enemy_id {
                             let anim = match intent {
-                                EnemyIntent::Attack { .. } => AnimationState::DemonAttack,
+                                EnemyIntent::Attack { .. } => {
+                                    // Nano Banana 妖兽攻击多样化判别
+                                    match enemy.enemy_type {
+                                        EnemyType::DemonicWolf => crate::components::sprite::AnimationState::WolfAttack,
+                                        EnemyType::PoisonSpider => {
+                                            // 1. 爆发瞬间喷射粒子
+                                            effect_events.send(SpawnEffectEvent::new(
+                                                EffectType::WebShot, 
+                                                transform.translation
+                                            ));
+                                            
+                                            // 2. 在玩家面前生成持久化蛛丝 (加载真实纹理)
+                                            let web_texture = asset_server.load("textures/web_effect.png");
+                                            commands.spawn((
+                                                crate::components::sprite::Ghost { ttl: 1.5 },
+                                                Mesh3d(meshes.add(Rectangle::new(1.5, 1.5))), // 稍微调大一点
+                                                MeshMaterial3d(materials.add(StandardMaterial {
+                                                    base_color: Color::WHITE,
+                                                    base_color_texture: Some(web_texture),
+                                                    alpha_mode: AlphaMode::Blend,
+                                                    unlit: true, // 保持蛛丝的亮白色
+                                                    ..default()
+                                                })),
+                                                Transform::from_xyz(-3.5, 1.2, 0.3) // 略微抬高，对准胸口
+                                                    .with_rotation(Quat::from_rotation_z(0.5)), // 随机旋转一下，更自然
+                                                CombatUiRoot,
+                                            ));
+                                            
+                                            crate::components::sprite::AnimationState::SpiderAttack
+                                        },
+                                        _ => crate::components::sprite::AnimationState::DemonAttack,
+                                    }
+                                },
                                 _ => {
-                                    effect_events.send(SpawnEffectEvent::new(EffectType::DemonAura, Vec3::new(3.0, 1.0, 0.2)));
-                                    AnimationState::DemonCast
+                                    effect_events.send(SpawnEffectEvent::new(
+                                        EffectType::DemonAura, 
+                                        transform.translation + Vec3::new(0.0, 0.5, 0.1)
+                                    ));
+                                    crate::components::sprite::AnimationState::DemonCast
                                 },
                             };
                             anim_events.send(CharacterAnimationEvent { target: render_entity, animation: anim });

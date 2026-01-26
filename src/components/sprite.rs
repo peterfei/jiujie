@@ -102,6 +102,10 @@ pub enum AnimationState {
     ImperialSword,
     /// 妖物突袭 (沉重撞击)
     DemonAttack,
+    /// 嗜血妖狼专属：奔袭撕咬
+    WolfAttack,
+    /// 剧毒蛛专属：爬行吐丝
+    SpiderAttack,
     /// 施展妖术 (蓄力/护盾/强化)
     DemonCast,
     /// 受击
@@ -204,6 +208,8 @@ pub struct PhysicalImpact {
     pub special_rotation: f32,
     /// 招式回旋速度
     pub special_rotation_velocity: f32,
+    /// 动作计时 (用于多阶段招式)
+    pub action_timer: f32,
     /// 目标位置偏移
     pub offset_velocity: Vec3,
     /// 当前位置偏移
@@ -218,6 +224,7 @@ impl Default for PhysicalImpact {
             tilt_amount: 0.0,
             special_rotation: 0.0,
             special_rotation_velocity: 0.0,
+            action_timer: 0.0,
             offset_velocity: Vec3::ZERO,
             current_offset: Vec3::ZERO,
         }
@@ -248,4 +255,6 @@ pub struct PlayerSpriteMarker;
 
 /// 敌人精灵标记
 #[derive(Component)]
-pub struct EnemySpriteMarker;
+pub struct EnemySpriteMarker {
+    pub id: u32,
+}

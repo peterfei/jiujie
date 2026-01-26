@@ -309,6 +309,20 @@ impl EmitterConfig {
         }
     }
 
+    pub fn web_shot() -> Self {
+        Self {
+            lifetime: (0.4, 0.6),
+            size: (3.0, 8.0),
+            start_color: Color::srgba(0.9, 0.9, 1.0, 0.9), // 白色蛛丝
+            end_color: Color::srgba(0.7, 0.7, 0.8, 0.0),
+            speed: (250.0, 400.0), // 极速喷射
+            angle: (std::f32::consts::PI * 0.9, std::f32::consts::PI * 1.1), // 向玩家喷射
+            gravity: Vec2::new(0.0, -20.0),
+            rotation_speed: (0.0, 0.0),
+            shape: ParticleShape::Line,
+        }
+    }
+
     pub fn spawn_particle(&self, position: Vec3) -> Particle {
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -330,7 +344,7 @@ impl EmitterConfig {
 pub enum ParticleShape { Circle, Square, Line, Triangle, Star }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum EffectType { Fire, Ice, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit, SwordEnergy, DemonAura }
+pub enum EffectType { Fire, Ice, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit, SwordEnergy, DemonAura, WebShot }
 
 impl EffectType {
     pub fn config(&self) -> EmitterConfig {
@@ -346,6 +360,7 @@ impl EffectType {
             EffectType::AmbientSpirit => EmitterConfig::ambient_spirit(),
             EffectType::SwordEnergy => EmitterConfig::sword_energy(),
             EffectType::DemonAura => EmitterConfig::demon_aura(),
+            EffectType::WebShot => EmitterConfig::web_shot(),
         }
     }
 }
