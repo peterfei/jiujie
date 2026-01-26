@@ -369,6 +369,30 @@ pub struct VictoryDelay {
     pub duration: f32,
 }
 
+/// 敌人行动序列资源（用于逐个行动）
+#[derive(Resource, Debug, Clone)]
+pub struct EnemyActionQueue {
+    /// 待行动的敌人实体列表
+    pub enemies: Vec<Entity>,
+    /// 当前正在行动的索引
+    pub current_index: usize,
+    /// 动作之间的间隔计时器
+    pub timer: Timer,
+    /// 是否已经处理完所有动作
+    pub processing: bool,
+}
+
+impl Default for EnemyActionQueue {
+    fn default() -> Self {
+        Self {
+            enemies: Vec::new(),
+            current_index: 0,
+            timer: Timer::from_seconds(1.0, TimerMode::Once),
+            processing: false,
+        }
+    }
+}
+
 impl VictoryDelay {
     pub fn new(duration: f32) -> Self {
         Self {

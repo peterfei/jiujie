@@ -179,6 +179,15 @@ fn trigger_hit_feedback(
                     // 给一个强大的回旋初速度 (方向根据角色面向)
                     impact.special_rotation_velocity = -45.0 * direction; 
                 }
+                AnimationState::DemonAttack => {
+                    // 妖物突袭：速度稍慢但倾斜幅度极大，展现力量感
+                    impact.tilt_velocity = -25.0 * direction;
+                    impact.offset_velocity = Vec3::new(18.0 * direction, 0.0, 0.0);
+                }
+                AnimationState::DemonCast => {
+                    // 施展妖术：原地高频震颤
+                    impact.tilt_velocity = 80.0; // 极高角速度产生的震荡效果
+                }
                 _ => {}
             }
         }
@@ -295,7 +304,7 @@ fn update_sprite_animations(
 
                     // 非循环动画结束后，恢复待机状态
                     match sprite.state {
-                        AnimationState::Attack | AnimationState::Hit | AnimationState::ImperialSword => {
+                        AnimationState::Attack | AnimationState::Hit | AnimationState::ImperialSword | AnimationState::DemonAttack | AnimationState::DemonCast => {
                             sprite.set_idle();
                         }
                         AnimationState::Death => {
@@ -328,6 +337,14 @@ fn handle_animation_events(
                 AnimationState::ImperialSword => {
                     sprite.set_attack(8, 0.5); // 御剑术稍长，8帧，0.5秒
                     info!("角色 {:?} 开始御剑术回旋斩", event.target);
+                }
+                AnimationState::DemonAttack => {
+                    sprite.set_attack(6, 0.4); 
+                    info!("角色 {:?} 开始妖术突袭", event.target);
+                }
+                AnimationState::DemonCast => {
+                    sprite.set_attack(4, 0.3);
+                    info!("角色 {:?} 开始施展妖术", event.target);
                 }
                 AnimationState::Hit => {
                     sprite.set_hit(3, 0.2); // 3帧，0.2秒

@@ -10,9 +10,10 @@ use crate::components::{
     ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation, 
     EnemySpriteMarker, VictoryDelay, RelicCollection, Relic, RelicId,
     RelicObtainedEvent, RelicTriggeredEvent, DialogueLine,
-    PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker, ParticleEmitter
+    PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker, ParticleEmitter,
+    EnemyActionQueue
 };
-use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, PlayerSpriteMarker};
+use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, PlayerSpriteMarker, AnimationState};
 use crate::systems::sprite::{spawn_character_sprite};
 
 /// 核心游戏插件
@@ -85,6 +86,7 @@ impl Plugin for MenuPlugin {
         app.init_resource::<CurrentRewardCards>();
         app.init_resource::<CurrentRewardRelic>();
         app.init_resource::<MousePosition>();
+        app.init_resource::<EnemyActionQueue>();
 
 
         // 在进入MainMenu状态时设置主菜单
@@ -123,6 +125,8 @@ impl Plugin for MenuPlugin {
         app.add_systems(Update, update_combat_ui.run_if(in_state(GameState::Combat)));
         // 回合开始时抽牌
         app.add_systems(Update, draw_cards_on_turn_start.run_if(in_state(GameState::Combat)));
+        // 敌人队列处理系统
+        app.add_systems(Update, process_enemy_turn_queue.run_if(in_state(GameState::Combat)));
         // 更新手牌UI
         app.add_systems(Update, update_hand_ui.run_if(in_state(GameState::Combat)));
         // 处理手牌卡片交互（缩放、弹出音效等）
@@ -1316,55 +1320,133 @@ fn handle_combat_button_clicks(
     _commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
     mut combat_state: ResMut<CombatState>,
-    mut player_query: Query<(&mut Player, &crate::components::Cultivation)>,
-    mut enemy_query: Query<&mut Enemy>,
-    mut attack_events: EventWriter<EnemyAttackEvent>,
-    mut effect_events: EventWriter<SpawnEffectEvent>,
-    mut screen_events: EventWriter<ScreenEffectEvent>,
+    mut enemy_query: Query<(Entity, &Enemy)>,
+    mut queue: ResMut<EnemyActionQueue>,
+    mut hand_query: Query<&mut Hand>,
+    mut discard_pile_query: Query<&mut DiscardPile>,
     mut button_queries: ParamSet<(
         Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<EndTurnButton>)>,
         Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<ReturnToMapButton>)>,
     )>,
 ) {
-    for (interaction, mut color) in button_queries.p0().iter_mut() {
+    for (interaction, mut _color) in button_queries.p0().iter_mut() {
         if matches!(interaction, Interaction::Pressed) {
-            info!("【战斗】玩家结束回合，众妖开始行动");
-            combat_state.phase = TurnPhase::EnemyTurn;
+            info!("【战斗】玩家结束回合，队列初始化开始行动");
 
-            for mut enemy in enemy_query.iter_mut() {
-                if enemy.hp <= 0 { continue; }
-                enemy.start_turn();
-                let intent = enemy.execute_intent();
-                match intent {
-                    EnemyIntent::Attack { damage } => {
-                        if let Ok((mut player, _)) = player_query.get_single_mut() {
-                            let broken = player.block > 0 && damage >= player.block;
-                            player.take_damage(damage);
-                            attack_events.send(EnemyAttackEvent::new(damage, broken));
-                            effect_events.send(SpawnEffectEvent::new(EffectType::Hit, Vec3::new(-350.0, -80.0, 999.0)));
-                            
-                            // 触发屏幕特效 (震动 + 红色闪光)
-                            screen_events.send(ScreenEffectEvent::Shake { trauma: 0.4, decay: 4.0 });
-                            screen_events.send(ScreenEffectEvent::Flash { 
-                                color: Color::srgba(1.0, 0.0, 0.0, 0.6), 
-                                duration: 0.15 
-                            });
+            // 1. 立即清空手牌并进入弃牌堆 (更新 UI 及时性修复)
+            if let Ok(mut hand) = hand_query.get_single_mut() {
+                if let Ok(mut discard_pile) = discard_pile_query.get_single_mut() {
+                    while let Some(card) = hand.remove_card(0) {
+                        discard_pile.add_card(card);
+                    }
+                    info!("【战斗】手牌已清空至弃牌堆");
+                }
+            }
+            
+            // 2. 搜集所有存活敌人进入行动队列
+            let mut enemies: Vec<Entity> = enemy_query.iter()
+                .filter(|(_, e)| e.hp > 0)
+                .map(|(entity, _)| entity)
+                .collect();
+            
+            // 排序，确保从左到右行动
+            enemies.sort(); 
+
+            queue.enemies = enemies;
+            queue.current_index = 0;
+            queue.timer = Timer::from_seconds(0.1, TimerMode::Once); // 立即开始第一个动作
+            queue.processing = true;
+
+            combat_state.phase = TurnPhase::EnemyTurn;
+        }
+    }
+
+    // 处理返回地图
+    for (interaction, _) in button_queries.p1().iter() {
+        if matches!(interaction, Interaction::Pressed) {
+            next_state.set(GameState::Map);
+        }
+    }
+}
+
+/// 核心系统：逐个处理敌人回合动作
+fn process_enemy_turn_queue(
+    mut queue: ResMut<EnemyActionQueue>,
+    mut combat_state: ResMut<CombatState>,
+    mut player_query: Query<(&mut Player, &crate::components::Cultivation)>,
+    mut enemy_query: Query<&mut Enemy>,
+    mut anim_events: EventWriter<CharacterAnimationEvent>,
+    mut effect_events: EventWriter<SpawnEffectEvent>,
+    mut screen_events: EventWriter<ScreenEffectEvent>,
+    mut attack_events: EventWriter<EnemyAttackEvent>,
+    enemy_sprite_query: Query<(Entity, &EnemyStatusUi)>, // 利用 UI 映射到 3D 实体
+    time: Res<Time>,
+) {
+    if !queue.processing || combat_state.phase != TurnPhase::EnemyTurn {
+        return;
+    }
+
+    queue.timer.tick(time.delta());
+
+    if queue.timer.finished() {
+        if queue.current_index < queue.enemies.len() {
+            let enemy_entity = queue.enemies[queue.current_index];
+            
+            if let Ok(mut enemy) = enemy_query.get_mut(enemy_entity) {
+                if enemy.hp > 0 {
+                    enemy.start_turn();
+                    let intent = enemy.execute_intent();
+                    let enemy_id = enemy.id;
+
+                    info!("【战斗】轮到 {} 行动，意图：{:?}", enemy.name, intent);
+
+                    // 1. 触发 3D 动画
+                    // 这里我们通过 EnemyStatusUi 查找对应的 3D 渲染实体
+                    for (render_entity, ui) in enemy_sprite_query.iter() {
+                        if ui.enemy_id == enemy_id {
+                            let anim = match intent {
+                                EnemyIntent::Attack { .. } => AnimationState::DemonAttack,
+                                _ => {
+                                    effect_events.send(SpawnEffectEvent::new(EffectType::DemonAura, Vec3::new(3.0, 1.0, 0.2)));
+                                    AnimationState::DemonCast
+                                },
+                            };
+                            anim_events.send(CharacterAnimationEvent { target: render_entity, animation: anim });
                         }
                     }
-                    EnemyIntent::Defend { block } => {
-                        effect_events.send(SpawnEffectEvent::new(EffectType::Ice, Vec3::new(300.0, 50.0, 999.0)));
-                    }
-                    EnemyIntent::Debuff { poison, weakness } => {
-                        if let Ok((mut player, _)) = player_query.get_single_mut() {
-                            player.poison += poison;
-                            player.weakness += weakness;
-                            info!("【战斗】妖物施法：玩家中毒({})/虚弱({})", poison, weakness);
+
+                    // 2. 结算逻辑
+                    match intent {
+                        EnemyIntent::Attack { damage } => {
+                            if let Ok((mut player, _)) = player_query.get_single_mut() {
+                                let broken = player.block > 0 && damage >= player.block;
+                                player.take_damage(damage);
+                                attack_events.send(EnemyAttackEvent::new(damage, broken));
+                                effect_events.send(SpawnEffectEvent::new(EffectType::Hit, Vec3::new(-3.5, 0.0, 0.2)));
+                                screen_events.send(ScreenEffectEvent::Shake { trauma: 0.4, decay: 4.0 });
+                            }
                         }
+                        EnemyIntent::Defend { block: _ } => {
+                            effect_events.send(SpawnEffectEvent::new(EffectType::Ice, Vec3::new(2.5, 1.0, 0.2)));
+                        }
+                        EnemyIntent::Debuff { poison, weakness } => {
+                            if let Ok((mut player, _)) = player_query.get_single_mut() {
+                                player.poison += poison;
+                                player.weakness += weakness;
+                            }
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
             }
 
+            // 准备处理下一个敌人
+            queue.current_index += 1;
+            queue.timer = Timer::from_seconds(1.2, TimerMode::Once); // 设置 1.2 秒动作间隔
+        } else {
+            // 所有敌人处理完毕，切回玩家回合
+            info!("【战斗】众妖行动结束，轮到修仙者");
+            queue.processing = false;
             if let Ok((mut player, _)) = player_query.get_single_mut() {
                 player.start_turn();
             }

@@ -100,6 +100,10 @@ pub enum AnimationState {
     Attack,
     /// 御剑术 (270度回旋斩)
     ImperialSword,
+    /// 妖物突袭 (沉重撞击)
+    DemonAttack,
+    /// 施展妖术 (蓄力/护盾/强化)
+    DemonCast,
     /// 受击
     Hit,
     /// 死亡

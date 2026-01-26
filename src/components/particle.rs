@@ -295,6 +295,20 @@ impl EmitterConfig {
         }
     }
 
+    pub fn demon_aura() -> Self {
+        Self {
+            lifetime: (0.8, 1.2),
+            size: (15.0, 30.0),
+            start_color: Color::srgba(0.3, 0.0, 0.5, 0.8), // 深紫色妖气
+            end_color: Color::srgba(0.0, 0.0, 0.0, 0.0),
+            speed: (50.0, 100.0),
+            angle: (std::f32::consts::PI * 0.4, std::f32::consts::PI * 0.6), // 向上升腾
+            gravity: Vec2::new(0.0, 10.0),
+            rotation_speed: (-2.0, 2.0),
+            shape: ParticleShape::Circle,
+        }
+    }
+
     pub fn spawn_particle(&self, position: Vec3) -> Particle {
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -316,7 +330,7 @@ impl EmitterConfig {
 pub enum ParticleShape { Circle, Square, Line, Triangle, Star }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum EffectType { Fire, Ice, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit, SwordEnergy }
+pub enum EffectType { Fire, Ice, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit, SwordEnergy, DemonAura }
 
 impl EffectType {
     pub fn config(&self) -> EmitterConfig {
@@ -331,6 +345,7 @@ impl EffectType {
             EffectType::ManaFlow => EmitterConfig::mana_flow(),
             EffectType::AmbientSpirit => EmitterConfig::ambient_spirit(),
             EffectType::SwordEnergy => EmitterConfig::sword_energy(),
+            EffectType::DemonAura => EmitterConfig::demon_aura(),
         }
     }
 }

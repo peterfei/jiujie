@@ -65,17 +65,13 @@ fn test_rotation_update() {
 
 #[test]
 fn test_spirit_particle_spawning() {
-    use bevy_card_battler::components::particle::ParticleEmitter;
+    use bevy_card_battler::components::particle::{ParticleEmitter, EmitterConfig};
     
     let mut app = App::new();
     let entity = app.world_mut().spawn((
-        ParticleEmitter {
-            enabled: true,
-            timer: 0.0,
-            rate: 0.1, // 每秒 10 个
-            config: Default::default(),
-        },
+        ParticleEmitter::new(10.0, EmitterConfig::fire()),
+        Transform::default(),
     )).id();
 
-    assert!(app.world().get::<ParticleEmitter>(entity).unwrap().enabled);
+    assert!(app.world().get::<ParticleEmitter>(entity).unwrap().looping);
 }

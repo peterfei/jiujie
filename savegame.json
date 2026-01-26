@@ -1,18 +1,18 @@
 {
   "player": {
-    "hp": 22,
+    "hp": 80,
     "max_hp": 80,
-    "energy": 0,
+    "energy": 3,
     "max_energy": 3,
     "block": 0,
     "gold": 100,
-    "turn": 8,
+    "turn": 1,
     "poison": 0,
     "weakness": 0
   },
   "cultivation": {
     "realm": "QiRefining",
-    "insight": 300
+    "insight": 0
   },
   "deck": [
     {
@@ -26,7 +26,8 @@
           "amount": 6
         }
       },
-      "rarity": "Common"
+      "rarity": "Common",
+      "image_path": "textures/cards/attack.png"
     },
     {
       "id": 1,
@@ -39,7 +40,8 @@
           "amount": 6
         }
       },
-      "rarity": "Common"
+      "rarity": "Common",
+      "image_path": "textures/cards/attack.png"
     },
     {
       "id": 2,
@@ -52,7 +54,8 @@
           "amount": 6
         }
       },
-      "rarity": "Common"
+      "rarity": "Common",
+      "image_path": "textures/cards/attack.png"
     },
     {
       "id": 3,
@@ -65,7 +68,8 @@
           "amount": 6
         }
       },
-      "rarity": "Common"
+      "rarity": "Common",
+      "image_path": "textures/cards/attack.png"
     },
     {
       "id": 4,
@@ -78,7 +82,8 @@
           "amount": 6
         }
       },
-      "rarity": "Common"
+      "rarity": "Common",
+      "image_path": "textures/cards/attack.png"
     },
     {
       "id": 5,
@@ -91,7 +96,8 @@
           "amount": 5
         }
       },
-      "rarity": "Common"
+      "rarity": "Common",
+      "image_path": "textures/cards/defense.png"
     },
     {
       "id": 6,
@@ -104,7 +110,8 @@
           "amount": 5
         }
       },
-      "rarity": "Common"
+      "rarity": "Common",
+      "image_path": "textures/cards/defense.png"
     },
     {
       "id": 7,
@@ -117,7 +124,8 @@
           "amount": 5
         }
       },
-      "rarity": "Common"
+      "rarity": "Common",
+      "image_path": "textures/cards/defense.png"
     },
     {
       "id": 8,
@@ -130,7 +138,8 @@
           "amount": 5
         }
       },
-      "rarity": "Common"
+      "rarity": "Common",
+      "image_path": "textures/cards/defense.png"
     },
     {
       "id": 9,
@@ -144,7 +153,8 @@
           "cards": 1
         }
       },
-      "rarity": "Uncommon"
+      "rarity": "Uncommon",
+      "image_path": "textures/cards/attack.png"
     },
     {
       "id": 10,
@@ -157,7 +167,8 @@
           "amount": 5
         }
       },
-      "rarity": "Uncommon"
+      "rarity": "Uncommon",
+      "image_path": "textures/cards/skill.png"
     },
     {
       "id": 11,
@@ -170,7 +181,8 @@
           "amount": 5
         }
       },
-      "rarity": "Uncommon"
+      "rarity": "Uncommon",
+      "image_path": "textures/cards/skill.png"
     }
   ],
   "relics": [
@@ -247,7 +259,7 @@
         1
       ],
       "unlocked": true,
-      "completed": true
+      "completed": false
     },
     {
       "id": 6,
@@ -257,7 +269,7 @@
         2
       ],
       "unlocked": true,
-      "completed": false
+      "completed": true
     },
     {
       "id": 7,
@@ -287,7 +299,7 @@
         1
       ],
       "unlocked": true,
-      "completed": true
+      "completed": false
     },
     {
       "id": 10,
@@ -316,7 +328,7 @@
         3,
         0
       ],
-      "unlocked": true,
+      "unlocked": false,
       "completed": false
     },
     {
@@ -326,7 +338,7 @@
         3,
         1
       ],
-      "unlocked": true,
+      "unlocked": false,
       "completed": false
     },
     {
@@ -336,7 +348,7 @@
         3,
         2
       ],
-      "unlocked": true,
+      "unlocked": false,
       "completed": false
     },
     {
@@ -346,7 +358,7 @@
         3,
         3
       ],
-      "unlocked": true,
+      "unlocked": false,
       "completed": false
     },
     {
@@ -590,6 +602,6 @@
       "completed": false
     }
   ],
-  "current_map_node_id": 13,
-  "current_map_layer": 3
+  "current_map_node_id": 5,
+  "current_map_layer": 1
 }

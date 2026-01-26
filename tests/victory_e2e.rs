@@ -73,7 +73,7 @@ fn e2e_103_reward_pool_includes_different_rarities() {
     let rewards = CardPool::random_rewards(30);
 
     // 验证包含不同稀有度
-    let has_common = rewards.iter().any(|c| c.rarity == CardRarity::Common, "textures/cards/default.png");
+    let has_common = rewards.iter().any(|c| c.rarity == CardRarity::Common);
     // let has_uncommon = rewards.iter().any(|c| c.rarity == CardRarity::Uncommon, "textures/cards/default.png");
     // let has_rare = rewards.iter().any(|c| c.rarity == CardRarity::Rare, "textures/cards/default.png");
 
@@ -359,7 +359,7 @@ fn e2e_701_multiple_victory_cycle_accumulates_cards() {
     for i in 0..3 {
         let reward_card = Card::new(
             2000 + i, "循环奖励卡", format!("第{}次奖励", i + 1),
-            CardType::Attack, 1, CardEffect::DealDamage { amount: 5 + i as i32 }, CardRarity::Common,
+            CardType::Attack, 1, CardEffect::DealDamage { amount: 5 + i as i32 }, CardRarity::Common, "textures/cards/default.png",
         );
         deck.add_card(reward_card);
     }
@@ -376,7 +376,7 @@ fn e2e_702_death_loses_progress() {
     // 添加奖励卡
     deck.add_card(Card::new(
         7777, "死亡前奖励", "会丢失", CardType::Skill,
-        1, CardEffect::Heal { amount: 10 }, CardRarity::Rare,
+        1, CardEffect::Heal { amount: 10 }, CardRarity::Rare, "textures/cards/default.png",
     ));
 
     let deck_size_with_reward = deck.len();

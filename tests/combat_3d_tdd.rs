@@ -74,12 +74,15 @@ fn test_physical_impact_trigger() {
     }
 
     // 模拟一帧更新
-    // 这里我们假设 update_physical_impacts 系统已经运行
-    // 为了简化，我们手动跑一下逻辑的子集
     let dt = 0.016;
+    let (vel, tilt_vel) = {
+        let impact = app.world().get::<PhysicalImpact>(entity).unwrap();
+        (impact.offset_velocity, impact.tilt_velocity)
+    };
+    
     let mut impact = app.world_mut().get_mut::<PhysicalImpact>(entity).unwrap();
-    impact.tilt_amount += impact.tilt_velocity * dt;
-    impact.current_offset += impact.offset_velocity * dt;
+    impact.tilt_amount += tilt_vel * dt;
+    impact.current_offset += vel * dt;
 
     assert!(impact.tilt_amount > 0.0, "受到冲击后立牌应该产生倾斜");
     assert!(impact.current_offset.x > 0.0, "受到冲击后立牌应该产生位移");
@@ -98,7 +101,7 @@ fn test_squash_and_stretch() {
     )).id();
 
     // 模拟缩放计算：吸气变长，呼气变宽
-    let timer = 1.5;
+    let timer = 1.5f32;
     let breath_factor = (timer * 1.0).sin();
     let stretch = 1.0 + breath_factor * 0.05;
     let squash = 1.0 - breath_factor * 0.03;
