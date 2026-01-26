@@ -61,6 +61,7 @@ pub fn create_test_app() -> App {
     app.add_event::<SpawnEffectEvent>();
     app.add_event::<ScreenEffectEvent>();
     app.add_event::<EnemyAttackEvent>();
+    app.add_event::<bevy_card_battler::components::PlaySfxEvent>();
 
     // 注册核心插件
     app.add_plugins(CorePlugin);
@@ -93,7 +94,7 @@ pub fn create_test_app() -> App {
 /// 切换到Combat状态（init_player 会创建玩家实体，setup_combat_ui 会创建敌人）
 ///
 /// 注意：init_player 系统会确保玩家实体存在
-/// setup_combat_ui 会创建敌人（HP: 30）
+/// setup_combat_ui 会创建敌人（1-3个）
 pub fn setup_combat_scene(app: &mut App) -> Entity {
     // 切换到Combat状态（init_player 会创建玩家，setup_combat_ui 会创建敌人）
     app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::Combat);
@@ -101,10 +102,10 @@ pub fn setup_combat_scene(app: &mut App) -> Entity {
     // 运行状态转换 schedule 以应用状态更改
     app.world_mut().run_schedule(StateTransition);
 
-    // 查找并返回 setup_combat_ui 创建的敌人实体
+    // 查找并返回 setup_combat_ui 创建的第一个敌人实体
     let world = app.world_mut();
     let mut enemy_query = world.query::<(Entity, &Enemy)>();
-    let enemy_entity = enemy_query.get_single(world).unwrap().0;
+    let enemy_entity = enemy_query.iter(world).next().expect("战斗场景初始化失败：找不到敌人实体").0;
 
     enemy_entity
 }

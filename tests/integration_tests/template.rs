@@ -35,19 +35,23 @@ fn example_combat_test() {
     // 1. 创建测试环境
     let mut app = create_test_app();
 
-    // 2. 设置测试场景
+    // 2. 预设敌人以确保测试确定性
+    use bevy_card_battler::components::{Enemy};
+    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30));
+
+    // 3. 设置测试场景
     let enemy_entity = setup_combat_scene(&mut app);
 
-    // 3. 运行初始化帧
+    // 4. 运行初始化帧
     advance_frames(&mut app, 1);
 
-    // 4. 执行测试操作
+    // 5. 执行测试操作
     kill_enemy(&mut app, enemy_entity);
 
-    // 5. 运行后续帧
+    // 6. 运行后续帧
     advance_frames(&mut app, 1);
 
-    // 6. 验证结果
+    // 7. 验证结果
     assert!(is_victory_delay_active(&app), "胜利延迟应该激活");
 
     println!("✓ 测试通过");

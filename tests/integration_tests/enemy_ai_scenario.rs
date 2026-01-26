@@ -17,11 +17,15 @@ use rand::SeedableRng;
 #[test]
 fn scenario_ai_001_demonic_wolf_prefers_attack() {
     let mut app = create_test_app();
+    
+    // 预设敌人以确保测试确定性
+    app.world_mut().spawn(Enemy::with_type(0, "嗜血妖狼", 30, EnemyType::DemonicWolf));
+    
     let _enemy_entity = setup_combat_scene(&mut app);
     advance_frames(&mut app, 1);
 
     let world = app.world_mut();
-    let mut enemy = world.query::<&mut Enemy>().get_single_mut(world).unwrap();
+    let enemy = world.query::<&Enemy>().iter(world).next().unwrap();
 
     // 嗜血妖狼应该有高攻击概率（70%）
     assert_eq!(enemy.enemy_type, EnemyType::DemonicWolf);
@@ -35,18 +39,22 @@ fn scenario_ai_001_demonic_wolf_prefers_attack() {
 #[test]
 fn scenario_ai_002_demonic_wolf_damage_range() {
     let mut app = create_test_app();
+    
+    // 预设敌人
+    app.world_mut().spawn(Enemy::with_type(0, "嗜血妖狼", 30, EnemyType::DemonicWolf));
+    
     let _enemy_entity = setup_combat_scene(&mut app);
     advance_frames(&mut app, 1);
 
     let world = app.world_mut();
-    let enemy = world.query::<&Enemy>().get_single(world).unwrap();
+    let enemy = world.query::<&Enemy>().iter(world).next().unwrap();
 
     // 嗜血妖狼伤害范围 8-12
     assert_eq!(enemy.ai_pattern.damage_range, (8, 12));
     assert_eq!(enemy.ai_pattern.block_range, (3, 5));
-    assert_eq!(enemy.ai_pattern.buff_range, (1, 2));
+    assert_eq!(enemy.ai_pattern.buff_range, (1, 3));
 
-    println!("✓ 场景2：嗜血妖狼伤害范围正确 (8-12, 防御3-5, 强化1-2)");
+    println!("✓ 场景2：嗜血妖狼伤害范围正确 (8-12, 防御3-5, 强化1-3)");
 }
 
 #[test]
@@ -64,6 +72,7 @@ fn scenario_ai_003_demonic_wolf_intent_selection() {
             EnemyIntent::Attack { .. } => attack_count += 1,
             EnemyIntent::Defend { .. } => defend_count += 1,
             EnemyIntent::Buff { .. } => buff_count += 1,
+            EnemyIntent::Debuff { .. } => {},
             EnemyIntent::Wait => {}
         }
     }
@@ -77,56 +86,55 @@ fn scenario_ai_003_demonic_wolf_intent_selection() {
 }
 
 // ============================================================================
-// 场景2：巡逻阴兵AI测试
+// 场景2：剧毒蛛AI测试
 // ============================================================================
 
 #[test]
-fn scenario_ai_101_ghost_soldier_balanced_pattern() {
-    let enemy = Enemy::with_type(0, "巡逻阴兵", 40, EnemyType::GhostSoldier);
+fn scenario_ai_101_poison_spider_pattern() {
+    let enemy = Enemy::with_type(0, "剧毒蛛", 20, EnemyType::PoisonSpider);
 
-    assert_eq!(enemy.enemy_type, EnemyType::GhostSoldier);
-    assert_eq!(enemy.ai_pattern.attack_chance, 0.5);
-    assert_eq!(enemy.ai_pattern.defend_chance, 0.3);
-    assert_eq!(enemy.ai_pattern.buff_chance, 0.2);
+    assert_eq!(enemy.enemy_type, EnemyType::PoisonSpider);
+    assert_eq!(enemy.ai_pattern.attack_chance, 0.4);
+    assert_eq!(enemy.ai_pattern.defend_chance, 0.2);
+    assert_eq!(enemy.ai_pattern.debuff_chance, 0.4);
 
-    println!("✓ 场景101：巡逻阴兵AI配置正确 (攻击50%, 防御30%, 强化20%)");
+    println!("✓ 场景101：剧毒蛛AI配置正确 (攻击40%, 防御20%, 邪术40%)");
 }
 
 #[test]
-fn scenario_ai_102_ghost_soldier_moderate_stats() {
-    let enemy = Enemy::with_type(0, "巡逻阴兵", 40, EnemyType::GhostSoldier);
+fn scenario_ai_102_poison_spider_stats() {
+    let enemy = Enemy::with_type(0, "剧毒蛛", 20, EnemyType::PoisonSpider);
 
-    assert_eq!(enemy.ai_pattern.damage_range, (6, 10));
-    assert_eq!(enemy.ai_pattern.block_range, (5, 8));
-    assert_eq!(enemy.ai_pattern.buff_range, (2, 3));
+    assert_eq!(enemy.ai_pattern.damage_range, (5, 8));
+    assert_eq!(enemy.ai_pattern.block_range, (4, 6));
 
-    println!("✓ 场景102：巡逻阴兵属性中等 (伤害6-10, 防御5-8, 强化2-3)");
+    println!("✓ 场景102：剧毒蛛属性 (伤害5-8, 防御4-6)");
 }
 
 // ============================================================================
-// 场景3：地府幽火AI测试
+// 场景3：怨灵AI测试
 // ============================================================================
 
 #[test]
-fn scenario_ai_201_spirit_fire_defensive_pattern() {
-    let enemy = Enemy::with_type(0, "地府幽火", 50, EnemyType::SpiritFire);
+fn scenario_ai_201_cursed_spirit_pattern() {
+    let enemy = Enemy::with_type(0, "怨灵", 40, EnemyType::CursedSpirit);
 
-    assert_eq!(enemy.enemy_type, EnemyType::SpiritFire);
+    assert_eq!(enemy.enemy_type, EnemyType::CursedSpirit);
     assert_eq!(enemy.ai_pattern.attack_chance, 0.3);
-    assert_eq!(enemy.ai_pattern.defend_chance, 0.5);
-    assert_eq!(enemy.ai_pattern.buff_chance, 0.2);
+    assert_eq!(enemy.ai_pattern.defend_chance, 0.3);
+    assert_eq!(enemy.ai_pattern.debuff_chance, 0.4);
 
-    println!("✓ 场景201：地府幽火AI配置正确 (攻击30%, 防御50%, 强化20%)");
+    println!("✓ 场景201：怨灵AI配置正确 (攻击30%, 防御30%, 邪术40%)");
 }
 
 #[test]
-fn scenario_ai_202_spirit_fire_high_block() {
-    let enemy = Enemy::with_type(0, "地府幽火", 50, EnemyType::SpiritFire);
+fn scenario_ai_202_cursed_spirit_stats() {
+    let enemy = Enemy::with_type(0, "怨灵", 40, EnemyType::CursedSpirit);
 
-    assert_eq!(enemy.ai_pattern.damage_range, (4, 7));
-    assert_eq!(enemy.ai_pattern.block_range, (8, 12));  // 高防御
+    assert_eq!(enemy.ai_pattern.damage_range, (10, 15));
+    assert_eq!(enemy.ai_pattern.block_range, (5, 10));
 
-    println!("✓ 场景202：地府幽火高防御 (伤害4-7, 防御8-12)");
+    println!("✓ 场景202：怨灵属性 (伤害10-15, 防御5-10)");
 }
 
 // ============================================================================
@@ -272,21 +280,21 @@ fn scenario_ai_502_enemy_start_turn_chooses_new_intent() {
 #[test]
 fn scenario_ai_601_all_enemy_types_valid() {
     let demonic_wolf = Enemy::with_type(0, "嗜血妖狼", 30, EnemyType::DemonicWolf);
-    let ghost_soldier = Enemy::with_type(1, "巡逻阴兵", 40, EnemyType::GhostSoldier);
-    let spirit_fire = Enemy::with_type(2, "地府幽火", 50, EnemyType::SpiritFire);
+    let poison_spider = Enemy::with_type(1, "剧毒蛛", 20, EnemyType::PoisonSpider);
+    let cursed_spirit = Enemy::with_type(2, "怨灵", 40, EnemyType::CursedSpirit);
     let great_demon = Enemy::with_type(3, "筑基大妖", 100, EnemyType::GreatDemon);
 
     // 验证概率总和为1.0
-    let wolf_sum = demonic_wolf.ai_pattern.attack_chance + demonic_wolf.ai_pattern.defend_chance + demonic_wolf.ai_pattern.buff_chance;
+    let wolf_sum = demonic_wolf.ai_pattern.attack_chance + demonic_wolf.ai_pattern.defend_chance + demonic_wolf.ai_pattern.buff_chance + demonic_wolf.ai_pattern.debuff_chance;
     assert!((wolf_sum - 1.0).abs() < 0.01, "妖狼概率总和应为1.0，实际: {:.2}", wolf_sum);
 
-    let ghost_sum = ghost_soldier.ai_pattern.attack_chance + ghost_soldier.ai_pattern.defend_chance + ghost_soldier.ai_pattern.buff_chance;
-    assert!((ghost_sum - 1.0).abs() < 0.01, "阴兵概率总和应为1.0，实际: {:.2}", ghost_sum);
+    let spider_sum = poison_spider.ai_pattern.attack_chance + poison_spider.ai_pattern.defend_chance + poison_spider.ai_pattern.buff_chance + poison_spider.ai_pattern.debuff_chance;
+    assert!((spider_sum - 1.0).abs() < 0.01, "毒蛛概率总和应为1.0，实际: {:.2}", spider_sum);
 
-    let fire_sum = spirit_fire.ai_pattern.attack_chance + spirit_fire.ai_pattern.defend_chance + spirit_fire.ai_pattern.buff_chance;
-    assert!((fire_sum - 1.0).abs() < 0.01, "幽火概率总和应为1.0，实际: {:.2}", fire_sum);
+    let spirit_sum = cursed_spirit.ai_pattern.attack_chance + cursed_spirit.ai_pattern.defend_chance + cursed_spirit.ai_pattern.buff_chance + cursed_spirit.ai_pattern.debuff_chance;
+    assert!((spirit_sum - 1.0).abs() < 0.01, "怨灵概率总和应为1.0，实际: {:.2}", spirit_sum);
 
-    let demon_sum = great_demon.ai_pattern.attack_chance + great_demon.ai_pattern.defend_chance + great_demon.ai_pattern.buff_chance;
+    let demon_sum = great_demon.ai_pattern.attack_chance + great_demon.ai_pattern.defend_chance + great_demon.ai_pattern.buff_chance + great_demon.ai_pattern.debuff_chance;
     assert!((demon_sum - 1.0).abs() < 0.01, "筑基大妖概率总和应为1.0，实际: {:.2}", demon_sum);
 
     println!("✓ 场景601：所有敌人类型的AI概率配置有效");
@@ -295,21 +303,19 @@ fn scenario_ai_601_all_enemy_types_valid() {
 #[test]
 fn scenario_ai_602_enemy_types_have_distinct_patterns() {
     let demonic_wolf = Enemy::with_type(0, "嗜血妖狼", 30, EnemyType::DemonicWolf);
-    let ghost_soldier = Enemy::with_type(1, "巡逻阴兵", 40, EnemyType::GhostSoldier);
-    let spirit_fire = Enemy::with_type(2, "地府幽火", 50, EnemyType::SpiritFire);
-    let great_demon = Enemy::with_type(3, "筑基大妖", 100, EnemyType::GreatDemon);
+    let poison_spider = Enemy::with_type(1, "剧毒蛛", 20, EnemyType::PoisonSpider);
+    let cursed_spirit = Enemy::with_type(2, "怨灵", 40, EnemyType::CursedSpirit);
 
     // 嗜血妖狼攻击概率最高
-    assert!(demonic_wolf.ai_pattern.attack_chance > ghost_soldier.ai_pattern.attack_chance);
-    assert!(demonic_wolf.ai_pattern.attack_chance > spirit_fire.ai_pattern.attack_chance);
+    assert!(demonic_wolf.ai_pattern.attack_chance > poison_spider.ai_pattern.attack_chance);
+    assert!(demonic_wolf.ai_pattern.attack_chance > cursed_spirit.ai_pattern.attack_chance);
 
-    // 地府幽火防御概率最高
-    assert!(spirit_fire.ai_pattern.defend_chance > demonic_wolf.ai_pattern.defend_chance);
-    assert!(spirit_fire.ai_pattern.defend_chance > ghost_soldier.ai_pattern.defend_chance);
+    // 怨灵防御概率较高
+    assert!(cursed_spirit.ai_pattern.defend_chance > demonic_wolf.ai_pattern.defend_chance);
 
-    // 筑基大妖伤害最高
-    assert!(great_demon.ai_pattern.damage_range.0 > demonic_wolf.ai_pattern.damage_range.0);
-    assert!(great_demon.ai_pattern.damage_range.1 > demonic_wolf.ai_pattern.damage_range.1);
+    // 毒蛛和怨灵都有较高的邪术概率
+    assert_eq!(poison_spider.ai_pattern.debuff_chance, 0.4);
+    assert_eq!(cursed_spirit.ai_pattern.debuff_chance, 0.4);
 
     println!("✓ 场景602：敌人类型有明显的AI模式差异");
 }

@@ -95,7 +95,7 @@ fn interaction_shop_remove_card_price() {
     // 验证：移除卡牌服务价格正确
     use bevy_card_battler::components::shop::ShopItem;
 
-    let item = ShopItem::RemoveCard;
+    let item = ShopItem::ForgetTechnique;
     assert_eq!(item.get_price(), 50);
 }
 

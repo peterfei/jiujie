@@ -20,7 +20,7 @@ fn bug_turn_order_001_enemy_initial_intent_is_wait() {
     // 检查敌人初始意图
     let initial_intent = {
         let world = app.world_mut();
-        world.query::<&Enemy>().get_single(world).unwrap().intent
+        world.query::<&Enemy>().iter(world).next().unwrap().intent
     };
 
     println!("敌人初始意图: {:?}", initial_intent);
@@ -29,14 +29,14 @@ fn bug_turn_order_001_enemy_initial_intent_is_wait() {
     // 记录初始玩家HP
     let initial_hp = {
         let world = app.world_mut();
-        world.query::<&Player>().get_single(world).unwrap().hp
+        world.query::<&Player>().iter(world).next().unwrap().hp
     };
 
     // 模拟当前代码的错误顺序：先 execute_intent，后 start_turn
     // 执行意图（Wait）
     {
         let world = app.world_mut();
-        if let Ok(mut enemy) = world.query::<&mut Enemy>().get_single_mut(world) {
+        if let Some(mut enemy) = world.query::<&mut Enemy>().iter_mut(world).next() {
             let executed = enemy.execute_intent();
             println!("执行意图（Wait）: {:?}", executed);
         }
@@ -45,7 +45,7 @@ fn bug_turn_order_001_enemy_initial_intent_is_wait() {
     // 检查玩家HP（Wait不应该造成伤害）
     let after_execute_hp = {
         let world = app.world_mut();
-        world.query::<&Player>().get_single(world).unwrap().hp
+        world.query::<&Player>().iter(world).next().unwrap().hp
     };
 
     println!("HP变化: {} -> {}", initial_hp, after_execute_hp);
@@ -54,7 +54,7 @@ fn bug_turn_order_001_enemy_initial_intent_is_wait() {
     // 然后选择新意图
     {
         let world = app.world_mut();
-        if let Ok(mut enemy) = world.query::<&mut Enemy>().get_single_mut(world) {
+        if let Some(mut enemy) = world.query::<&mut Enemy>().iter_mut(world).next() {
             enemy.start_turn();
             let new_intent = enemy.intent;
             println!("选择新意图: {:?}", new_intent);
@@ -62,7 +62,7 @@ fn bug_turn_order_001_enemy_initial_intent_is_wait() {
         }
     }
 
-    println!("❌ BUG确认：敌人执行了Wait意图，而不是新回合的Attack意图");
+    println!("✓ BUG确认测试逻辑正确");
 }
 
 #[test]
@@ -76,13 +76,13 @@ fn bug_turn_order_002_correct_order_should_be_start_then_execute() {
 
     let initial_hp = {
         let world = app.world_mut();
-        world.query::<&Player>().get_single(world).unwrap().hp
+        world.query::<&Player>().iter(world).next().unwrap().hp
     };
 
     // 正确顺序：先 start_turn，再 execute_intent
     {
         let world = app.world_mut();
-        if let Ok(mut enemy) = world.query::<&mut Enemy>().get_single_mut(world) {
+        if let Some(mut enemy) = world.query::<&mut Enemy>().iter_mut(world).next() {
             // 先选择新意图
             enemy.start_turn();
             let new_intent = enemy.intent;
@@ -98,7 +98,7 @@ fn bug_turn_order_002_correct_order_should_be_start_then_execute() {
     // 实际伤害在 handle_combat_button_clicks 中处理
     let final_hp = {
         let world = app.world_mut();
-        world.query::<&Player>().get_single(world).unwrap().hp
+        world.query::<&Player>().iter(world).next().unwrap().hp
     };
 
     println!("HP: {} -> {}", initial_hp, final_hp);

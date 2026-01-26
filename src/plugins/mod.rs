@@ -1040,8 +1040,9 @@ fn setup_combat_ui(
     asset_server: Res<AssetServer>,
     player_deck: Res<PlayerDeck>,
     mut victory_delay: ResMut<VictoryDelay>,
-    player_query: Query<(&Player, &crate::components::Cultivation)>)
-{
+    player_query: Query<(&Player, &crate::components::Cultivation)>,
+    enemy_query: Query<&Enemy>,
+) {
     info!("【战斗】进入战场，众妖环伺");
     if victory_delay.active { victory_delay.active = false; victory_delay.elapsed = 0.0; }
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
@@ -1053,36 +1054,50 @@ fn setup_combat_ui(
     )).id();
 
     // --- 多敌人生成 ---
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-    let num_enemies = rng.gen_range(1..=3);
+    if enemy_query.is_empty() {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let num_enemies = rng.gen_range(1..=3);
 
-    for i in 0..num_enemies {
-        let enemy_id = i as u32;
-        let (name, hp, e_type) = match rng.gen_range(0..3) {
-            0 => ("嗜血妖狼", 30, EnemyType::DemonicWolf),
-            1 => ("剧毒蛛", 20, EnemyType::PoisonSpider),
-            _ => ("怨灵", 40, EnemyType::CursedSpirit),
-        };
-        let x_world = 250.0 + (i as f32 - (num_enemies as f32 - 1.0) / 2.0) * 220.0;
-        commands.spawn(Enemy::with_type(enemy_id, name, hp, e_type));
-        spawn_character_sprite(&mut commands, CharacterType::NormalEnemy, Vec3::new(x_world, 50.0, 10.0), Vec2::new(100.0, 120.0));
+        for i in 0..num_enemies {
+            let enemy_id = i as u32;
+            let (name, hp, e_type) = match rng.gen_range(0..3) {
+                0 => ("嗜血妖狼", 30, EnemyType::DemonicWolf),
+                1 => ("剧毒蛛", 20, EnemyType::PoisonSpider),
+                _ => ("怨灵", 40, EnemyType::CursedSpirit),
+            };
+            let x_world = 250.0 + (i as f32 - (num_enemies as f32 - 1.0) / 2.0) * 220.0;
+            commands.spawn(Enemy::with_type(enemy_id, name, hp, e_type));
+            spawn_character_sprite(&mut commands, CharacterType::NormalEnemy, Vec3::new(x_world, 50.0, 10.0), Vec2::new(100.0, 120.0));
 
-        let ui_left = 640.0 + x_world - 80.0;
-        commands.entity(root_entity).with_children(|root| {
-            root.spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(ui_left), bottom: Val::Px(480.0),
-                    flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default()
-                },
-                EnemyStatusUi { enemy_id },
-            )).with_children(|p| {
-                p.spawn((Text::new(name), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE)));
-                p.spawn((Text::new(format!("HP: {}/{}", hp, hp)), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(Color::srgb(1.0, 0.3, 0.3)), EnemyHpText));
-                p.spawn((Text::new("意图: 观察"), TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() }, TextColor(Color::srgb(1.0, 0.8, 0.4)), EnemyIntentText));
+            let ui_left = 640.0 + x_world - 80.0;
+            commands.entity(root_entity).with_children(|root| {
+                root.spawn((
+                    Node { position_type: PositionType::Absolute, left: Val::Px(ui_left), bottom: Val::Px(480.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() },
+                    EnemyStatusUi { enemy_id },
+                )).with_children(|p| {
+                    p.spawn((Text::new(name), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE)));
+                    p.spawn((Text::new(format!("HP: {}/{}", hp, hp)), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(Color::srgb(1.0, 0.3, 0.3)), EnemyHpText));
+                    p.spawn((Text::new("意图: 观察"), TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() }, TextColor(Color::srgb(1.0, 0.8, 0.4)), EnemyIntentText));
+                });
             });
-        });
+        }
+    } else {
+        info!("【战斗】检测到预设妖兽，跳过随机生成");
+        for enemy in enemy_query.iter() {
+            let x_world = 250.0; // 简化位置
+            let ui_left = 640.0 + x_world - 80.0;
+            commands.entity(root_entity).with_children(|root| {
+                root.spawn((
+                    Node { position_type: PositionType::Absolute, left: Val::Px(ui_left), bottom: Val::Px(480.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() },
+                    EnemyStatusUi { enemy_id: enemy.id },
+                )).with_children(|p| {
+                    p.spawn((Text::new(enemy.name.clone()), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE)));
+                    p.spawn((Text::new(format!("HP: {}/{}", enemy.hp, enemy.max_hp)), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(Color::srgb(1.0, 0.3, 0.3)), EnemyHpText));
+                    p.spawn((Text::new("意图: 观察"), TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() }, TextColor(Color::srgb(1.0, 0.8, 0.4)), EnemyIntentText));
+                });
+            });
+        }
     }
 
     spawn_character_sprite(&mut commands, CharacterType::Player, Vec3::new(-350.0, -80.0, 10.0), Vec2::new(100.0, 140.0));

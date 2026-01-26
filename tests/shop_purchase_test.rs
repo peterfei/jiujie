@@ -33,7 +33,7 @@ fn create_shop_test_app() -> App {
                 CardType::Attack, 1, CardEffect::DealDamage { amount: 6 },
                 CardRarity::Common,
             )),
-            ShopItem::RemoveCard,
+            ShopItem::ForgetTechnique,
         ],
     });
 

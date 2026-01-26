@@ -44,13 +44,13 @@ fn bug_enemy_wait_002_wait_intent_deals_no_damage() {
     // 获取初始玩家HP
     let initial_hp = {
         let world = app.world_mut();
-        world.query::<&Player>().get_single(world).unwrap().hp
+        world.query::<&Player>().iter(world).next().unwrap().hp
     };
 
     // 设置敌人意图为Wait
     {
         let world = app.world_mut();
-        if let Ok(mut enemy) = world.query::<&mut Enemy>().get_single_mut(world) {
+        if let Some(mut enemy) = world.query::<&mut Enemy>().iter_mut(world).next() {
             enemy.intent = EnemyIntent::Wait;
             println!("设置敌人意图为: Wait");
         }
@@ -59,7 +59,7 @@ fn bug_enemy_wait_002_wait_intent_deals_no_damage() {
     // 执行敌人意图（模拟结束回合）
     {
         let world = app.world_mut();
-        if let Ok(mut enemy) = world.query::<&mut Enemy>().get_single_mut(world) {
+        if let Some(mut enemy) = world.query::<&mut Enemy>().iter_mut(world).next() {
             let executed = enemy.execute_intent();
             println!("执行意图: {:?}", executed);
         }
@@ -68,7 +68,7 @@ fn bug_enemy_wait_002_wait_intent_deals_no_damage() {
     // 检查玩家HP是否变化
     let final_hp = {
         let world = app.world_mut();
-        world.query::<&Player>().get_single(world).unwrap().hp
+        world.query::<&Player>().iter(world).next().unwrap().hp
     };
 
     println!("玩家HP: {} -> {}", initial_hp, final_hp);
@@ -90,13 +90,13 @@ fn bug_enemy_wait_003_attack_intent_deals_damage() {
     // 获取初始玩家HP
     let initial_hp = {
         let world = app.world_mut();
-        world.query::<&Player>().get_single(world).unwrap().hp
+        world.query::<&Player>().iter(world).next().unwrap().hp
     };
 
     // 设置敌人意图为Attack
     {
         let world = app.world_mut();
-        if let Ok(mut enemy) = world.query::<&mut Enemy>().get_single_mut(world) {
+        if let Some(mut enemy) = world.query::<&mut Enemy>().iter_mut(world).next() {
             enemy.intent = EnemyIntent::Attack { damage: 10 };
             println!("设置敌人意图为: Attack {{ damage: 10 }}");
         }
@@ -105,7 +105,7 @@ fn bug_enemy_wait_003_attack_intent_deals_damage() {
     // 执行敌人意图
     {
         let world = app.world_mut();
-        if let Ok(mut enemy) = world.query::<&mut Enemy>().get_single_mut(world) {
+        if let Some(mut enemy) = world.query::<&mut Enemy>().iter_mut(world).next() {
             let executed = enemy.execute_intent();
             println!("执行意图: {:?}", executed);
 
@@ -125,12 +125,14 @@ fn bug_enemy_wait_004_ai_probability_sum_check() {
 
     let sum = enemy.ai_pattern.attack_chance
            + enemy.ai_pattern.defend_chance
-           + enemy.ai_pattern.buff_chance;
+           + enemy.ai_pattern.buff_chance
+           + enemy.ai_pattern.debuff_chance;
 
-    println!("嗜血妖狼AI概率总和: attack={:.2}, defend={:.2}, buff={:.2}, sum={:.2}",
+    println!("嗜血妖狼AI概率总和: attack={:.2}, defend={:.2}, buff={:.2}, debuff={:.2}, sum={:.2}",
         enemy.ai_pattern.attack_chance,
         enemy.ai_pattern.defend_chance,
         enemy.ai_pattern.buff_chance,
+        enemy.ai_pattern.debuff_chance,
         sum
     );
 
@@ -165,7 +167,7 @@ fn bug_enemy_wait_005_enemy_choose_new_intent() {
     // 检查意图是否有效（非Wait）
     let intent = {
         let world = app.world_mut();
-        world.query::<&Enemy>().get_single(world).unwrap().intent
+        world.query::<&Enemy>().iter(world).next().unwrap().intent
     };
 
     match intent {
@@ -180,6 +182,9 @@ fn bug_enemy_wait_005_enemy_choose_new_intent() {
         }
         EnemyIntent::Buff { strength } => {
             println!("✓ 敌人选择强化，力量: {}", strength);
+        }
+        EnemyIntent::Debuff { poison, weakness } => {
+            println!("✓ 敌人选择邪术，中毒: {}, 虚弱: {}", poison, weakness);
         }
     }
 }

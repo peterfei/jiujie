@@ -98,7 +98,7 @@ fn interaction_shop_item_purchase_insufficient_gold() {
 #[test]
 fn interaction_shop_remove_card_service_price() {
     // 验证：移除卡牌服务有固定价格
-    let item = ShopItem::RemoveCard;
+    let item = ShopItem::ForgetTechnique;
     assert_eq!(item.get_price(), 50);
 }
 

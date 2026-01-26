@@ -13,8 +13,8 @@ mod tests {
 
     #[test]
     fn test_combat_ui_hierarchy() {
-        use bevy_card_battler::plugins::{CombatUiRoot, PlayerDeck, VictoryDelay};
-        use bevy_card_battler::components::{Player, Cultivation};
+        use bevy_card_battler::plugins::{CombatUiRoot};
+        use bevy_card_battler::components::{Player, Cultivation, PlayerDeck, VictoryDelay};
 
         let mut app = App::new();
         // 模拟最小化插件环境
