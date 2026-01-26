@@ -1752,22 +1752,30 @@ fn handle_card_play(
                                 if player_energy >= card.cost {
                                     info!("打出卡牌: {} (消耗: {})", card.name, card.cost);
                                     
-                                    // 触发玩家攻击动画 (Nano Banana 特化招式)
-                                    if let Ok(player_entity) = player_sprite_query.get_single() {
-                                        let anim = if card.name == "御剑术" {
-                                            crate::components::sprite::AnimationState::ImperialSword
-                                        } else {
-                                            crate::components::sprite::AnimationState::Attack
-                                        };
-                
-                                        anim_events.send(CharacterAnimationEvent {
-                                            target: player_entity,
-                                            animation: anim,
-                                        });
-                                    }
-                
-                                    sfx_events.send(PlaySfxEvent::new(SfxType::CardPlay));
-                    if let Ok(mut player) = player_query.get_single_mut() {
+                                                        // 触发玩家动画 (Nano Banana 特化判别)
+                                                        if let Ok(player_entity) = player_sprite_query.get_single() {
+                                                            // 1. 只有攻击类卡牌才触发冲刺
+                                                            if card.card_type == CardType::Attack {
+                                                                let anim = if card.name == "御剑术" {
+                                                                    // 御剑术：额外爆发剑气
+                                                                    effect_events.send(SpawnEffectEvent {
+                                                                        effect_type: EffectType::SwordEnergy,
+                                                                        position: Vec3::new(-3.5, 1.0, 0.2), // 玩家大致位置
+                                                                        burst: true, count: 50,
+                                                                    });
+                                                                    crate::components::sprite::AnimationState::ImperialSword
+                                                                } else {
+                                                                    crate::components::sprite::AnimationState::Attack
+                                                                };
+                                    
+                                                                anim_events.send(CharacterAnimationEvent {
+                                                                    target: player_entity,
+                                                                    animation: anim,
+                                                                });
+                                                            }
+                                                        }
+                                    
+                                                        sfx_events.send(PlaySfxEvent::new(SfxType::CardPlay));                    if let Ok(mut player) = player_query.get_single_mut() {
                         player.energy -= card.cost;
                     }
 

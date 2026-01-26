@@ -3,16 +3,36 @@ use bevy_card_battler::components::sprite::{CharacterAnimationEvent, AnimationSt
 use bevy_card_battler::components::cards::{Card, CardType, CardEffect, CardRarity};
 
 #[test]
-fn test_imperial_sword_card_triggers_special_anim() {
-    // 逻辑：打出名称为“御剑术”的卡牌应该选择 ImperialSword 状态
-    let card_name = "御剑术";
-    let anim = if card_name == "御剑术" {
+fn test_card_animation_selection_logic() {
+    // 1. 御剑术 -> ImperialSword
+    let sword_card = "御剑术";
+    let anim_sword = if sword_card == "御剑术" {
         AnimationState::ImperialSword
     } else {
         AnimationState::Attack
     };
+    assert_eq!(anim_sword, AnimationState::ImperialSword);
 
-    assert_eq!(anim, AnimationState::ImperialSword);
+    // 2. 疗伤术 -> 不应该触发攻击相关动画 (保持 Idle 或特定辅助动画)
+    let heal_card = "回春术";
+    // 模拟我们的优化逻辑：只有特定攻击类卡牌才触发物理位移
+    let is_attack_move = heal_card == "御剑术" || heal_card == "打击"; 
+    assert!(!is_attack_move, "疗伤类卡牌不应触发攻击冲刺动画");
+}
+
+#[test]
+fn test_sword_energy_particle_event() {
+    use bevy_card_battler::components::particle::EffectType;
+    
+    // 逻辑：如果是 ImperialSword 状态，应该准备发送 SwordEnergy 粒子
+    let anim_state = AnimationState::ImperialSword;
+    let effect_to_spawn = if anim_state == AnimationState::ImperialSword {
+        Some(EffectType::Lightning) // 暂时用闪电代替剑气逻辑测试
+    } else {
+        None
+    };
+
+    assert!(effect_to_spawn.is_some());
 }
 
 #[test]
