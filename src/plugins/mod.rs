@@ -214,16 +214,30 @@ impl Plugin for GamePlugin {
 // 核心系统
 // ============================================================================
 
+use bevy::core_pipeline::tonemapping::Tonemapping;
+
 /// 相机设置
 fn setup_camera(mut commands: Commands) {
+    // 2D 相机 (用于 UI 渲染)
+    commands.spawn((
+        Camera2d,
+        Camera {
+            order: 10, // 确保 UI 永远在最上层
+            clear_color: ClearColorConfig::None,
+            ..default()
+        },
+    ));
+    
     // 3D 相机 (用于战斗场景渲染)
     commands.spawn((
         Camera3d::default(),
         Camera {
             clear_color: ClearColorConfig::Custom(Color::srgba(0.005, 0.02, 0.005, 1.0)),
-            order: 0, // 先画 3D
+            order: 0, 
             ..default()
         },
+        // 关键点：禁用色调映射，还原 2D 贴图的原始高饱和度
+        Tonemapping::None,
         Transform::from_xyz(0.0, 2.5, 8.0).looking_at(Vec3::new(0.0, 0.5, 0.0), Vec3::Y),
         DistanceFog {
             color: Color::srgba(0.005, 0.02, 0.005, 1.0), 
@@ -231,17 +245,6 @@ fn setup_camera(mut commands: Commands) {
                 start: 2.0, 
                 end: 15.0,
             },
-            ..default()
-        },
-    ));
-
-    // 2D 相机 (用于 UI 渲染)
-    commands.spawn((
-        Camera2d,
-        Camera {
-            order: 10, // 确保 UI 永远在最上层
-            // 这里至关重要：不要清除之前 3D 相机的背景，也不要继承它的深度
-            clear_color: ClearColorConfig::None,
             ..default()
         },
     ));
@@ -1171,7 +1174,15 @@ fn setup_combat_ui(
             };
             let x_world = 250.0 + (i as f32 - (num_enemies as f32 - 1.0) / 2.0) * 220.0;
             commands.spawn(Enemy::with_type(enemy_id, name, hp, e_type));
-            spawn_character_sprite(&mut commands, &character_assets, CharacterType::NormalEnemy, Vec3::new(x_world, 50.0, 10.0), Vec2::new(100.0, 120.0));
+
+            // 根据妖兽类型选择渲染类型 (Nano Banana 多样化)
+            let char_type = match e_type {
+                EnemyType::DemonicWolf => CharacterType::DemonicWolf,
+                EnemyType::PoisonSpider => CharacterType::PoisonSpider,
+                EnemyType::CursedSpirit => CharacterType::CursedSpirit,
+                EnemyType::GreatDemon => CharacterType::GreatDemon,
+            };
+            spawn_character_sprite(&mut commands, &character_assets, char_type, Vec3::new(x_world, 50.0, 10.0), Vec2::new(100.0, 120.0));
 
             let ui_left = 640.0 + x_world - 80.0;
             commands.entity(root_entity).with_children(|root| {
@@ -1190,6 +1201,15 @@ fn setup_combat_ui(
         for enemy in enemy_query.iter() {
             let x_world = 250.0; // 简化位置
             let ui_left = 640.0 + x_world - 80.0;
+            
+            let char_type = match enemy.enemy_type {
+                EnemyType::DemonicWolf => CharacterType::DemonicWolf,
+                EnemyType::PoisonSpider => CharacterType::PoisonSpider,
+                EnemyType::CursedSpirit => CharacterType::CursedSpirit,
+                EnemyType::GreatDemon => CharacterType::GreatDemon,
+            };
+            spawn_character_sprite(&mut commands, &character_assets, char_type, Vec3::new(x_world, 50.0, 10.0), Vec2::new(100.0, 120.0));
+
             commands.entity(root_entity).with_children(|root| {
                 root.spawn((
                     Node { position_type: PositionType::Absolute, left: Val::Px(ui_left), bottom: Val::Px(480.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() },

@@ -109,12 +109,14 @@ pub enum AnimationState {
 pub enum CharacterType {
     /// 玩家
     Player,
-    /// 普通敌人
-    NormalEnemy,
-    /// 精英敌人
-    EliteEnemy,
-    /// Boss
-    Boss,
+    /// 嗜血妖狼
+    DemonicWolf,
+    /// 剧毒蛛
+    PoisonSpider,
+    /// 怨灵
+    CursedSpirit,
+    /// 筑基大妖 (BOSS)
+    GreatDemon,
 }
 
 /// 角色资源配置
@@ -124,11 +126,13 @@ pub struct CharacterAssets {
     pub player_idle: Handle<Image>,
     /// 玩家攻击图
     pub player_attack: Handle<Image>,
-    /// 普通敌人图
-    pub normal_enemy: Handle<Image>,
-    /// 精英敌人图
-    pub elite_enemy: Handle<Image>,
-    /// Boss图
+    /// 嗜血妖狼图
+    pub wolf: Handle<Image>,
+    /// 剧毒蛛图
+    pub spider: Handle<Image>,
+    /// 怨灵图
+    pub spirit: Handle<Image>,
+    /// BOSS图
     pub boss: Handle<Image>,
 }
 
@@ -136,12 +140,12 @@ impl CharacterAssets {
     /// 从资源服务器加载
     pub fn load(asset_server: &AssetServer) -> Self {
         Self {
-            // 暂时映射到我们已有的插画上
             player_idle: asset_server.load("textures/cards/attack.png"),
             player_attack: asset_server.load("textures/cards/attack.png"),
-            normal_enemy: asset_server.load("textures/cards/defense.png"),
-            elite_enemy: asset_server.load("textures/cards/defense.png"),
-            boss: asset_server.load("textures/cards/special.png"),
+            wolf: asset_server.load("textures/enemies/wolf.png"),
+            spider: asset_server.load("textures/enemies/spider.png"),
+            spirit: asset_server.load("textures/enemies/spirit.png"),
+            boss: asset_server.load("textures/enemies/boss.png"),
         }
     }
 }
@@ -203,6 +207,13 @@ impl Default for PhysicalImpact {
             current_offset: Vec3::ZERO,
         }
     }
+}
+
+/// 旋转组件（用于法阵等物体的持续旋转）
+#[derive(Component)]
+pub struct Rotating {
+    /// 旋转速度 (弧度/秒)
+    pub speed: f32,
 }
 
 /// 精灵图标记组件

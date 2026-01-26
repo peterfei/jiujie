@@ -130,13 +130,16 @@ fn sync_2d_to_3d_render(
             // 1. 创建角色立牌网格 (3:4 比例)
             let mesh = meshes.add(Rectangle::new(char_sprite.size.x / 50.0, char_sprite.size.y / 50.0));
             
-            // 2. 创建材质 (使用裁剪模式解决遮挡问题)
+            // 2. 创建材质 (还原高对比度和高饱和度)
             let material = materials.add(StandardMaterial {
                 base_color: Color::WHITE,
                 base_color_texture: Some(char_sprite.texture.clone()),
-                // 使用 Mask 模式可以让边缘非常干净，杜绝半透明重叠导致的黑边/遮挡
+                // 移除自发光，改用强光照或完全不发光以保持对比度
+                emissive: LinearRgba::BLACK, 
+                // 禁用反射，防止灯光让立牌发白
+                reflectance: 0.0,
+                // 使用 Mask 模式保持边缘锐利
                 alpha_mode: AlphaMode::Mask(0.5), 
-                emissive: LinearRgba::new(0.5, 0.5, 0.5, 1.0), 
                 ..default()
             });
 
@@ -255,9 +258,10 @@ pub fn spawn_character_sprite(
     // 根据角色类型选择颜色和贴图
     let (color, texture) = match character_type {
         CharacterType::Player => (Color::WHITE, character_assets.player_idle.clone()),
-        CharacterType::NormalEnemy => (Color::WHITE, character_assets.normal_enemy.clone()),
-        CharacterType::EliteEnemy => (Color::WHITE, character_assets.elite_enemy.clone()),
-        CharacterType::Boss => (Color::WHITE, character_assets.boss.clone()),
+        CharacterType::DemonicWolf => (Color::WHITE, character_assets.wolf.clone()),
+        CharacterType::PoisonSpider => (Color::WHITE, character_assets.spider.clone()),
+        CharacterType::CursedSpirit => (Color::WHITE, character_assets.spirit.clone()),
+        CharacterType::GreatDemon => (Color::WHITE, character_assets.boss.clone()),
     };
 
     let mut sprite = Sprite {
@@ -270,9 +274,10 @@ pub fn spawn_character_sprite(
     // 根据类型设置不同尺寸
     let sprite_size = match character_type {
         CharacterType::Player => Vec2::new(80.0, 120.0),
-        CharacterType::NormalEnemy => Vec2::new(70.0, 100.0),
-        CharacterType::EliteEnemy => Vec2::new(100.0, 140.0),
-        CharacterType::Boss => Vec2::new(150.0, 200.0),
+        CharacterType::DemonicWolf => Vec2::new(70.0, 100.0),
+        CharacterType::PoisonSpider => Vec2::new(70.0, 100.0),
+        CharacterType::CursedSpirit => Vec2::new(100.0, 140.0),
+        CharacterType::GreatDemon => Vec2::new(150.0, 200.0),
     };
 
     sprite.custom_size = Some(sprite_size);
