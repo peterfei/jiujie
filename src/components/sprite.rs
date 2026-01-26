@@ -249,21 +249,17 @@ impl Default for PhysicalImpact {
     }
 }
 
-/// 旋转组件（用于法阵等物体的持续旋转）
+/// 3D 旋转组件
 #[derive(Component)]
 pub struct Rotating {
-    /// 旋转速度 (弧度/秒)
     pub speed: f32,
 }
 
-/// 残影组件 (Ghost Afterimage)
+/// 法阵标记组件 (用于亮度脉动)
 #[derive(Component)]
-pub struct Ghost {
-    /// 剩余存在时间
-    pub ttl: f32,
-}
+pub struct MagicSealMarker;
 
-/// 精灵图标记组件
+/// 精灵标记
 #[derive(Component)]
 pub struct SpriteMarker;
 
@@ -275,4 +271,11 @@ pub struct PlayerSpriteMarker;
 #[derive(Component)]
 pub struct EnemySpriteMarker {
     pub id: u32,
+}
+
+/// 残影组件 (Ghost Trail)
+#[derive(Component)]
+pub struct Ghost {
+    /// 存活时间
+    pub ttl: f32,
 }

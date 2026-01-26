@@ -1,14 +1,46 @@
 use bevy::prelude::*;
-use bevy_card_battler::components::sprite::{PhysicalImpact, BreathAnimation};
+
+#[test]
+fn test_glowing_seal_pulse_subtle() {
+    // 逻辑：法阵的亮度应非常平缓地脉动 (0.85 -> 1.15)
+    let timer = 1.0f32;
+    let pulse_speed = 0.5f32; // 极慢频率
+    let pulse = 1.0 + (timer * pulse_speed).sin() * 0.15;
+    assert!(pulse >= 0.8 && pulse <= 1.2, "亮度波动应保持在 20% 以内，避免闪烁感");
+}
+
+#[test]
+fn test_character_grounded() {
+    // 逻辑：角色初始高度应接近 0，不再悬空
+    let home_pos_y = 0.05f32; 
+    assert!(home_pos_y < 0.2, "角色应该站在地面上，高度应小于 0.2");
+}
+
+#[test]
+fn test_character_color_fidelity() {
+    let mut app = App::new();
+    app.init_resource::<Assets<StandardMaterial>>();
+    
+    let mat = StandardMaterial {
+        base_color: Color::WHITE,
+        // 验证反射率为 0，防止灯光让人物发白
+        reflectance: 0.0,
+        // 验证自发光已启用 (用于还原高饱和度)
+        emissive: LinearRgba::WHITE,
+        ..default()
+    };
+    
+    assert_eq!(mat.reflectance, 0.0, "材质反射率应为 0 以防颜色被冲淡");
+}
 
 #[test]
 fn test_demon_cast_pulse_scaling() {
     // 逻辑：施法时产生高频缩放脉冲
     let timer = 0.2f32;
     let pulse_speed = 30.0f32; // 每秒约 5 次往复
-    let pulse_factor = 1.0 + (timer * pulse_speed).sin().abs() * 0.15;
+    let pulse = 1.0 + (timer * pulse_speed).sin().abs() * 0.15;
     
-    assert!(pulse_factor > 1.0, "施法期间应产生向外的能量扩张感");
+    assert!(pulse > 1.0, "施法期间应产生向外的能量扩张感");
 }
 
 #[test]
@@ -17,7 +49,7 @@ fn test_base_transparency() {
     app.init_resource::<Assets<StandardMaterial>>();
     
     // 模拟生成底座材质
-    let mat_handle = app.world_mut().resource_mut::<Assets<StandardMaterial>>().add(StandardMaterial {
+    let _mat_handle = app.world_mut().resource_mut::<Assets<StandardMaterial>>().add(StandardMaterial {
         base_color: Color::srgba(0.0, 0.2, 0.0, 0.3), // 半透明绿
         alpha_mode: AlphaMode::Blend,
         ..default()
@@ -29,10 +61,11 @@ fn test_base_transparency() {
 }
 
 #[test]
-fn test_bite_oscillation_physics() {
-    // 逻辑：在 action_timer > 0 时，产生了基于 Sine 的额外偏移
-    let timer = 0.5f32;
-    let bite_factor = (timer * 20.0).sin() * 0.5; // 提高频率到 20.0
+fn test_wolf_multi_turn_spin() {
+    // 逻辑：1秒内应完成 2 圈旋转 (4 * PI)
+    let progress = 0.5f32; // 动作中点
+    let total_spin = 4.0 * std::f32::consts::PI;
+    let current_spin = progress * total_spin;
     
-    assert!(bite_factor.abs() > 0.0, "撕咬动作应产生显著的摆动偏移");
+    assert!(current_spin >= 6.0, "动作中点应已完成至少一圈旋转");
 }

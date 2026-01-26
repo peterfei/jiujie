@@ -4,15 +4,32 @@
 
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
+use crate::states::GameState;
 use crate::components::sprite::{
     CharacterSprite, AnimationState, CharacterType,
     CharacterAnimationEvent, SpriteMarker, PlayerSpriteMarker, EnemySpriteMarker,
-    Combatant3d, BreathAnimation, PhysicalImpact, CharacterAssets, Rotating, Ghost, ActionType
+    Combatant3d, BreathAnimation, PhysicalImpact, CharacterAssets, Rotating, Ghost, ActionType,
+    MagicSealMarker
 };
-use crate::states::GameState;
 
-/// Sprite 渲染插件
 pub struct SpritePlugin;
+
+// ... 其他系统定义保持不变 ...
+
+/// 更新法阵脉动效果 (大作级平缓呼吸)
+fn update_magic_seal_pulse(
+    query: Query<&MeshMaterial3d<StandardMaterial>, With<MagicSealMarker>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    time: Res<Time>,
+) {
+    for material_handle in query.iter() {
+        if let Some(material) = materials.get_mut(material_handle) {
+            // 极低频率 0.5, 微小振幅 0.15
+            let pulse = 1.0 + (time.elapsed_secs() * 0.5).sin() * 0.15;
+            material.emissive = LinearRgba::new(0.0, 0.8 * pulse, 0.3 * pulse, 1.0);
+        }
+    }
+}
 
 impl Plugin for SpritePlugin {
     fn build(&self, app: &mut App) {
@@ -24,13 +41,13 @@ impl Plugin for SpritePlugin {
             (
                 handle_animation_events,
                 trigger_hit_feedback,
-                // 下面这三个必须按顺序执行
                 (
                     sync_2d_to_3d_render,
                     update_breath_animations,
                     update_physical_impacts,
                 ).chain(),
                 update_rotations,
+                update_magic_seal_pulse,
                 spawn_ghosts,
                 cleanup_ghosts,
                 update_sprite_animations,
@@ -204,13 +221,28 @@ fn update_physical_impacts(
         let tilt_suppression = 1.0 / (1.0 + impact.special_rotation.abs() * 5.0);
         let effective_tilt = impact.tilt_amount * tilt_suppression;
 
-        // 关键逻辑：将 action_tilt_offset (狼的撕咬) 移到 Y 轴旋转中
-        // 这样它是水平摆头，而不是绕脚底倒下，从而消除俯视角下的上下抖动错觉
+        // 狼的大作级扑杀逻辑 (空中回旋 + 前倾)
+        let mut wolf_spin = 0.0;
+        let mut wolf_forward_tilt = 0.0;
+        if impact.action_timer > 0.0 && impact.action_type == ActionType::WolfBite {
+            let action_duration = 1.0;
+            let progress = (1.0 - (impact.action_timer / action_duration)).clamp(0.0, 1.0);
+            
+            // 1. 空中旋转 720 度 (2 圈)
+            wolf_spin = progress * std::f32::consts::PI * 4.0;
+            
+            // 2. 增加一点起跳后的前倾感 (基于方向)
+            let dir = impact.action_direction;
+            wolf_forward_tilt = (progress * std::f32::consts::PI).sin() * 0.4 * dir;
+        }
+
+        // 旋转合成：
+        // 增加 wolf_forward_tilt 到 Z 轴，wolf_spin 到 Y 轴
         transform.rotation = Quat::from_rotation_x(-0.2) 
-            * Quat::from_rotation_z(effective_tilt) // 基础受击晃动保留在 Z
-            * Quat::from_rotation_y(impact.special_rotation + action_tilt_offset); // 撕咬和施法震动均使用 Y 轴
+            * Quat::from_rotation_z(effective_tilt + wolf_forward_tilt) 
+            * Quat::from_rotation_y(impact.special_rotation + action_tilt_offset + wolf_spin);
         
-        // 覆盖 translation：这是本帧最后的修改者，确保 Y 轴稳如泰山
+        // 覆盖 translation
         transform.translation = impact.home_position + impact.current_offset + action_pos_offset + Vec3::new(0.0, breath_y, 0.0);
     }
 }
@@ -360,21 +392,26 @@ fn sync_2d_to_3d_render(
             // 1. 创建角色立牌网格 (3:4 比例)
             let mesh = meshes.add(Rectangle::new(char_sprite.size.x / 50.0, char_sprite.size.y / 50.0));
             
-            // 2. 创建材质 (还原高对比度和高饱和度)
+            // 2. 创建材质 (大作级高保真还原：原色输出)
             let material = materials.add(StandardMaterial {
+                // 基础色设为中灰，防止过度曝光
                 base_color: Color::WHITE,
                 base_color_texture: Some(char_sprite.texture.clone()),
-                emissive: LinearRgba::BLACK, 
+                // 核心：使用自发光纹理还原插画的高饱和度色彩，不受环境光干扰
+                emissive: LinearRgba::WHITE, 
+                emissive_texture: Some(char_sprite.texture.clone()),
+                // 彻底禁用反射，解决“发灰”问题
                 reflectance: 0.0,
+                metallic: 0.0,
+                perceptual_roughness: 1.0,
                 alpha_mode: AlphaMode::Mask(0.5), 
-                // 双重保险：开启双面渲染
                 cull_mode: None,
                 double_sided: true,
                 ..default()
             });
 
-            // 3. 构造 3D 纸片人
-            let home_pos = Vec3::new(x_3d, 1.0, z_3d + 0.1);
+            // 3. 构造 3D 纸片人 (落地修正：高度设为 0.05)
+            let home_pos = Vec3::new(x_3d, 0.05, z_3d + 0.1);
             commands.entity(entity).insert((
                 Combatant3d { facing_right: true },
                 BreathAnimation::default(),
@@ -393,18 +430,17 @@ fn sync_2d_to_3d_render(
             .with_children(|parent| {
                 // 4. 添加物理底座 (墨翠玉盘) - 优化为半透明发光质感
                 parent.spawn((
-                    Mesh3d(meshes.add(Cylinder::new(0.8, 0.02))), // 更薄一点
+                    Mesh3d(meshes.add(Cylinder::new(0.8, 0.02))), 
                     MeshMaterial3d(materials.add(StandardMaterial {
-                        // 半透明墨绿色
                         base_color: Color::srgba(0.0, 0.05, 0.0, 0.4),
-                        // 边缘发光，增加灵气感
                         emissive: LinearRgba::new(0.0, 0.2, 0.1, 1.0),
                         metallic: 0.9,
-                        perceptual_roughness: 0.1, // 产生抛光感
+                        perceptual_roughness: 0.1, 
                         alpha_mode: AlphaMode::Blend,
                         ..default()
                     })),
-                    Transform::from_xyz(0.0, -char_sprite.size.y / 100.0, 0.0),
+                    // 落地后，底座位置修正 (刚好贴地)
+                    Transform::from_xyz(0.0, -0.02, 0.0),
                 ));
             });
         }

@@ -9,11 +9,10 @@ use crate::components::{
     SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, 
     ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation, 
     EnemySpriteMarker, VictoryDelay, RelicCollection, Relic, RelicId,
-    RelicObtainedEvent, RelicTriggeredEvent, DialogueLine,
-    PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker, ParticleEmitter,
-    EnemyActionQueue
+    EnemyActionQueue, RelicObtainedEvent, RelicTriggeredEvent,
+    ParticleEmitter, PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker, DialogueLine,
 };
-use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, PlayerSpriteMarker, AnimationState};
+use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, PlayerSpriteMarker, AnimationState, Ghost, MagicSealMarker};
 use crate::systems::sprite::{spawn_character_sprite};
 
 /// 核心游戏插件
@@ -232,22 +231,21 @@ fn setup_camera(mut commands: Commands) {
         },
     ));
     
-    // 3D 相机 (用于战斗场景渲染)
+    // 3. 3D 相机 (大作级视角：低仰角 + 深度雾)
     commands.spawn((
         Camera3d::default(),
         Camera {
-            clear_color: ClearColorConfig::Custom(Color::srgba(0.005, 0.02, 0.005, 1.0)),
+            clear_color: ClearColorConfig::Custom(Color::srgba(0.01, 0.005, 0.02, 1.0)),
             order: 0, 
             ..default()
         },
-        // 关键点：禁用色调映射，还原 2D 贴图的原始高饱和度
         Tonemapping::None,
-        Transform::from_xyz(0.0, 2.5, 8.0).looking_at(Vec3::new(0.0, 0.5, 0.0), Vec3::Y),
+        Transform::from_xyz(0.0, 4.5, 10.0).looking_at(Vec3::new(0.0, 1.0, 0.0), Vec3::Y),
         DistanceFog {
-            color: Color::srgba(0.005, 0.02, 0.005, 1.0), 
+            color: Color::srgba(0.01, 0.005, 0.02, 1.0), // 幽邃的紫色雾气
             falloff: FogFalloff::Linear {
-                start: 2.0, 
-                end: 15.0,
+                start: 5.0, 
+                end: 25.0,
             },
             ..default()
         },
@@ -269,50 +267,62 @@ fn setup_combat_environment(
 ) {
     let floor_texture = asset_server.load("textures/magic_circle.png");
 
-    // 1. 聚灵法阵地板 (3D 平面)
+    // 1. 聚灵法阵地板 (3D 平面) - 强化发光
     commands.spawn((
         Mesh3d(meshes.add(Plane3d::default().mesh().size(20.0, 20.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgba(1.0, 1.0, 1.0, 0.9),
+            base_color: Color::srgba(1.0, 1.0, 1.0, 0.95),
             base_color_texture: Some(floor_texture.clone()),
-            // 让法阵发光
-            emissive: LinearRgba::new(0.0, 0.8, 0.3, 1.0),
-            perceptual_roughness: 1.0,
-            // 使用 Opaque 模式配合纹理 Alpha 处理，可以获得最稳定的深度排序
+            emissive: LinearRgba::new(0.0, 1.2, 0.5, 1.0), // 初始更亮
+            perceptual_roughness: 0.8,
             alpha_mode: AlphaMode::Blend,
             ..default()
         })),
         Transform::from_xyz(0.0, -1.5, 0.0), 
         CombatUiRoot, 
-        Rotating { speed: 0.05 }, // 进一步降低速度，使其更加沉稳
+        Rotating { speed: 0.05 },
+        MagicSealMarker, // 标记用于脉动效果
     ));
 
-    // 2. 主光源 (模拟太阳/大阵光芒) - 支持阴影
+    // 2. 主光源 (模拟太阳/大阵光芒)
     commands.spawn((
         DirectionalLight {
             shadows_enabled: true,
-            illuminance: 5000.0,
+            illuminance: 4000.0,
             ..default()
         },
         Transform::from_xyz(5.0, 10.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
         CombatUiRoot,
     ));
 
-    // 3. 补充环境灯光 (灵光) - 稍微调亮一点以显出雾气
+    // 3. 局部氛围光源 - 增加电影感
+    // 玩家位光
     commands.spawn((
         PointLight {
-            intensity: 4000.0,
-            shadows_enabled: false,
-            color: Color::srgb(0.4, 0.8, 0.4),
+            intensity: 150000.0,
+            range: 15.0,
+            color: Color::srgb(0.3, 0.5, 1.0),
             ..default()
         },
-        Transform::from_xyz(0.0, 4.0, 4.0),
+        Transform::from_xyz(-4.5, 3.0, 2.0),
+        CombatUiRoot,
+    ));
+
+    // 敌人位光
+    commands.spawn((
+        PointLight {
+            intensity: 120000.0,
+            range: 12.0,
+            color: Color::srgb(1.0, 0.2, 0.3),
+            ..default()
+        },
+        Transform::from_xyz(4.5, 3.0, 2.0),
         CombatUiRoot,
     ));
     
     commands.insert_resource(AmbientLight {
-        color: Color::srgb(0.5, 0.6, 0.7),
-        brightness: 150.0, // 降低环境光，增加对比度
+        color: Color::srgb(0.1, 0.1, 0.1), 
+        brightness: 20.0, // 降低到极低，主要靠点光源和自发光
     });
 
     // 4. 环境灵气粒子
@@ -1427,8 +1437,9 @@ fn process_enemy_turn_queue(
                                                     unlit: true,
                                                     ..default()
                                                 })),
-                                                Transform::from_xyz(-3.5, 1.2, 0.3)
-                                                    .with_rotation(Quat::from_rotation_z(0.5)),
+                                            // 落地后，蛛丝坐标修正 (从 1.2 降到 0.5)
+                                            Transform::from_xyz(-3.5, 0.5, 0.3)
+                                                .with_rotation(Quat::from_rotation_z(0.5)),
                                                 CombatUiRoot,
                                             ));
                                             crate::components::sprite::AnimationState::SpiderAttack
