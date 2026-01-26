@@ -1538,10 +1538,10 @@ fn update_hand_ui(
                             card_ui.spawn((
                                 ImageNode::new(asset_server.load(card.image_path.clone())),
                                 Node {
-                                    width: Val::Px(85.0),
-                                    height: Val::Px(65.0),
+                                    width: Val::Px(80.0),
+                                    height: Val::Px(105.0),
                                     border: UiRect::all(Val::Px(1.0)),
-                                    margin: UiRect::vertical(Val::Px(2.0)),
+                                    margin: UiRect::vertical(Val::Px(1.0)),
                                     ..default()
                                 },
                                 BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.2)),
@@ -2012,8 +2012,8 @@ fn create_reward_card(parent: &mut ChildBuilder, card: &Card, _index: usize, ass
         parent.spawn((
             ImageNode::new(asset_server.load(card.image_path.clone())),
             Node {
-                width: Val::Px(150.0),
-                height: Val::Px(100.0),
+                width: Val::Px(160.0),
+                height: Val::Px(120.0),
                 border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },

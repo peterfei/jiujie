@@ -145,8 +145,8 @@ pub fn setup_shop_ui(
                             item_parent.spawn((
                                 ImageNode::new(asset_server.load(card.image_path.clone())),
                                 Node {
-                                    width: Val::Px(140.0),
-                                    height: Val::Px(100.0),
+                                    width: Val::Px(120.0),
+                                    height: Val::Px(140.0),
                                     border: UiRect::all(Val::Px(1.0)),
                                     ..default()
                                 },
