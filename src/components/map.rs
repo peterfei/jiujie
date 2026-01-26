@@ -170,10 +170,15 @@ pub fn generate_map_nodes(config: &MapConfig, _current_layer: u32) -> Vec<MapNod
             // 第一层总是可解锁的
             let unlocked = layer == 0;
 
-            // 随机节点类型（互斥逻辑避免重叠）
-            let node_type = if layer == config.layers - 1 && node_idx == 0 {
-                NodeType::Boss
-            } else if layer == config.layers - 1 {
+            // 随机节点类型（大作级关底唯一 BOSS 逻辑）
+            let node_type = if layer == config.layers - 1 {
+                if node_idx == config.nodes_per_layer / 2 {
+                    NodeType::Boss // 仅中心位置为 BOSS
+                } else {
+                    continue; // 其它节点在该层不生成，确保 BOSS 唯一
+                }
+            } else if layer == config.layers - 2 {
+                // 倒数第二层增加精英怪作为守门人
                 NodeType::Elite
             } else if node_idx % 7 == 0 {
                 // 每7个节点1个商店（避免与每3个休息重叠）

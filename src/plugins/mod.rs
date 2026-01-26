@@ -1162,10 +1162,14 @@ fn setup_combat_ui(
     enemy_query: Query<&Enemy>,
     mut victory_delay: ResMut<VictoryDelay>,
     player_query: Query<(&Player, &crate::components::Cultivation)>,
+    map_progress: Res<MapProgress>, // 引入地图进度
 ) {
     info!("【战斗】进入战场，众妖环伺");
     if victory_delay.active { victory_delay.active = false; victory_delay.elapsed = 0.0; }
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
+
+    // 检查当前节点是否为 Boss
+    let is_boss_node = map_progress.is_at_boss();
 
     // 创建根容器
     let root_entity = commands.spawn((
@@ -1177,12 +1181,13 @@ fn setup_combat_ui(
     if enemy_query.is_empty() {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        let num_enemies = rng.gen_range(1..=3);
+        
+        // 如果是 Boss 节点，固定生成 1 个 BOSS；否则随机生成 1~3 个小怪
+        let num_enemies = if is_boss_node { 1 } else { rng.gen_range(1..=3) };
 
         for i in 0..num_enemies {
             let enemy_id = i as u32;
-            // 临时测试补丁：第一个敌人固定为 BOSS
-            let (name, hp, e_type) = if i == 0 {
+            let (name, hp, e_type) = if is_boss_node {
                 ("幽冥白虎", 150, EnemyType::GreatDemon)
             } else {
                 match rng.gen_range(0..3) {
