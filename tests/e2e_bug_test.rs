@@ -31,7 +31,7 @@ fn e2e_bug_hand_count_display_should_update() {
     assert_eq!(hand.len(), 0, "初始手牌数量应该是0");
 
     // WHEN: 添加卡牌
-    let card = Card::new(0, "测试", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 5 }, CardRarity::Common);
+    let card = Card::new(0, "测试", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 5 }, CardRarity::Common, "textures/cards/default.png");
     let mut hand = hand;
     hand.add_card(card);
 
@@ -51,7 +51,7 @@ fn e2e_bug_hand_count_with_multiple_cards() {
 
     // WHEN: 添加5张牌
     for i in 0..5 {
-        let card = Card::new(i, "测试", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 5 }, CardRarity::Common);
+        let card = Card::new(i, "测试", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 5 }, CardRarity::Common, "textures/cards/default.png");
         hand.add_card(card);
     }
 
@@ -175,9 +175,9 @@ fn e2e_draw_cards_effect_increases_hand_count() {
     let mut app = create_test_app();
 
     let draw_pile_cards = vec![
-        Card::new(0, "抽牌1", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 3 }, CardRarity::Common),
-        Card::new(1, "抽牌2", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 3 }, CardRarity::Common),
-        Card::new(2, "抽牌3", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 3 }, CardRarity::Common),
+        Card::new(0, "抽牌1", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 3 }, CardRarity::Common, "textures/cards/default.png"),
+        Card::new(1, "抽牌2", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 3 }, CardRarity::Common, "textures/cards/default.png"),
+        Card::new(2, "抽牌3", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 3 }, CardRarity::Common, "textures/cards/default.png"),
     ];
 
     let draw_pile_entity = app.world_mut().spawn(DrawPile::new(draw_pile_cards)).id();
@@ -188,8 +188,8 @@ fn e2e_draw_cards_effect_increases_hand_count() {
     {
         let world = app.world_mut();
         let mut hand = world.get_mut::<Hand>(hand_entity).unwrap();
-        hand.add_card(Card::new(10, "初始1", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 5 }, CardRarity::Common));
-        hand.add_card(Card::new(11, "初始2", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 5 }, CardRarity::Common));
+        hand.add_card(Card::new(10, "初始1", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 5 }, CardRarity::Common, "textures/cards/default.png"));
+        hand.add_card(Card::new(11, "初始2", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 5 }, CardRarity::Common, "textures/cards/default.png"));
     }
 
     app.update();
@@ -224,8 +224,8 @@ fn e2e_draw_cards_when_pile_empty_triggers_reshuffle() {
     let mut app = create_test_app();
 
     let discard_cards = vec![
-        Card::new(0, "弃牌1", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 3 }, CardRarity::Common),
-        Card::new(1, "弃牌2", "", CardType::Defense, 1, CardEffect::GainBlock { amount: 5 }, CardRarity::Common),
+        Card::new(0, "弃牌1", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 3 }, CardRarity::Common, "textures/cards/default.png"),
+        Card::new(1, "弃牌2", "", CardType::Defense, 1, CardEffect::GainBlock { amount: 5 }, CardRarity::Common, "textures/cards/default.png"),
     ];
 
     let draw_pile_entity = app.world_mut().spawn(DrawPile::new(vec![])).id();

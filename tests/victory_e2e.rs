@@ -73,9 +73,9 @@ fn e2e_103_reward_pool_includes_different_rarities() {
     let rewards = CardPool::random_rewards(30);
 
     // 验证包含不同稀有度
-    let has_common = rewards.iter().any(|c| c.rarity == CardRarity::Common);
-    // let has_uncommon = rewards.iter().any(|c| c.rarity == CardRarity::Uncommon);
-    // let has_rare = rewards.iter().any(|c| c.rarity == CardRarity::Rare);
+    let has_common = rewards.iter().any(|c| c.rarity == CardRarity::Common, "textures/cards/default.png");
+    // let has_uncommon = rewards.iter().any(|c| c.rarity == CardRarity::Uncommon, "textures/cards/default.png");
+    // let has_rare = rewards.iter().any(|c| c.rarity == CardRarity::Rare, "textures/cards/default.png");
 
     // 至少应该有普通卡
     assert!(has_common, "奖励池应该包含普通卡");
@@ -93,7 +93,7 @@ fn e2e_201_selected_card_adds_to_deck() {
     // 创建一张奖励卡
     let reward_card = Card::new(
         9999, "超级攻击", "造成30点伤害", CardType::Attack,
-        2, CardEffect::DealDamage { amount: 30 }, CardRarity::Rare,
+        2, CardEffect::DealDamage { amount: 30 }, CardRarity::Rare, "textures/cards/default.png"
     );
 
     // 添加到牌组
@@ -115,7 +115,7 @@ fn e2e_202_multiple_rewards_add_to_deck() {
     for i in 0..3 {
         deck.add_card(Card::new(
             5000 + i, "奖励卡", "测试", CardType::Skill,
-            1, CardEffect::Heal { amount: 5 }, CardRarity::Uncommon,
+            1, CardEffect::Heal { amount: 5 }, CardRarity::Uncommon, "textures/cards/default.png",
         ));
     }
 
@@ -129,7 +129,7 @@ fn e2e_203_reward_card_preserved_after_menu_return() {
     // 添加奖励卡
     deck.add_card(Card::new(
         8888, "保留卡", "应该保留", CardType::Defense,
-        1, CardEffect::GainBlock { amount: 10 }, CardRarity::Rare,
+        1, CardEffect::GainBlock { amount: 10 }, CardRarity::Rare, "textures/cards/default.png",
     ));
 
     let size_with_reward = deck.len();

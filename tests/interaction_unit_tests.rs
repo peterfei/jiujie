@@ -74,7 +74,7 @@ fn interaction_shop_item_purchase_sufficient_gold() {
     let card = Card::new(
         1, "测试卡", "描述",
         CardType::Attack, 1, CardEffect::DealDamage { amount: 6 },
-        CardRarity::Common,
+        CardRarity::Common, "textures/cards/default.png"
     );
     let item = ShopItem::Card(card);
 

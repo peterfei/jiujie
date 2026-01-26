@@ -49,7 +49,7 @@ fn setup_combat_with_relics(relics: Vec<Relic>) -> App {
             CardType::Attack,
             1,
             CardEffect::DealDamage { amount: 6 },
-            CardRarity::Common,
+            CardRarity::Common, "textures/cards/default.png",
         ),
     ]));
     app.world_mut().spawn(DiscardPile::new());

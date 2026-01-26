@@ -25,6 +25,8 @@ pub struct Card {
     pub effect: CardEffect,
     /// 稀有度
     pub rarity: CardRarity,
+    /// 插画路径
+    pub image_path: String,
 }
 
 /// 卡牌类型
@@ -94,6 +96,7 @@ impl Card {
         cost: i32,
         effect: CardEffect,
         rarity: CardRarity,
+        image_path: impl Into<String>,
     ) -> Self {
         Self {
             id,
@@ -103,6 +106,7 @@ impl Card {
             cost,
             effect,
             rarity,
+            image_path: image_path.into(),
         }
     }
 
@@ -270,6 +274,7 @@ pub fn create_starting_deck() -> Vec<Card> {
             1,
             CardEffect::DealDamage { amount: 6 },
             CardRarity::Common,
+            "textures/cards/attack.png",
         ),
         Card::new(
             1,
@@ -279,6 +284,7 @@ pub fn create_starting_deck() -> Vec<Card> {
             1,
             CardEffect::DealDamage { amount: 6 },
             CardRarity::Common,
+            "textures/cards/attack.png",
         ),
         Card::new(
             2,
@@ -288,6 +294,7 @@ pub fn create_starting_deck() -> Vec<Card> {
             1,
             CardEffect::DealDamage { amount: 6 },
             CardRarity::Common,
+            "textures/cards/attack.png",
         ),
         Card::new(
             3,
@@ -297,6 +304,7 @@ pub fn create_starting_deck() -> Vec<Card> {
             1,
             CardEffect::DealDamage { amount: 6 },
             CardRarity::Common,
+            "textures/cards/attack.png",
         ),
         Card::new(
             4,
@@ -306,6 +314,7 @@ pub fn create_starting_deck() -> Vec<Card> {
             1,
             CardEffect::DealDamage { amount: 6 },
             CardRarity::Common,
+            "textures/cards/attack.png",
         ),
         // 4张护体（防御）卡 - 金光咒
         Card::new(
@@ -316,6 +325,7 @@ pub fn create_starting_deck() -> Vec<Card> {
             1,
             CardEffect::GainBlock { amount: 5 },
             CardRarity::Common,
+            "textures/cards/defense.png",
         ),
         Card::new(
             6,
@@ -325,6 +335,7 @@ pub fn create_starting_deck() -> Vec<Card> {
             1,
             CardEffect::GainBlock { amount: 5 },
             CardRarity::Common,
+            "textures/cards/defense.png",
         ),
         Card::new(
             7,
@@ -334,6 +345,7 @@ pub fn create_starting_deck() -> Vec<Card> {
             1,
             CardEffect::GainBlock { amount: 5 },
             CardRarity::Common,
+            "textures/cards/defense.png",
         ),
         Card::new(
             8,
@@ -343,6 +355,7 @@ pub fn create_starting_deck() -> Vec<Card> {
             1,
             CardEffect::GainBlock { amount: 5 },
             CardRarity::Common,
+            "textures/cards/defense.png",
         ),
         // 1张剑气卡 - 剑气斩
         Card::new(
@@ -356,6 +369,7 @@ pub fn create_starting_deck() -> Vec<Card> {
                 cards: 1,
             },
             CardRarity::Uncommon,
+            "textures/cards/attack.png",
         ),
         // 2张回复卡 - 回春术
         Card::new(
@@ -366,6 +380,7 @@ pub fn create_starting_deck() -> Vec<Card> {
             1,
             CardEffect::Heal { amount: 5 },
             CardRarity::Uncommon,
+            "textures/cards/skill.png",
         ),
         Card::new(
             11,
@@ -375,6 +390,7 @@ pub fn create_starting_deck() -> Vec<Card> {
             1,
             CardEffect::Heal { amount: 5 },
             CardRarity::Uncommon,
+            "textures/cards/skill.png",
         ),
     ]
 }
@@ -391,22 +407,22 @@ impl CardPool {
     pub fn all_cards() -> Vec<Card> {
         vec![
             // === 普通功法 ===
-            Card::new(100, "雷法·掌心雷", "造成12点雷击伤害", CardType::Attack, 2, CardEffect::DealDamage { amount: 12 }, CardRarity::Common),
-            Card::new(101, "不动明王", "获得8点护盾", CardType::Defense, 1, CardEffect::GainBlock { amount: 8 }, CardRarity::Common),
-            Card::new(102, "疾风刺", "造成4点快速伤害", CardType::Attack, 0, CardEffect::DealDamage { amount: 4 }, CardRarity::Common),
+            Card::new(100, "雷法·掌心雷", "造成12点雷击伤害", CardType::Attack, 2, CardEffect::DealDamage { amount: 12 }, CardRarity::Common, "textures/cards/attack.png"),
+            Card::new(101, "不动明王", "获得8点护盾", CardType::Defense, 1, CardEffect::GainBlock { amount: 8 }, CardRarity::Common, "textures/cards/defense.png"),
+            Card::new(102, "疾风刺", "造成4点快速伤害", CardType::Attack, 0, CardEffect::DealDamage { amount: 4 }, CardRarity::Common, "textures/cards/attack.png"),
             // === 群体功法 ===
-            Card::new(150, "横扫千军", "对所有妖兽造成6点伤害", CardType::Attack, 1, CardEffect::DealAoEDamage { amount: 6 }, CardRarity::Uncommon),
-            Card::new(151, "万剑归宗", "剑气纵横！对全场造成10点伤害", CardType::Attack, 2, CardEffect::DealAoEDamage { amount: 10 }, CardRarity::Rare),
+            Card::new(150, "横扫千军", "对所有妖兽造成6点伤害", CardType::Attack, 1, CardEffect::DealAoEDamage { amount: 6 }, CardRarity::Uncommon, "textures/cards/attack.png"),
+            Card::new(151, "万剑归宗", "剑气纵横！对全场造成10点伤害", CardType::Attack, 2, CardEffect::DealAoEDamage { amount: 10 }, CardRarity::Rare, "textures/cards/attack.png"),
             // === 稀有功法 ===
-            Card::new(200, "御剑·流云", "造成8点伤害，抽2张牌", CardType::Attack, 2, CardEffect::AttackAndDraw { damage: 8, cards: 2 }, CardRarity::Uncommon),
-            Card::new(201, "太极图", "获得12点护盾", CardType::Defense, 2, CardEffect::GainBlock { amount: 12 }, CardRarity::Uncommon),
-            Card::new(202, "甘霖咒", "恢复10点道行", CardType::Skill, 2, CardEffect::Heal { amount: 10 }, CardRarity::Uncommon),
-            Card::new(203, "破军剑", "造成6点伤害，抽1张牌", CardType::Attack, 1, CardEffect::AttackAndDraw { damage: 6, cards: 1 }, CardRarity::Uncommon),
-            Card::new(204, "神识全开", "抽3张牌，获得2点灵力", CardType::Skill, 1, CardEffect::DrawCards { amount: 3 }, CardRarity::Uncommon),
+            Card::new(200, "御剑·流云", "造成8点伤害，抽2张牌", CardType::Attack, 2, CardEffect::AttackAndDraw { damage: 8, cards: 2 }, CardRarity::Uncommon, "textures/cards/attack.png"),
+            Card::new(201, "太极图", "获得12点护盾", CardType::Defense, 2, CardEffect::GainBlock { amount: 12 }, CardRarity::Uncommon, "textures/cards/defense.png"),
+            Card::new(202, "甘霖咒", "恢复10点道行", CardType::Skill, 2, CardEffect::Heal { amount: 10 }, CardRarity::Uncommon, "textures/cards/skill.png"),
+            Card::new(203, "破军剑", "造成6点伤害，抽1张牌", CardType::Attack, 1, CardEffect::AttackAndDraw { damage: 6, cards: 1 }, CardRarity::Uncommon, "textures/cards/attack.png"),
+            Card::new(204, "神识全开", "抽3张牌，获得2点灵力", CardType::Skill, 1, CardEffect::DrawCards { amount: 3 }, CardRarity::Uncommon, "textures/cards/skill.png"),
             // === 传说功法 ===
-            Card::new(300, "九天神雷", "造成20点毁灭伤害", CardType::Attack, 3, CardEffect::DealDamage { amount: 20 }, CardRarity::Rare),
-            Card::new(301, "金身法相", "获得15点护盾，恢复5点道行", CardType::Defense, 2, CardEffect::GainBlock { amount: 15 }, CardRarity::Rare),
-            Card::new(302, "万物回春", "恢复15点道行", CardType::Skill, 2, CardEffect::Heal { amount: 15 }, CardRarity::Rare),
+            Card::new(300, "九天神雷", "造成20点毁灭伤害", CardType::Attack, 3, CardEffect::DealDamage { amount: 20 }, CardRarity::Rare, "textures/cards/attack.png"),
+            Card::new(301, "金身法相", "获得15点护盾，恢复5点道行", CardType::Defense, 2, CardEffect::GainBlock { amount: 15 }, CardRarity::Rare, "textures/cards/defense.png"),
+            Card::new(302, "万物回春", "恢复15点道行", CardType::Skill, 2, CardEffect::Heal { amount: 15 }, CardRarity::Rare, "textures/cards/skill.png"),
         ]
     }
 
@@ -462,6 +478,7 @@ impl CardPool {
             3,
             CardEffect::MultiAttack { damage: 10, times: 3 },
             CardRarity::Special,
+            "textures/cards/special.png",
         )
     }
 }

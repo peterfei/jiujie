@@ -35,7 +35,7 @@ fn e2e_card_creation() {
         CardType::Attack,
         1,
         CardEffect::DealDamage { amount: 6 },
-        CardRarity::Common,
+        CardRarity::Common, "textures/cards/default.png"
     );
 
     // THEN: 卡牌属性应该正确
@@ -49,10 +49,10 @@ fn e2e_card_creation() {
 #[test]
 fn e2e_card_type_colors() {
     // GIVEN: 不同类型的卡牌
-    let attack_card = Card::new(0, "", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 6 }, CardRarity::Common);
-    let defense_card = Card::new(1, "", "", CardType::Defense, 1, CardEffect::GainBlock { amount: 5 }, CardRarity::Common);
-    let skill_card = Card::new(2, "", "", CardType::Skill, 1, CardEffect::DrawCards { amount: 1 }, CardRarity::Common);
-    let power_card = Card::new(3, "", "", CardType::Power, 2, CardEffect::GainEnergy { amount: 2 }, CardRarity::Rare);
+    let attack_card = Card::new(0, "", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 6 }, CardRarity::Common, "textures/cards/default.png");
+    let defense_card = Card::new(1, "", "", CardType::Defense, 1, CardEffect::GainBlock { amount: 5 }, CardRarity::Common, "textures/cards/default.png");
+    let skill_card = Card::new(2, "", "", CardType::Skill, 1, CardEffect::DrawCards { amount: 1 }, CardRarity::Common, "textures/cards/default.png");
+    let power_card = Card::new(3, "", "", CardType::Power, 2, CardEffect::GainEnergy { amount: 2 }, CardRarity::Rare, "textures/cards/default.png");
 
     // THEN: 每种类型应该有不同的颜色
     let attack_color = attack_card.get_color();
@@ -72,8 +72,8 @@ fn e2e_card_type_colors() {
 fn e2e_draw_pile_creation() {
     // GIVEN: 创建抽牌堆
     let cards = vec![
-        Card::new(0, "", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 6 }, CardRarity::Common),
-        Card::new(1, "", "", CardType::Defense, 1, CardEffect::GainBlock { amount: 5 }, CardRarity::Common),
+        Card::new(0, "", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 6 }, CardRarity::Common, "textures/cards/default.png"),
+        Card::new(1, "", "", CardType::Defense, 1, CardEffect::GainBlock { amount: 5 }, CardRarity::Common, "textures/cards/default.png"),
     ];
     let mut draw_pile = DrawPile::new(cards);
 
@@ -86,7 +86,7 @@ fn e2e_draw_pile_creation() {
 fn e2e_draw_card_from_pile() {
     // GIVEN: 创建抽牌堆
     let cards = vec![
-        Card::new(0, "打击", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 6 }, CardRarity::Common),
+        Card::new(0, "打击", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 6 }, CardRarity::Common, "textures/cards/default.png"),
     ];
     let mut draw_pile = DrawPile::new(cards);
 
@@ -115,7 +115,7 @@ fn e2e_draw_from_empty_pile() {
 fn e2e_discard_pile_operations() {
     // GIVEN: 创建弃牌堆
     let mut discard_pile = DiscardPile::new();
-    let card = Card::new(0, "", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 6 }, CardRarity::Common);
+    let card = Card::new(0, "", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 6 }, CardRarity::Common, "textures/cards/default.png");
 
     // WHEN: 添加卡牌到弃牌堆
     discard_pile.add_card(card.clone());
@@ -136,7 +136,7 @@ fn e2e_discard_pile_operations() {
 fn e2e_hand_operations() {
     // GIVEN: 创建手牌
     let mut hand = Hand::new(10);
-    let card = Card::new(0, "", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 6 }, CardRarity::Common);
+    let card = Card::new(0, "", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 6 }, CardRarity::Common, "textures/cards/default.png");
 
     // WHEN: 添加卡牌到手牌
     let added = hand.add_card(card.clone());
@@ -159,7 +159,7 @@ fn e2e_hand_operations() {
 fn e2e_hand_max_size_limit() {
     // GIVEN: 创建上限为2的手牌
     let mut hand = Hand::new(2);
-    let card = Card::new(0, "", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 6 }, CardRarity::Common);
+    let card = Card::new(0, "", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 6 }, CardRarity::Common, "textures/cards/default.png");
 
     // WHEN: 添加超过上限的卡牌
     hand.add_card(card.clone());
@@ -218,8 +218,8 @@ fn e2e_full_draw_cycle() {
 
     // 创建抽牌堆、弃牌堆、手牌实体
     let cards = vec![
-        Card::new(0, "打击", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 6 }, CardRarity::Common),
-        Card::new(1, "防御", "", CardType::Defense, 1, CardEffect::GainBlock { amount: 5 }, CardRarity::Common),
+        Card::new(0, "打击", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 6 }, CardRarity::Common, "textures/cards/default.png"),
+        Card::new(1, "防御", "", CardType::Defense, 1, CardEffect::GainBlock { amount: 5 }, CardRarity::Common, "textures/cards/default.png"),
     ];
     let draw_pile_entity = app.world_mut().spawn(DrawPile::new(cards)).id();
     let discard_pile_entity = app.world_mut().spawn(DiscardPile::new()).id();

@@ -1534,6 +1534,19 @@ fn update_hand_ui(
                                 TextLayout::new_with_justify(JustifyText::Center),
                             ));
 
+                            // 卡牌插画 (Nano Banana 风格优化)
+                            card_ui.spawn((
+                                ImageNode::new(asset_server.load(card.image_path.clone())),
+                                Node {
+                                    width: Val::Px(85.0),
+                                    height: Val::Px(65.0),
+                                    border: UiRect::all(Val::Px(1.0)),
+                                    margin: UiRect::vertical(Val::Px(2.0)),
+                                    ..default()
+                                },
+                                BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.2)),
+                            ));
+
                             // 卡牌描述
                             card_ui.spawn((
                                 Text::new(card.description.clone()),
@@ -1994,6 +2007,19 @@ fn create_reward_card(parent: &mut ChildBuilder, card: &Card, _index: usize, ass
         parent.spawn((Text::new(card.rarity.get_chinese_name()), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(rarity_color)));
         parent.spawn((Text::new(card.name.clone()), TextFont { font: chinese_font.clone(), font_size: 24.0, ..default() }, TextColor(Color::WHITE)));
         parent.spawn((Text::new(format!("灵力消耗: {}", card.cost)), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(Color::srgb(0.4, 0.8, 1.0))));
+        
+        // 卡牌插画 (Nano Banana 风格优化)
+        parent.spawn((
+            ImageNode::new(asset_server.load(card.image_path.clone())),
+            Node {
+                width: Val::Px(150.0),
+                height: Val::Px(100.0),
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.2)),
+        ));
+
         parent.spawn((Text::new(card.description.clone()), TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() }, TextColor(Color::srgb(0.8, 0.8, 0.8)), TextLayout::new_with_justify(JustifyText::Center), Node { max_width: Val::Px(170.0), ..default() }));
     });
 }
@@ -2638,7 +2664,8 @@ fn teardown_tribulation(
                     let aoe_spell = Card::new(
                         151, "万剑归宗", "金丹大能之怒！对全场造成10点伤害",
                         CardType::Attack, 2, CardEffect::DealAoEDamage { amount: 10 },
-                        CardRarity::Rare
+                        CardRarity::Rare,
+                        "textures/cards/attack.png"
                     );
                     deck.add_card(aoe_spell.clone());
                     info!("📖【大能神通】晋升金丹，领悟群体攻伐：{}", aoe_spell.name);
@@ -2865,8 +2892,8 @@ fn spawn_card_hover_panel(commands: &mut Commands, card: &Card, asset_server: &A
     }
 
     // 如果面板超出底部，从上方显示
-    if y + 200.0 > WINDOW_HEIGHT {  // 假设面板高度约200px
-        y = mouse_pos.y - 200.0 - OFFSET_Y;
+    if y + 400.0 > WINDOW_HEIGHT {  // 假设面板高度约400px (包含插画)
+        y = mouse_pos.y - 400.0 - OFFSET_Y;
     }
 
     let (position_left, position_right) = if x + PANEL_WIDTH > WINDOW_WIDTH {
@@ -2875,7 +2902,7 @@ fn spawn_card_hover_panel(commands: &mut Commands, card: &Card, asset_server: &A
         (Some(Val::Px(x)), None)
     };
 
-    let (position_top, position_bottom) = if y + 200.0 > WINDOW_HEIGHT {
+    let (position_top, position_bottom) = if y + 400.0 > WINDOW_HEIGHT {
         (Some(Val::Px(WINDOW_HEIGHT - y)), None)
     } else {
         (Some(Val::Px(y)), None)
@@ -2956,6 +2983,19 @@ fn spawn_card_hover_panel(commands: &mut Commands, card: &Card, asset_server: &A
                     ..default()
                 },
                 TextColor(Color::srgba(1.0, 1.0, 1.0, 0.8)),
+            ));
+
+            // 卡牌插画 (Nano Banana 风格优化)
+            parent.spawn((
+                ImageNode::new(asset_server.load(card.image_path.clone())),
+                Node {
+                    width: Val::Px(270.0),
+                    height: Val::Px(180.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    margin: UiRect::vertical(Val::Px(5.0)),
+                    ..default()
+                },
+                BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.2)),
             ));
 
             // 卡牌描述

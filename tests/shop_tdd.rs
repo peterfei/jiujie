@@ -51,7 +51,7 @@ fn test_shop_item_card_price_by_rarity() {
     let common_card = Card::new(
         1, "普通打击", "造成6点伤害",
         CardType::Attack, 1, CardEffect::DealDamage { amount: 6 },
-        CardRarity::Common,
+        CardRarity::Common, "textures/cards/default.png"
     );
     let shop_item = ShopItem::Card(common_card);
     assert_eq!(shop_item.get_price(), 30, "普通卡牌价格应为30");
@@ -59,7 +59,7 @@ fn test_shop_item_card_price_by_rarity() {
     let uncommon_card = Card::new(
         2, "罕见打击", "造成9点伤害",
         CardType::Attack, 1, CardEffect::DealDamage { amount: 9 },
-        CardRarity::Uncommon,
+        CardRarity::Uncommon, "textures/cards/default.png"
     );
     let shop_item = ShopItem::Card(uncommon_card);
     assert_eq!(shop_item.get_price(), 50, "罕见卡牌价格应为50");
@@ -67,7 +67,7 @@ fn test_shop_item_card_price_by_rarity() {
     let rare_card = Card::new(
         3, "稀有打击", "造成12点伤害",
         CardType::Attack, 1, CardEffect::DealDamage { amount: 12 },
-        CardRarity::Rare,
+        CardRarity::Rare, "textures/cards/default.png"
     );
     let shop_item = ShopItem::Card(rare_card);
     assert_eq!(shop_item.get_price(), 80, "稀有卡牌价格应为80");
@@ -75,7 +75,7 @@ fn test_shop_item_card_price_by_rarity() {
     let special_card = Card::new(
         4, "特殊打击", "造成15点伤害",
         CardType::Attack, 1, CardEffect::DealDamage { amount: 15 },
-        CardRarity::Special,
+        CardRarity::Special, "textures/cards/default.png"
     );
     let shop_item = ShopItem::Card(special_card);
     assert_eq!(shop_item.get_price(), 100, "特殊卡牌价格应为100");
@@ -128,7 +128,7 @@ fn test_shop_item_name_and_description() {
     let card = Card::new(
         1, "测试卡牌", "测试描述",
         CardType::Attack, 1, CardEffect::DealDamage { amount: 6 },
-        CardRarity::Common,
+        CardRarity::Common, "textures/cards/default.png"
     );
 
     let card_item = ShopItem::Card(card.clone());
@@ -222,7 +222,7 @@ fn test_buy_card_with_sufficient_gold() {
     let card = Card::new(
         1, "测试卡", "描述",
         CardType::Attack, 1, CardEffect::DealDamage { amount: 6 },
-        CardRarity::Common,
+        CardRarity::Common, "textures/cards/default.png"
     );
     let shop_item = ShopItem::Card(card.clone());
     let price = shop_item.get_price();
@@ -254,7 +254,7 @@ fn test_cannot_buy_card_with_insufficient_gold() {
     let card = Card::new(
         1, "测试卡", "描述",
         CardType::Attack, 1, CardEffect::DealDamage { amount: 6 },
-        CardRarity::Common,
+        CardRarity::Common, "textures/cards/default.png"
     );
     let shop_item = ShopItem::Card(card);
     let price = shop_item.get_price();
@@ -406,7 +406,7 @@ fn test_shop_prices_are_reasonable() {
     let common_card = Card::new(
         1, "卡", "描述",
         CardType::Attack, 1, CardEffect::DealDamage { amount: 6 },
-        CardRarity::Common,
+        CardRarity::Common, "textures/cards/default.png"
     );
     assert!(ShopItem::Card(common_card.clone()).get_price() > 0);
     assert!(ShopItem::Card(common_card).get_price() <= 150);
@@ -432,12 +432,12 @@ fn test_shop_should_not_duplicate_items() {
     let card1 = Card::new(
         1, "卡1", "描述",
         CardType::Attack, 1, CardEffect::DealDamage { amount: 6 },
-        CardRarity::Common,
+        CardRarity::Common, "textures/cards/default.png"
     );
     let card2 = Card::new(
         2, "卡2", "描述",
         CardType::Attack, 1, CardEffect::DealDamage { amount: 6 },
-        CardRarity::Common,
+        CardRarity::Common, "textures/cards/default.png"
     );
 
     let items = vec![

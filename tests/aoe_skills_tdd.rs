@@ -29,7 +29,7 @@ fn test_aoe_damage_hits_all_enemies() {
     let aoe_card = Card::new(
         100, "万剑归宗", "对所有敌人造成10点伤害",
         CardType::Attack, 2, CardEffect::DealAoEDamage { amount: 10 },
-        CardRarity::Rare
+        CardRarity::Rare, "textures/cards/default.png"
     );
 
     // 模拟 apply_card_effect 逻辑

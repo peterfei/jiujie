@@ -54,7 +54,7 @@ fn create_test_app() -> App {
             ShopItem::Card(Card::new(
                 1, "测试卡", "描述",
                 CardType::Attack, 1, CardEffect::DealDamage { amount: 6 },
-                CardRarity::Common,
+                CardRarity::Common, "textures/cards/default.png"
             )),
         ],
     });

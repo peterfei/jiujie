@@ -39,7 +39,7 @@ fn create_test_app() -> App {
             CardType::Attack,
             1,
             CardEffect::DealDamage { amount: 6 },
-            CardRarity::Common,
+            CardRarity::Common, "textures/cards/default.png",
         ),
     ]));
     app.world_mut().spawn(DiscardPile::new());

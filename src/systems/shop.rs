@@ -140,6 +140,20 @@ pub fn setup_shop_ui(
                             TextColor(Color::WHITE),
                         ));
 
+                        // 如果是卡牌，展示插画 (Nano Banana 风格优化)
+                        if let ShopItem::Card(card) = item {
+                            item_parent.spawn((
+                                ImageNode::new(asset_server.load(card.image_path.clone())),
+                                Node {
+                                    width: Val::Px(140.0),
+                                    height: Val::Px(100.0),
+                                    border: UiRect::all(Val::Px(1.0)),
+                                    ..default()
+                                },
+                                BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.1)),
+                            ));
+                        }
+
                         // 描述
                         item_parent.spawn((
                             Text::new(item.get_description()),

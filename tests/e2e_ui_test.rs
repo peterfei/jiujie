@@ -143,7 +143,7 @@ fn e2e_hand_ui_updates_when_hand_changes() {
         CardType::Attack,
         1,
         CardEffect::DealDamage { amount: 5 },
-        CardRarity::Common,
+        CardRarity::Common, "textures/cards/default.png"
     );
 
     {
@@ -170,9 +170,9 @@ fn e2e_draw_cards_increases_hand_count() {
     let mut app = create_full_test_app();
 
     let cards = vec![
-        Card::new(0, "打击", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 6 }, CardRarity::Common),
-        Card::new(1, "防御", "", CardType::Defense, 1, CardEffect::GainBlock { amount: 5 }, CardRarity::Common),
-        Card::new(2, "突刺", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 3 }, CardRarity::Common),
+        Card::new(0, "打击", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 6 }, CardRarity::Common, "textures/cards/default.png"),
+        Card::new(1, "防御", "", CardType::Defense, 1, CardEffect::GainBlock { amount: 5 }, CardRarity::Common, "textures/cards/default.png"),
+        Card::new(2, "突刺", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 3 }, CardRarity::Common, "textures/cards/default.png"),
     ];
 
     let draw_pile_entity = app.world_mut().spawn(DrawPile::new(cards)).id();
@@ -210,8 +210,8 @@ fn e2e_empty_draw_pile_triggers_shuffle() {
     let mut app = create_full_test_app();
 
     let discard_cards = vec![
-        Card::new(0, "弃牌1", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 3 }, CardRarity::Common),
-        Card::new(1, "弃牌2", "", CardType::Defense, 1, CardEffect::GainBlock { amount: 3 }, CardRarity::Common),
+        Card::new(0, "弃牌1", "", CardType::Attack, 1, CardEffect::DealDamage { amount: 3 }, CardRarity::Common, "textures/cards/default.png"),
+        Card::new(1, "弃牌2", "", CardType::Defense, 1, CardEffect::GainBlock { amount: 3 }, CardRarity::Common, "textures/cards/default.png"),
     ];
 
     let draw_pile_entity = app.world_mut().spawn(DrawPile::new(vec![])).id();
