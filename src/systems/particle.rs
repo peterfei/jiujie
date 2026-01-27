@@ -61,6 +61,15 @@ fn handle_effect_events(mut commands: Commands, assets: Res<ParticleAssets>, mut
                 if let Some(target) = event.target {
                     particle.target = Some(target);
                 }
+                if let Some(target_entity) = event.target_entity {
+                    particle.target_entity = Some(target_entity);
+                }
+                if let Some(ref target_group) = event.target_group {
+                    particle.target_group = Some(target_group.clone());
+                }
+                if let Some(target_index) = event.target_index {
+                    particle.target_index = Some(target_index);
+                }
                 spawn_particle_entity(&mut commands, &assets, particle);
             }
         } else {
@@ -131,12 +140,16 @@ fn update_emitters(mut commands: Commands, assets: Res<ParticleAssets>, mut emit
 
 use crate::components::screen_effect::ScreenEffectEvent;
 
-fn update_particles(
+use crate::components::sprite::EnemySpriteMarker;
+
+pub fn update_particles(
     mut commands: Commands,
-    mut query: Query<(Entity, &mut Particle, &mut Node, &mut ImageNode, &mut Visibility, &mut Transform)>,
+    mut query: Query<(Entity, &mut Particle, &mut Node, &mut ImageNode, &mut Visibility, &mut Transform), Without<EnemySpriteMarker>>,
     time: Res<Time>,
     mut events: EventWriter<SpawnEffectEvent>,
     mut screen_events: EventWriter<ScreenEffectEvent>,
+    enemy_query: Query<(Entity, &Transform), With<EnemySpriteMarker>>,
+    enemy_impact_query: Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &crate::components::sprite::PhysicalImpact), With<EnemySpriteMarker>>,
 ) {
     let delta = time.delta_secs();
     for (entity, mut p, mut node, mut image, mut visibility, mut transform) in query.iter_mut() {
@@ -175,10 +188,10 @@ fn update_particles(
                 phase_two_celestial_mandala(&mut p, local_prog, hub_pos);
             } else if local_prog < 0.55 {
                 // 第三相位：瞬狱锁定 (Ominous Pause) - 45% ~ 55%
-                phase_three_ominous_pause(&mut p, local_prog, &mut screen_events);
+                phase_three_ominous_pause(&mut p, local_prog, &mut screen_events, &enemy_query);
             } else {
                 // 第四相位：极速穿心 (Mach Piercing) - 55% ~ 100%
-                phase_four_mach_piercing(&mut p, local_prog, &mut events, &mut screen_events);
+                phase_four_mach_piercing(&mut p, local_prog, &mut events, &mut screen_events, &enemy_query, &enemy_impact_query);
             }
         } else {
             // --- 通用粒子逻辑 ---
@@ -316,12 +329,26 @@ fn phase_three_ominous_pause(
     p: &mut Particle,
     local_prog: f32,
     screen_events: &mut EventWriter<ScreenEffectEvent>,
+    enemy_query: &Query<(Entity, &Transform), With<EnemySpriteMarker>>,
 ) {
     let t = (local_prog - 0.45) / 0.1;
 
     // 触发背景变暗（仅一次）
     if t > 0.0 && t < 0.05 && p.seed < 0.05 {
         screen_events.send(ScreenEffectEvent::Shake { trauma: 0.1, decay: 0.5 });
+    }
+
+    // 动态同步目标位置
+    if let Some(target_entity) = p.target_entity {
+        if let Ok((_, transform)) = enemy_query.get(target_entity) {
+            p.target = Some(transform.translation.truncate());
+        } else {
+            // 目标实体已消失，寻找新目标进行重定向
+            if let Some((new_entity, new_transform)) = enemy_query.iter().next() {
+                p.target_entity = Some(new_entity);
+                p.target = Some(new_transform.translation.truncate());
+            }
+        }
     }
 
     // 减速到静止 - 保持当前位置不变
@@ -363,8 +390,46 @@ fn phase_four_mach_piercing(
     local_prog: f32,
     events: &mut EventWriter<SpawnEffectEvent>,
     screen_events: &mut EventWriter<ScreenEffectEvent>,
+    enemy_query: &Query<(Entity, &Transform), With<EnemySpriteMarker>>,
+    enemy_impact_query: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &crate::components::sprite::PhysicalImpact), With<EnemySpriteMarker>>,
 ) {
     let strike_t = (local_prog - 0.55) / 0.45;
+
+    // 【磁力吸引】动态获取敌人的当前位置作为目标
+    // 不使用预计算的坐标，而是实时获取敌人的 home_position 并转换
+    if let Some(target_entity) = p.target_entity {
+        // 检查当前目标是否存活
+        if let Ok((_, _, impact)) = enemy_impact_query.get(target_entity) {
+            // 敌人存活，动态获取其 home_position（固定的，不受动画影响）
+            // home_position = (x_world/100, 0.05, y_world/100 + 0.1)
+            let x_world = impact.home_position.x * 100.0;
+            let y_world = (impact.home_position.z - 0.1) * 100.0;
+            let dynamic_target = Vec2::new(x_world, y_world);
+
+            // 更新粒子目标（磁力吸引效果）
+            p.target = Some(dynamic_target);
+        } else {
+            // 目标实体已消失，使用 target_group 进行循环重定向
+            if let Some(ref group) = p.target_group {
+                if let Some(idx) = p.target_index {
+                    // 从当前索引开始，循环查找下一个存活目标
+                    for offset in 1..=group.len() {
+                        let new_idx = (idx + offset) % group.len();
+                        let (entity, _) = &group[new_idx];
+
+                        // 检查该实体是否仍然存活，并获取其位置
+                        if let Ok((_, _, impact)) = enemy_impact_query.get(*entity) {
+                            p.target_entity = Some(*entity);
+                            let x_world = impact.home_position.x * 100.0;
+                            let y_world = (impact.home_position.z - 0.1) * 100.0;
+                            p.target = Some(Vec2::new(x_world, y_world));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     if let Some(target) = p.target {
         // 确保 position 有效（防止 NaN）
@@ -372,14 +437,20 @@ fn phase_four_mach_piercing(
             p.position = Vec2::new(0.0, 250.0); // 默认位置
         }
 
-        // 触发初始震动
-        if strike_t > 0.0 && strike_t < 0.05 && p.seed < 0.1 {
-            screen_events.send(ScreenEffectEvent::Shake { trauma: 0.5, decay: 0.8 });
+        // 触发初始震动（优化：减少触发频率）
+        // 只让第一个粒子触发震动，避免 80 个粒子都触发
+        if strike_t > 0.0 && strike_t < 0.02 && p.seed < 0.01 {
+            screen_events.send(ScreenEffectEvent::Shake { trauma: 0.3, decay: 0.5 });
         }
 
+        // 修复问题 1: 记录 Phase 4 启动瞬间的位置作为固定起点
+        if p.lock_pos.is_none() {
+            p.lock_pos = Some(p.position);
+        }
+        let lock_pos = p.lock_pos.unwrap();
+
         // 三次贝塞尔曲线：B(t) = (1-t)³P0 + 3(1-t)²tP1 + 3(1-t)t²P2 + t³P3
-        let lock_pos = p.position;
-        let base_dir = (target - lock_pos).normalize();
+        let base_dir = (target - lock_pos).normalize_or(Vec2::ZERO);
         let side_dir = Vec2::new(-base_dir.y, base_dir.x);
 
         let control1 = lock_pos + side_dir * (p.seed - 0.5) * 150.0;
@@ -400,37 +471,38 @@ fn phase_four_mach_piercing(
         let move_dir = (target - p.position).normalize();
         p.rotation = (-move_dir.y).atan2(move_dir.x);
 
-        // 极长流光（高密度）
+        // 极长流光（优化：降低频率，减少闪屏）
+        // 只在特定时间间隔生成残影，而不是每帧都生成
         if strike_t > 0.0 && strike_t < 0.95 {
-            let speed_factor = (1.0 - strike_t) * 5.0 + 1.0;
-            let trail_count = ((speed_factor * 2.0) as usize).min(6); // 限制最多 6 个残影
+            // 每 0.05 秒生成一次残影（约每 3 帧一次，假设 60fps）
+            let trail_interval = 0.05;
+            let time_in_phase = strike_t * 0.45; // phase 4 的实际时间
+            let should_spawn = (time_in_phase % trail_interval) < 0.01; // 允许一些误差
 
-            for i in 0..trail_count {
-                // 确保 delay 不会变成负数
-                let delay = (0.06 - (i as f32 * 0.015)).max(0.0);
-
-                // 只在位置有效时生成残影
-                if p.position.x.is_finite() && p.position.y.is_finite() {
-                    events.send(SpawnEffectEvent::new(
-                        EffectType::SwordEnergy,
-                        p.position.extend(delay)
-                    ).burst(1));
-                }
+            if should_spawn && p.seed < 0.3 { // 只让 30% 的粒子生成残影
+                // 只生成 1 个残影，而不是多个
+                events.send(SpawnEffectEvent::new(
+                    EffectType::SwordEnergy,
+                    p.position.extend(0.0)
+                ).burst(1));
             }
         }
 
-        // 撞击火花（最后 5%）
+        // 撞击火花（优化：减少粒子数量）
         if strike_t > 0.95 {
-            let impact_intensity = ((strike_t - 0.95) / 0.05).min(1.0);
+            // 只让部分粒子触发撞击效果，避免过度渲染
+            if p.seed < 0.2 { // 只有 20% 的粒子触发撞击
+                let impact_intensity = ((strike_t - 0.95) / 0.05).min(1.0);
 
-            events.send(SpawnEffectEvent::new(
-                EffectType::ImpactSpark,
-                target.extend(0.0)
-            ).burst((12.0 * impact_intensity) as usize));
+                events.send(SpawnEffectEvent::new(
+                    EffectType::ImpactSpark,
+                    target.extend(0.0)
+                ).burst((5.0 * impact_intensity) as usize)); // 从 12 减少到 5
+            }
 
-            // 撞击闪光
-            if impact_intensity > 0.8 {
-                screen_events.send(ScreenEffectEvent::Shake { trauma: impact_intensity * 0.3, decay: 0.5 });
+            // 撞击闪光（只触发一次）
+            if strike_t > 0.98 && p.seed < 0.05 { // 只在最后时刻，只有少数粒子触发
+                screen_events.send(ScreenEffectEvent::Shake { trauma: 0.2, decay: 0.3 });
             }
         }
     }

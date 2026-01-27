@@ -1881,6 +1881,8 @@ fn handle_card_play(
     mut anim_events: EventWriter<CharacterAnimationEvent>,
     player_sprite_query: Query<Entity, With<PlayerSpriteMarker>>,
     enemy_sprite_query: Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
+    enemy_impact_query: Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &crate::components::sprite::PhysicalImpact)>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
 ) {
     for (interaction, hand_card) in card_query.iter() {
         if matches!(interaction, Interaction::Pressed) {
@@ -1937,6 +1939,8 @@ fn handle_card_play(
                             &mut screen_events,
                             &mut anim_events,
                             &enemy_sprite_query,
+                            &enemy_impact_query,
+                            &camera_query,
                         );
 
                     // 3. 移出手牌
@@ -1970,6 +1974,8 @@ fn apply_card_effect(
     screen_events: &mut EventWriter<ScreenEffectEvent>,
     anim_events: &mut EventWriter<CharacterAnimationEvent>,
     enemy_sprite_query: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
+    enemy_impact_query: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &crate::components::sprite::PhysicalImpact)>,
+    camera_query: &Query<(&Camera, &GlobalTransform), With<Camera3d>>,
 ) {
     let card_name = card.name.clone();
     match &card.effect {
@@ -2006,15 +2012,46 @@ fn apply_card_effect(
                 // 万剑归宗全屏特效补丁 (相位二：锁定打击)
                 if card_name.contains("万剑归宗") {
                     screen_events.send(ScreenEffectEvent::Shake { trauma: 1.0, decay: 0.45 });
-                    let enemy_positions: Vec<Vec3> = enemy_sprite_query.iter().map(|(_, _, t)| t.translation).collect();
+                    info!("【万剑归宗】使用敌人3D世界坐标转换为2D粒子坐标");
+                    let mut alive_enemies: Vec<(Entity, Vec2)> = Vec::new();
 
-                    for &target_pos in enemy_positions.iter() {
-                        // 通过发送带目标的事件，让粒子系统统一处理贴图、比例和轨迹
-                        effect_events.send(
-                            SpawnEffectEvent::new(EffectType::WanJian, Vec3::new(-350.0, -80.0, 0.5))
-                                .burst(60)
-                                .with_target(target_pos.truncate())
-                        );
+                    // 直接使用敌人的 3D world_pos，转换为2D粒子坐标
+                    for (idx, (entity, marker, impact)) in enemy_impact_query.iter().enumerate() {
+                        let enemy_id = marker.id;
+
+                        // 敌人的 3D 世界坐标（home_position）
+                        // home_position = (x_world/100, 0.05, y_world/100 + 0.1)
+                        let world_pos_3d = impact.home_position;
+
+                        // 恢复原始 2D spawn 坐标
+                        let x_world = world_pos_3d.x * 100.0;
+                        let y_world = (world_pos_3d.z - 0.1) * 100.0;
+
+                        // 粒子目标：使用敌人的 2D 坐标（与玩家位置一致）
+                        let particle_pos = Vec2::new(x_world, y_world);
+
+                        info!("【万剑归宗调试】敌人 id={}, idx={}", enemy_id, idx);
+                        info!("  3D world_pos={:.2?}", world_pos_3d);
+                        info!("  恢复2D=({:.1}, {:.1})", x_world, y_world);
+                        info!("  粒子目标=({:.1}, {:.1})", particle_pos.x, particle_pos.y);
+
+                        alive_enemies.push((entity, particle_pos));
+                    }
+
+                    if !alive_enemies.is_empty() {
+                        let total_swords = 80;
+                        let swords_per_enemy = total_swords / alive_enemies.len();
+
+                        for (idx, (entity, _target_pos)) in alive_enemies.iter().enumerate() {
+                            effect_events.send(
+                                SpawnEffectEvent::new(EffectType::WanJian, Vec3::new(-350.0, -80.0, 0.5))
+                                    .burst(swords_per_enemy)
+                                    .with_target(alive_enemies[idx].1)
+                                    .with_target_entity(*entity)
+                                    .with_target_group(alive_enemies.clone())
+                                    .with_target_index(idx)
+                            );
+                        }
                     }
                 } else {
                     screen_events.send(ScreenEffectEvent::Shake { trauma: 0.5, decay: 4.0 });

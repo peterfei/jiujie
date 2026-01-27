@@ -296,7 +296,8 @@ fn sync_2d_to_3d_render(
 ) {
     for (entity, char_sprite, transform, combatant_3d) in sprite_query.iter() {
         if combatant_3d.is_none() {
-            let x_3d = (transform.translation.x / 100.0).clamp(-3.5, 3.5);
+            // 移除clamp限制，支持多敌人场景下的正确位置
+            let x_3d = transform.translation.x / 100.0;
             let z_3d = transform.translation.y / 100.0;
 
             let is_boss = char_sprite.size.x > 150.0;

@@ -30,6 +30,10 @@ fn test_wanjian_vfx_trigger() {
                 position: Vec3::ZERO,
                 burst: true,
                 count: 100,
+                target: None,
+                target_entity: None,
+                target_group: None,
+                target_index: None,
             });
         }
         {

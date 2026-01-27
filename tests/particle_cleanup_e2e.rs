@@ -108,6 +108,10 @@ fn e2e_cleanup_301_spawn_effect_event_can_be_created() {
         position: Vec3::new(0.0, 100.0, 999.0),
         burst: true,
         count: 50,
+        target: None,
+        target_entity: None,
+        target_group: None,
+        target_index: None,
     };
 
     assert_eq!(event.count, 50, "事件应该记录粒子数量");
@@ -194,6 +198,10 @@ fn e2e_cleanup_502_victory_particles_use_burst_mode() {
         position: Vec3::new(0.0, 100.0, 999.0),
         burst: true,
         count: 50,
+        target: None,
+        target_entity: None,
+        target_group: None,
+        target_index: None,
     };
 
     assert!(event.burst, "胜利特效应该是爆发模式（非持续）");

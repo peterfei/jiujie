@@ -51,18 +51,30 @@ fn e2e_delay_101_victory_events_have_correct_positions() {
         position: Vec3::new(0.0, 100.0, 999.0),
         burst: true,
         count: 50,
+        target: None,
+        target_entity: None,
+        target_group: None,
+        target_index: None,
     };
     let event2 = SpawnEffectEvent {
         effect_type: EffectType::Victory,
         position: Vec3::new(-50.0, 80.0, 999.0),
         burst: true,
         count: 30,
+        target: None,
+        target_entity: None,
+        target_group: None,
+        target_index: None,
     };
     let event3 = SpawnEffectEvent {
         effect_type: EffectType::Victory,
         position: Vec3::new(50.0, 80.0, 999.0),
         burst: true,
         count: 30,
+        target: None,
+        target_entity: None,
+        target_group: None,
+        target_index: None,
     };
 
     // 验证Y坐标是正值（在屏幕上方）
@@ -85,18 +97,30 @@ fn e2e_delay_102_victory_events_total_count() {
             position: Vec3::new(0.0, 100.0, 999.0),
             burst: true,
             count: 50,
+            target: None,
+            target_entity: None,
+            target_group: None,
+            target_index: None,
         },
         SpawnEffectEvent {
             effect_type: EffectType::Victory,
             position: Vec3::new(-50.0, 80.0, 999.0),
             burst: true,
             count: 30,
+            target: None,
+            target_entity: None,
+            target_group: None,
+            target_index: None,
         },
         SpawnEffectEvent {
             effect_type: EffectType::Victory,
             position: Vec3::new(50.0, 80.0, 999.0),
             burst: true,
             count: 30,
+            target: None,
+            target_entity: None,
+            target_group: None,
+            target_index: None,
         },
     ];
 
@@ -113,6 +137,10 @@ fn e2e_delay_103_victory_events_use_burst_mode() {
             position: Vec3::new(0.0, 100.0, 999.0),
             burst: true,
             count: 50,
+            target: None,
+            target_entity: None,
+            target_group: None,
+            target_index: None,
         },
     ];
 

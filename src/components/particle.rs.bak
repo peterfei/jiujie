@@ -23,10 +23,6 @@ pub struct Particle {
     pub target: Option<Vec2>,
     /// 目标实体
     pub target_entity: Option<Entity>,
-    /// 所有存活敌人的位置和实体（用于动态重定向）
-    pub target_group: Option<Vec<(Entity, Vec2)>>,
-    /// 当前粒子在目标组中的索引（用于循环分配）
-    pub target_index: Option<usize>,
     /// 第四相位锁定位置 (用于固定贝塞尔曲线起点)
     pub lock_pos: Option<Vec2>,
     /// 初始位置
@@ -43,7 +39,7 @@ impl Particle {
             position: Vec2::ZERO, velocity: Vec2::ZERO, lifetime, elapsed: 0.0,
             start_size: 10.0, end_size: 0.0, start_color: Color::WHITE, end_color: Color::srgba(0.0, 0.0, 0.0, 0.0),
             rotation_speed: 0.0, rotation: 0.0, gravity: Vec2::ZERO,
-            target: None, target_entity: None, target_group: None, target_index: None, lock_pos: None,
+            target: None, target_entity: None, lock_pos: None,
             start_pos: Vec2::ZERO, seed: rand::random::<f32>(),
             effect_type: EffectType::Hit,
         }
@@ -324,8 +320,6 @@ impl SpawnEffectEvent {
     pub fn burst(mut self, count: usize) -> Self { self.burst = true; self.count = count; self }
     pub fn with_target(mut self, target: Vec2) -> Self { self.target = Some(target); self }
     pub fn with_target_entity(mut self, entity: Entity) -> Self { self.target_entity = Some(entity); self }
-    pub fn with_target_group(mut self, group: Vec<(Entity, Vec2)>) -> Self { self.target_group = Some(group); self }
-    pub fn with_target_index(mut self, index: usize) -> Self { self.target_index = Some(index); self }
 }
 
 #[derive(Component)]

@@ -324,8 +324,8 @@ impl SpawnEffectEvent {
     pub fn burst(mut self, count: usize) -> Self { self.burst = true; self.count = count; self }
     pub fn with_target(mut self, target: Vec2) -> Self { self.target = Some(target); self }
     pub fn with_target_entity(mut self, entity: Entity) -> Self { self.target_entity = Some(entity); self }
-    pub fn with_target_group(mut self, group: Vec<(Entity, Vec2)>) -> Self { self.target_group = Some(group); self }
-    pub fn with_target_index(mut self, index: usize) -> Self { self.target_index = Some(index); self }
+    pub fn with_target_group(mut self, group: Vec<(Entity, Vec2)>) -> Self { self.target_group = Some(group); } self }
+    pub fn with_target_index(mut self, index: usize) -> Self { self.target_index = Some(index); }
 }
 
 #[derive(Component)]
