@@ -39,6 +39,8 @@ pub struct Player {
     pub poison: i32,
     /// 虚弱层数 (攻击力降低)
     pub weakness: i32,
+    /// 易伤层数 (受创增加)
+    pub vulnerable: i32,
 }
 
 impl Default for Player {
@@ -47,15 +49,33 @@ impl Default for Player {
             hp: 80, max_hp: 80,
             energy: 3, max_energy: 3,
             block: 0, gold: 100, turn: 1,
-            poison: 0, weakness: 0,
+            poison: 0, weakness: 0, vulnerable: 0,
         }
     }
 }
 
 impl Player {
+    /// 计算实际造成的伤害 (考虑虚弱)
+    pub fn calculate_outgoing_damage(&self, base_amount: i32) -> i32 {
+        if self.weakness > 0 {
+            (base_amount as f32 * 0.75) as i32
+        } else {
+            base_amount
+        }
+    }
+
+    /// 计算实际受到的伤害 (考虑易伤)
+    pub fn calculate_incoming_damage(&self, base_amount: i32) -> i32 {
+        if self.vulnerable > 0 {
+            (base_amount as f32 * 1.5) as i32
+        } else {
+            base_amount
+        }
+    }
+
     /// 受到伤害（护甲优先抵消）
     pub fn take_damage(&mut self, amount: i32) {
-        let mut remaining_damage = amount;
+        let mut remaining_damage = self.calculate_incoming_damage(amount);
 
         // 护甲优先抵消伤害
         if self.block > 0 {
@@ -168,6 +188,12 @@ pub struct Enemy {
     pub block: i32,
     /// 行动轮次（用于 BOSS 固定招式循环）
     pub turn_count: u32,
+    /// 虚弱层数
+    pub weakness: i32,
+    /// 易伤层数
+    pub vulnerable: i32,
+    /// 中毒层数
+    pub poison: i32,
 }
 
 /// 敌人意图
@@ -265,12 +291,14 @@ impl Enemy {
             strength: 0,
             block: 0,
             turn_count: 0,
+            weakness: 0,
+            vulnerable: 0,
+            poison: 0,
         }
     }
 
     /// 创建指定类型的敌人
     pub fn with_type(id: u32, name: impl Into<String>, hp: i32, enemy_type: EnemyType) -> Self {
-        let ai_pattern = AiPattern::from_enemy_type(enemy_type);
         Self {
             id,
             name: name.into(),
@@ -278,16 +306,47 @@ impl Enemy {
             hp,
             max_hp: hp,
             intent: EnemyIntent::Wait,
-            ai_pattern,
+            ai_pattern: AiPattern::demonic_wolf(),
             strength: 0,
             block: 0,
             turn_count: 0,
+            weakness: 0,
+            vulnerable: 0,
+            poison: 0,
         }
     }
 
-    /// 受到伤害
+    /// 计算实际造成的伤害 (考虑虚弱)
+    pub fn calculate_outgoing_damage(&self, base_amount: i32) -> i32 {
+        if self.weakness > 0 {
+            (base_amount as f32 * 0.75) as i32
+        } else {
+            base_amount
+        }
+    }
+
+    /// 计算实际受到的伤害 (考虑易伤)
+    pub fn calculate_incoming_damage(&self, base_amount: i32) -> i32 {
+        if self.vulnerable > 0 {
+            (base_amount as f32 * 1.5) as i32
+        } else {
+            base_amount
+        }
+    }
+
     pub fn take_damage(&mut self, amount: i32) {
-        self.hp = (self.hp - amount).max(0);
+        let mut remaining_damage = self.calculate_incoming_damage(amount);
+        
+        if self.block > 0 {
+            if self.block >= remaining_damage {
+                self.block -= remaining_damage;
+                remaining_damage = 0;
+            } else {
+                remaining_damage -= self.block;
+                self.block = 0;
+            }
+        }
+        self.hp = (self.hp - remaining_damage).max(0);
     }
 
     /// 设置意图
