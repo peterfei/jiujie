@@ -113,6 +113,31 @@ impl Player {
 // 敌人组件
 // ============================================================================
 
+#[derive(Component)]
+pub struct DamageNumber {
+    pub value: i32,
+    pub timer: f32,
+    pub lifetime: f32,
+    pub velocity: Vec2,
+}
+
+impl DamageNumber {
+    pub fn new(value: i32) -> Self {
+        Self {
+            value,
+            timer: 0.0,
+            lifetime: 1.0,
+            velocity: Vec2::new(0.0, 50.0),
+        }
+    }
+}
+
+#[derive(Event)]
+pub struct DamageEffectEvent {
+    pub position: Vec2,
+    pub amount: i32,
+}
+
 /// 敌人战斗属性
 #[derive(Component, Debug, Clone)]
 pub struct Enemy {

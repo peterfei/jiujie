@@ -14,7 +14,11 @@ pub mod dialogue;
 pub mod audio;
 
 pub use map::{MapNode, NodeType, MapConfig, generate_map_nodes, MapProgress};
-pub use combat::{Player, Enemy, EnemyIntent, EnemyType, AiPattern, CombatConfig, CombatState, TurnPhase, PlayerDeck, VictoryDelay, CardHoverPanelMarker, RelicHoverPanelMarker, EnemyActionQueue};
+pub use combat::{
+    Player, Enemy, EnemyIntent, EnemyType, AiPattern, CombatConfig, CombatState, TurnPhase, 
+    PlayerDeck, VictoryDelay, CardHoverPanelMarker, RelicHoverPanelMarker, EnemyActionQueue,
+    DamageNumber, DamageEffectEvent,
+};
 pub use cards::{
     Card, CardType, CardEffect, CardRarity,
     DrawPile, DiscardPile, Hand,

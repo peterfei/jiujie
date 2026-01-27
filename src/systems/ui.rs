@@ -1,0 +1,77 @@
+use bevy::prelude::*;
+use crate::components::combat::{DamageNumber, DamageEffectEvent};
+use crate::states::GameState;
+
+pub struct UiPlugin;
+
+impl Plugin for UiPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_event::<DamageEffectEvent>();
+        app.add_systems(Update, (
+            spawn_damage_numbers,
+            update_damage_numbers,
+        ).run_if(in_state(GameState::Combat)));
+    }
+}
+
+fn spawn_damage_numbers(
+    mut commands: Commands,
+    mut events: EventReader<DamageEffectEvent>,
+) {
+    for event in events.read() {
+        // 计算 UI 坐标 (基于 1280x720 逻辑分辨率)
+        // 这里的 event.position 已经是恢复后的 2D 坐标 (x_world, y_world)
+        let ui_x = 640.0 + event.position.x;
+        let ui_y = 360.0 - event.position.y;
+
+        commands.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(ui_x),
+                top: Val::Px(ui_y),
+                ..default()
+            },
+            Text::new(format!("-{}", event.amount)),
+            TextFont {
+                font_size: 40.0,
+                ..default()
+            },
+            TextColor(Color::srgba(1.0, 0.2, 0.2, 1.0)),
+            DamageNumber::new(event.amount),
+            ZIndex(100), // 确保在最上层
+        ));
+    }
+}
+
+fn update_damage_numbers(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut DamageNumber, &mut Node, &mut TextColor, &mut TextFont)>,
+    time: Res<Time>,
+) {
+    for (entity, mut dn, mut node, mut color, mut font) in query.iter_mut() {
+        dn.timer += time.delta_secs();
+        if dn.timer >= dn.lifetime {
+            commands.entity(entity).despawn_recursive();
+            continue;
+        }
+
+        // 向上漂浮 (带一点减速)
+        let t = dn.timer / dn.lifetime;
+        let upward_speed = dn.velocity.y * (1.0 - t * 0.5);
+        if let Val::Px(current_top) = node.top {
+            node.top = Val::Px(current_top - upward_speed * time.delta_secs());
+        }
+
+        // 缩放动画 (先变大再缩小)
+        let scale = if t < 0.2 {
+            1.0 + (t / 0.2) * 0.5 // 前 20% 时间放大到 1.5 倍
+        } else {
+            1.5 - ((t - 0.2) / 0.8) * 0.5 // 后 80% 时间缩回到 1.0 倍
+        };
+        font.font_size = 40.0 * scale;
+
+        // 淡出效果
+        let alpha = 1.0 - t.powi(2); // 加速淡出
+        color.0.set_alpha(alpha);
+    }
+}

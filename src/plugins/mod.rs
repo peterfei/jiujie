@@ -5,15 +5,15 @@ use crate::states::GameState;
 use crate::components::{
     MapNode, NodeType, MapProgress, Player, Enemy, EnemyIntent, EnemyType, CombatState, TurnPhase, 
     Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, CardType, CardRarity, 
-    CardPool, PlayerDeck, EnemyUiMarker, PlayerUiMarker, EnemyAttackEvent, CharacterType, 
+    CardPool, PlayerDeck, EnemyAttackEvent, CharacterType, 
     SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, 
     ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation, 
     EnemySpriteMarker, VictoryDelay, RelicCollection, Relic, RelicId,
     EnemyActionQueue, RelicObtainedEvent, RelicTriggeredEvent,
     ParticleEmitter, PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker, DialogueLine,
-    Particle, // 补全导入
+    Particle, DamageNumber, DamageEffectEvent, // 补全导入
 };
-use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, PlayerSpriteMarker, AnimationState, Ghost, MagicSealMarker, CharacterSprite};
+use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, PlayerSpriteMarker, AnimationState, MagicSealMarker, CharacterSprite};
 use crate::systems::sprite::{spawn_character_sprite};
 
 /// 核心游戏插件
@@ -188,6 +188,7 @@ impl Plugin for GamePlugin {
             crate::systems::particle::ParticlePlugin,
             crate::systems::screen_effect::ScreenEffectPlugin,
             crate::systems::sprite::SpritePlugin,
+            crate::systems::ui::UiPlugin,
         ))
         .init_state::<GameState>()
         .insert_resource(VictoryDelay::new(2.0))
@@ -1813,21 +1814,22 @@ pub fn update_hand_ui(
 
 /// 处理手牌卡片悬停与交互反馈 (大作级动态手感)
 fn handle_hand_card_hover(
-    mut query: Query<(&Interaction, &HandCard, &mut Node, &mut ZIndex, &mut Transform), (With<HandCard>, Changed<Interaction>)>,
+    mut query: Query<(&Interaction, &HandCard, &mut ZIndex, &mut Transform), (With<HandCard>, Changed<Interaction>)>,
 ) {
-    for (interaction, hand_card, mut node, mut z_index, mut transform) in query.iter_mut() {
+    for (interaction, hand_card, mut z_index, mut transform) in query.iter_mut() {
         match interaction {
             Interaction::Hovered => {
-                // 悬停：弹起、放大、置顶
-                node.bottom = Val::Px(hand_card.base_bottom + 40.0);
+                // 悬停：视觉上浮、放大、置顶
+                // 注意：修改 transform.translation.y 而非 node.bottom，防止 Picking 区域随之位移导致闪烁
+                transform.translation.y = 40.0; 
                 *z_index = ZIndex(100);
                 transform.scale = Vec3::splat(1.25); // 放大 25%
                 transform.rotation = Quat::IDENTITY; // 摆正
             }
             Interaction::None => {
                 // 恢复：回位、缩小
-                node.bottom = Val::Px(hand_card.base_bottom);
-                *z_index = ZIndex(10);
+                transform.translation.y = 0.0;
+                *z_index = ZIndex(hand_card.index as i32);
                 transform.scale = Vec3::ONE;
                 transform.rotation = Quat::from_rotation_z(hand_card.base_rotation);
             }
@@ -1839,31 +1841,6 @@ fn handle_hand_card_hover(
 // ============================================================================
 // 出牌系统
 // ============================================================================
-
-/// 处理手牌卡片交互（悬停缩放、弹出）
-fn handle_hand_card_interaction(
-    mut query: Query<(&Interaction, &HandCard, &mut Node, &mut Transform, &mut ZIndex, &mut BorderColor), Changed<Interaction>>,
-) {
-    for (interaction, hand_card, mut node, mut transform, mut z_index, mut border_color) in query.iter_mut() {
-        match interaction {
-            Interaction::Hovered => {
-                node.bottom = Val::Px(hand_card.base_bottom + 50.0);
-                transform.scale = Vec3::splat(1.3);
-                transform.rotation = Quat::IDENTITY;
-                *z_index = ZIndex(100);
-                *border_color = BorderColor(Color::WHITE);
-            }
-            Interaction::None => {
-                node.bottom = Val::Px(hand_card.base_bottom);
-                transform.scale = Vec3::ONE;
-                transform.rotation = Quat::from_rotation_z(hand_card.base_rotation);
-                *z_index = ZIndex(hand_card.index as i32);
-                border_color.0 = Color::BLACK;
-            }
-            _ => {}
-        }
-    }
-}
 
 /// 处理卡牌点击事件
 fn handle_card_play(
@@ -1879,11 +1856,15 @@ fn handle_card_play(
     mut screen_events: EventWriter<ScreenEffectEvent>,
     mut sfx_events: EventWriter<PlaySfxEvent>,
     mut anim_events: EventWriter<CharacterAnimationEvent>,
-    player_sprite_query: Query<Entity, With<PlayerSpriteMarker>>,
-    enemy_sprite_query: Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
-    enemy_impact_query: Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &crate::components::sprite::PhysicalImpact)>,
-    camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    mut damage_events: EventWriter<DamageEffectEvent>,
+    queries: (
+        Query<Entity, With<PlayerSpriteMarker>>,
+        Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
+        Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &crate::components::sprite::PhysicalImpact)>,
+        Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    ),
 ) {
+    let (player_sprite_query, enemy_sprite_query, enemy_impact_query, camera_query) = queries;
     for (interaction, hand_card) in card_query.iter() {
         if matches!(interaction, Interaction::Pressed) {
             let player_energy = if let Ok((p, _)) = player_query.get_single() {
@@ -1938,6 +1919,7 @@ fn handle_card_play(
                             &mut effect_events,
                             &mut screen_events,
                             &mut anim_events,
+                            &mut damage_events,
                             &enemy_sprite_query,
                             &enemy_impact_query,
                             &camera_query,
@@ -1963,8 +1945,8 @@ fn handle_card_play(
 /// 应用卡牌效果
 fn apply_card_effect(
     card: &crate::components::cards::Card,
-    commands: &mut Commands, // 增加 commands
-    asset_server: &Res<AssetServer>, // 增加 asset_server
+    _commands: &mut Commands, // 增加 commands
+    _asset_server: &Res<AssetServer>, // 增加 asset_server
     player_query: &mut Query<(&mut Player, &crate::components::Cultivation)>,
     enemy_query: &mut Query<&mut Enemy>,
     draw_pile_query: &mut Query<&mut DrawPile>,
@@ -1973,9 +1955,10 @@ fn apply_card_effect(
     effect_events: &mut EventWriter<SpawnEffectEvent>,
     screen_events: &mut EventWriter<ScreenEffectEvent>,
     anim_events: &mut EventWriter<CharacterAnimationEvent>,
+    damage_events: &mut EventWriter<DamageEffectEvent>,
     enemy_sprite_query: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
     enemy_impact_query: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &crate::components::sprite::PhysicalImpact)>,
-    camera_query: &Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    _camera_query: &Query<(&Camera, &GlobalTransform), With<Camera3d>>,
 ) {
     let card_name = card.name.clone();
     match &card.effect {
@@ -1989,6 +1972,18 @@ fn apply_card_effect(
                 for (entity, marker, transform) in enemy_sprite_query.iter() {
                     if marker.id == target_id {
                         effect_events.send(SpawnEffectEvent::new(EffectType::Fire, transform.translation));
+                        
+                        // 发送受击飘字事件
+                        // 从 enemy_impact_query 寻找对应的 2D 位置
+                        if let Some((_, _, impact)) = enemy_impact_query.iter().find(|(_, m, _)| m.id == target_id) {
+                            let x_world = impact.home_position.x * 100.0;
+                            let y_world = (impact.home_position.z - 0.1) * 100.0;
+                            damage_events.send(DamageEffectEvent {
+                                position: Vec2::new(x_world, y_world),
+                                amount: *amount,
+                            });
+                        }
+
                         if is_dead {
                             anim_events.send(CharacterAnimationEvent { target: entity, animation: crate::components::sprite::AnimationState::Death });
                         } else {
@@ -2009,6 +2004,17 @@ fn apply_card_effect(
             
             if hit_count > 0 {
                 info!("【卡牌】施展群体杀伤，重创 {} 名妖物", hit_count);
+
+                // 发送 AOE 飘字事件
+                for (_, _marker, impact) in enemy_impact_query.iter() {
+                    let x_world = impact.home_position.x * 100.0;
+                    let y_world = (impact.home_position.z - 0.1) * 100.0;
+                    damage_events.send(DamageEffectEvent {
+                        position: Vec2::new(x_world, y_world),
+                        amount: *amount,
+                    });
+                }
+
                 // 万剑归宗全屏特效补丁 (相位二：锁定打击)
                 if card_name.contains("万剑归宗") {
                     screen_events.send(ScreenEffectEvent::Shake { trauma: 1.0, decay: 0.45 });
