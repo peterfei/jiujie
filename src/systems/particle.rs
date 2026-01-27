@@ -141,6 +141,7 @@ fn update_emitters(mut commands: Commands, assets: Res<ParticleAssets>, mut emit
 use crate::components::screen_effect::ScreenEffectEvent;
 
 use crate::components::sprite::EnemySpriteMarker;
+use bevy::core_pipeline::core_3d::Camera3d;
 
 pub fn update_particles(
     mut commands: Commands,
@@ -150,6 +151,7 @@ pub fn update_particles(
     mut screen_events: EventWriter<ScreenEffectEvent>,
     enemy_query: Query<(Entity, &Transform), With<EnemySpriteMarker>>,
     enemy_impact_query: Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &crate::components::sprite::PhysicalImpact), With<EnemySpriteMarker>>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
 ) {
     let delta = time.delta_secs();
     for (entity, mut p, mut node, mut image, mut visibility, mut transform) in query.iter_mut() {
@@ -191,7 +193,7 @@ pub fn update_particles(
                 phase_three_ominous_pause(&mut p, local_prog, &mut screen_events, &enemy_query);
             } else {
                 // 第四相位：极速穿心 (Mach Piercing) - 55% ~ 100%
-                phase_four_mach_piercing(&mut p, local_prog, &mut events, &mut screen_events, &enemy_query, &enemy_impact_query);
+                phase_four_mach_piercing(&mut p, local_prog, &mut events, &mut screen_events, &enemy_query, &enemy_impact_query, &camera_query);
             }
         } else {
             // --- 通用粒子逻辑 ---
@@ -211,7 +213,8 @@ pub fn update_particles(
 
         let size = p.current_size();
         let (w, h) = if p.effect_type == EffectType::WanJian {
-            (size, size * 4.0)
+            // sword.png 原始尺寸 1408×768，宽高比 ~1.83
+            (size * 1.83, size)
         } else {
             (size, size)
         };
@@ -224,11 +227,8 @@ pub fn update_particles(
         image.color = p.current_color();
 
         // 更新 2D 旋转（Transform 组件）
-        let final_rotation = if p.effect_type == EffectType::WanJian || p.effect_type == EffectType::SwordEnergy {
-            p.rotation - std::f32::consts::PI / 2.0 // 修正纵向贴图
-        } else {
-            p.rotation
-        };
+        // sword.png 是横向贴图 (1408×768)，直接使用计算出的旋转角度
+        let final_rotation = p.rotation;
         transform.rotation = Quat::from_rotation_z(final_rotation);
 
         // 7. 死亡检查与销毁 (放最后且确保逻辑闭环)
@@ -392,22 +392,48 @@ fn phase_four_mach_piercing(
     screen_events: &mut EventWriter<ScreenEffectEvent>,
     enemy_query: &Query<(Entity, &Transform), With<EnemySpriteMarker>>,
     enemy_impact_query: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &crate::components::sprite::PhysicalImpact), With<EnemySpriteMarker>>,
+    camera_query: &Query<(&Camera, &GlobalTransform), With<Camera3d>>,
 ) {
     let strike_t = (local_prog - 0.55) / 0.45;
 
-    // 【磁力吸引】动态获取敌人的当前位置作为目标
-    // 不使用预计算的坐标，而是实时获取敌人的 home_position 并转换
+    // 【磁力吸引 + 摄像机投影修正】
+    // 使用 world_to_viewport 进行正确的3D到2D投影，解决窗口大小变化时的位置偏移问题
     if let Some(target_entity) = p.target_entity {
+        // 获取摄像机
+        let (camera, camera_transform) = match camera_query.get_single() {
+            Ok((cam, trans)) => (cam, trans),
+            Err(_) => {
+                // 摄像机未就绪，使用简单乘法作为后备方案
+                if let Ok((_, _, impact)) = enemy_impact_query.get(target_entity) {
+                    let x_world = impact.home_position.x * 100.0;
+                    let y_world = (impact.home_position.z - 0.1) * 100.0;
+                    p.target = Some(Vec2::new(x_world, y_world));
+                }
+                return;
+            }
+        };
+
         // 检查当前目标是否存活
         if let Ok((_, _, impact)) = enemy_impact_query.get(target_entity) {
-            // 敌人存活，动态获取其 home_position（固定的，不受动画影响）
-            // home_position = (x_world/100, 0.05, y_world/100 + 0.1)
-            let x_world = impact.home_position.x * 100.0;
-            let y_world = (impact.home_position.z - 0.1) * 100.0;
-            let dynamic_target = Vec2::new(x_world, y_world);
+            // 敌人存活，使用 world_to_viewport 进行正确的3D到2D投影
+            if let Ok(screen_pos) = camera.world_to_viewport(camera_transform, impact.home_position) {
+                // screen_pos 是相对于窗口左上角的像素坐标
+                // 转换为相对于屏幕中心的粒子坐标
+                let window_size = camera.viewport.as_ref()
+                    .map(|v| v.physical_size)
+                    .unwrap_or(bevy::render::camera::Viewport::default().physical_size);
 
-            // 更新粒子目标（磁力吸引效果）
-            p.target = Some(dynamic_target);
+                let center_x = window_size.x as f32 / 2.0;
+                let center_y = window_size.y as f32 / 2.0;
+
+                // 粒子坐标系：中心为原点，x向右为正，y向上为正
+                let dynamic_target = Vec2::new(
+                    screen_pos.x - center_x,
+                    center_y - screen_pos.y
+                );
+
+                p.target = Some(dynamic_target);
+            }
         } else {
             // 目标实体已消失，使用 target_group 进行循环重定向
             if let Some(ref group) = p.target_group {
@@ -420,9 +446,19 @@ fn phase_four_mach_piercing(
                         // 检查该实体是否仍然存活，并获取其位置
                         if let Ok((_, _, impact)) = enemy_impact_query.get(*entity) {
                             p.target_entity = Some(*entity);
-                            let x_world = impact.home_position.x * 100.0;
-                            let y_world = (impact.home_position.z - 0.1) * 100.0;
-                            p.target = Some(Vec2::new(x_world, y_world));
+                            if let Ok(screen_pos) = camera.world_to_viewport(camera_transform, impact.home_position) {
+                                let window_size = camera.viewport.as_ref()
+                                    .map(|v| v.physical_size)
+                                    .unwrap_or(bevy::render::camera::Viewport::default().physical_size);
+
+                                let center_x = window_size.x as f32 / 2.0;
+                                let center_y = window_size.y as f32 / 2.0;
+
+                                p.target = Some(Vec2::new(
+                                    screen_pos.x - center_x,
+                                    center_y - screen_pos.y
+                                ));
+                            }
                             break;
                         }
                     }
