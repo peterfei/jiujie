@@ -125,6 +125,42 @@ impl Card {
 // 牌组系统
 // ============================================================================
 
+/// 玩家牌组资源
+#[derive(Resource, Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PlayerDeck {
+    pub cards: Vec<Card>,
+}
+
+/// 牌组查看 UI 标记
+#[derive(Component)]
+pub struct DeckUiRoot;
+
+/// 查看牌组按钮标记
+#[derive(Component)]
+pub struct ViewDeckButton;
+
+/// 关闭牌组查看按钮标记
+#[derive(Component)]
+pub struct CloseDeckButton;
+
+impl PlayerDeck {
+    pub fn new(cards: Vec<Card>) -> Self {
+        Self { cards }
+    }
+
+    pub fn add_card(&mut self, card: Card) {
+        self.cards.push(card);
+    }
+
+    pub fn len(&self) -> usize {
+        self.cards.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.cards.is_empty()
+    }
+}
+
 /// 抽牌堆
 #[derive(Component, Debug, Clone)]
 pub struct DrawPile {

@@ -105,6 +105,8 @@ impl Plugin for MenuPlugin {
         app.add_systems(OnExit(GameState::Map), cleanup_map_ui);
         // 处理地图界面按钮点击
         app.add_systems(Update, handle_map_button_clicks.run_if(in_state(GameState::Map)));
+        // 全局牌组查看系统
+        app.add_systems(Update, handle_deck_view_toggle);
 
         // 在进入Combat状态时设置战斗UI
         // 在进入Combat状态时设置战斗UI
@@ -124,6 +126,8 @@ impl Plugin for MenuPlugin {
         app.add_systems(Update, update_combat_ui.run_if(in_state(GameState::Combat)));
         // 回合开始时抽牌
         app.add_systems(Update, draw_cards_on_turn_start.run_if(in_state(GameState::Combat)));
+        // 战斗开始时抽牌 (新注册，解决空手牌问题)
+        app.add_systems(Update, draw_cards_on_combat_start.run_if(in_state(GameState::Combat)));
         // 敌人队列处理系统
         app.add_systems(Update, process_enemy_turn_queue.run_if(in_state(GameState::Combat)));
         // 更新手牌UI
@@ -751,14 +755,16 @@ fn setup_map_ui(
     };
     let visible_limit = current_layer + vision_range;
 
+    let player_gold = if let Some((p, _)) = player_info { p.gold } else { 0 };
+
     commands
         .spawn((
             Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
                 flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                padding: UiRect::all(Val::Px(20.0)),
                 ..default()
             },
             BackgroundColor(Color::srgb(0.05, 0.05, 0.05)),
@@ -858,18 +864,39 @@ fn setup_map_ui(
                 });
 
             // 底部状态栏（显示灵石等）
-            parent.spawn((
-                Node {
-                    width: Val::Px(300.0),
-                    height: Val::Px(40.0),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-            )).with_children(|footer| {
-                let gold = player_info.map(|(p, _)| p.gold).unwrap_or(0);
+            parent.spawn(Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(20.0),
+                bottom: Val::Px(20.0),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(30.0),
+                ..default()
+            }).with_children(|footer| {
+                // 1. 查看牌组按钮
                 footer.spawn((
-                    Text::new(format!("持有灵石: {}", gold)),
+                    Button,
+                    Node {
+                        width: Val::Px(120.0),
+                        height: Val::Px(45.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.2, 0.2, 0.4)),
+                    BorderRadius::all(Val::Px(8.0)),
+                    crate::components::cards::ViewDeckButton,
+                )).with_children(|btn| {
+                    btn.spawn((
+                        Text::new("藏经阁"), // 更有修仙味的名字
+                        TextFont { font: chinese_font.clone(), font_size: 22.0, ..default() },
+                        TextColor(Color::WHITE),
+                    ));
+                });
+
+                // 2. 灵石信息
+                footer.spawn((
+                    Text::new(format!("灵石: {}", player_gold)),
                     TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() },
                     TextColor(Color::srgb(1.0, 0.8, 0.2)),
                 ));
@@ -1183,19 +1210,12 @@ fn setup_combat_ui(
     spawn_character_sprite(&mut commands, &character_assets, CharacterType::Player, Vec3::new(-350.0, -80.0, 10.0), Vec2::new(100.0, 140.0), None);
 
     // --- 法宝 3D 视觉生成 ---
-    // 调试：如果玩家目前没有法宝，为了测试视觉效果，我们强行显示一个“飞剑符”
-    let display_relics = if relic_collection.relic.is_empty() {
-        vec![crate::components::relic::Relic::burning_blood()]
-    } else {
-        relic_collection.relic.clone()
-    };
-
-    for (i, relic) in display_relics.iter().enumerate() {
-        // 计算法宝位置 (稍微在玩家前面，防止被立牌遮挡)
-        let angle = i as f32 * 0.8;
-        let x_offset = angle.cos() * 1.2;
-        let z_offset = angle.sin() * 0.5;
-        let base_pos = Vec3::new(-3.5 + x_offset, 1.2, 0.5 + z_offset);
+    for (i, relic) in relic_collection.relic.iter().enumerate() {
+        // 大作级环绕布局：半径 1.8 米，高度 1.5 米
+        let angle = i as f32 * 1.2; // 角度间隔
+        let x_offset = angle.cos() * 1.8;
+        let z_offset = angle.sin() * 0.8;
+        let base_pos = Vec3::new(-3.5 + x_offset, 1.5, 1.0 + z_offset); // Z 轴提前到 1.0
 
         commands.spawn((
             crate::components::sprite::RelicVisualMarker { 
@@ -1204,20 +1224,21 @@ fn setup_combat_ui(
             },
             SpriteMarker,
             CombatUiRoot,
-            Rotating { speed: 1.0 }, 
-            CharacterSprite::new(asset_server.load("textures/relics/default.png"), Vec2::new(40.0, 40.0)),
+            Rotating { speed: 1.5 }, // 旋转快一点更灵动
+            CharacterSprite::new(asset_server.load("textures/relics/default.png"), Vec2::new(45.0, 45.0)),
             Transform::from_translation(base_pos),
         ));
     }
     commands.insert_resource(CombatState::default());
+    
+    // 准备全量牌组
     let deck_cards = player_deck.cards.clone();
-    commands.insert_resource(DeckConfig { starting_deck: deck_cards.clone(), ..default() });
-    let drawn = 5.min(deck_cards.len());
-    let mut hand = Hand::new(10);
-    for card in deck_cards.iter().take(drawn) { hand.add_card(card.clone()); }
-    commands.spawn(DrawPile::new(deck_cards.iter().skip(drawn).cloned().collect()));
+    info!("【战斗】准备战斗牌组: {} 张", deck_cards.len());
+    
+    // 仅初始化空的堆栈，将抽牌权交给专门的 draw_cards 系统
+    commands.spawn(DrawPile::new(deck_cards));
     commands.spawn(DiscardPile::new());
-    commands.spawn(hand);
+    commands.spawn(Hand::new(10));
     let player_data = player_query.get_single().ok();
 
     commands.entity(root_entity).with_children(|root| {
@@ -1357,7 +1378,7 @@ fn process_enemy_turn_queue(
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
     mut queue: ResMut<EnemyActionQueue>,
-    mut combat_state: ResMut<CombatState>,
+    combat_state_opt: Option<ResMut<CombatState>>, // 关键修复：改为 Option
     mut player_query: Query<(&mut Player, &crate::components::Cultivation)>,
     mut enemy_query: Query<&mut Enemy>,
     mut anim_events: EventWriter<CharacterAnimationEvent>,
@@ -1367,6 +1388,7 @@ fn process_enemy_turn_queue(
     enemy_sprite_query: Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
     time: Res<Time>,
 ) {
+    let Some(mut combat_state) = combat_state_opt else { return; };
     if !queue.processing || combat_state.phase != TurnPhase::EnemyTurn {
         return;
     }
@@ -1559,25 +1581,28 @@ fn reset_player_on_combat_start(mut player_query: Query<&mut Player>) {
 fn draw_cards_on_combat_start(
     mut draw_pile_query: Query<&mut DrawPile>,
     mut hand_query: Query<&mut Hand>,
+    combat_state_opt: Option<ResMut<CombatState>>, // 关键修复：改为 Option 防止系统参数未就绪闪退
 ) {
-    info!("draw_cards_on_combat_start 被调用");
-    match (draw_pile_query.get_single_mut(), hand_query.get_single_mut()) {
-        (Ok(mut draw_pile), Ok(mut hand)) => {
-            info!("抽牌堆卡牌数: {}, 手牌当前数量: {}", draw_pile.count, hand.cards.len());
-            // 初始抽5张牌
-            let cards_to_draw = 5;
-            for _ in 0..cards_to_draw {
+    let Some(mut combat_state) = combat_state_opt else { return; };
+    if combat_state.cards_drawn_this_turn { return; }
+
+    if let Ok(mut draw_pile) = draw_pile_query.get_single_mut() {
+        if let Ok(mut hand) = hand_query.get_single_mut() {
+            info!("【战斗】初始洗牌并抽取 5 张机缘");
+            
+            // 1. 全量洗牌
+            use rand::seq::SliceRandom;
+            draw_pile.cards.shuffle(&mut rand::thread_rng());
+            
+            // 2. 抽取 5 张
+            let to_draw = 5.min(draw_pile.cards.len());
+            for _ in 0..to_draw {
                 if let Some(card) = draw_pile.draw_card() {
                     hand.add_card(card);
                 }
             }
-            info!("战斗开始：抽了 {} 张牌，手牌现在有 {} 张", cards_to_draw, hand.cards.len());
-        }
-        (Err(e), _) => {
-            info!("DrawPile 查询失败: {:?}", e);
-        }
-        (_, Err(e)) => {
-            info!("Hand 查询失败: {:?}", e);
+            
+            combat_state.cards_drawn_this_turn = true;
         }
     }
 }
@@ -1588,8 +1613,9 @@ fn draw_cards_on_turn_start(
     mut hand_query: Query<&mut Hand>,
     mut discard_pile_query: Query<&mut DiscardPile>,
     player_query: Query<&Player>,
-    mut combat_state: ResMut<CombatState>,
+    combat_state_opt: Option<ResMut<CombatState>>, // 关键修复：改为 Option
 ) {
+    let Some(mut combat_state) = combat_state_opt else { return; };
     // 只在玩家回合且回合数大于1时抽牌（避免战斗开始时重复抽牌）
     let player_turn = if let Ok(player) = player_query.get_single() {
         player.turn
@@ -1682,10 +1708,23 @@ fn update_hand_ui(
         }
     }
 
-    // 只在手牌变化时更新卡牌UI
-    if let Ok(hand) = hand_changed_query.get_single() {
-        info!("更新手牌UI，手牌数量: {}", hand.cards.len());
-        if let Ok((hand_area_entity, children)) = hand_area_query.get_single_mut() {
+    // 即使手牌没有发生 Change 事件，如果 UI 里的卡片数量对不上，也要强制更新
+    let hand_needs_update = if let Ok(hand) = hand_changed_query.get_single() {
+        if let Ok((_, children)) = hand_area_query.get_single() {
+            // 注意：children 包含一个"手牌: X/Y"文本，所以要减 1
+            let ui_card_count = children.len().saturating_sub(1);
+            hand.cards.len() != ui_card_count
+        } else {
+            true
+        }
+    } else {
+        false
+    };
+
+    if hand_needs_update {
+        if let Ok(hand) = hand_changed_query.get_single() {
+            info!("更新手牌UI，手牌数量: {}", hand.cards.len());
+            if let Ok((hand_area_entity, children)) = hand_area_query.get_single_mut() {
             let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
 
             // 1. 清空现有手牌显示（保留第一个子元素，即"手牌: X/Y"文本）
@@ -1804,6 +1843,7 @@ fn update_hand_ui(
             }
         }
     }
+}
 }
 
 /// 处理手牌卡片悬停与交互反馈 (大作级动态手感)
@@ -2381,7 +2421,6 @@ fn cleanup_reward_ui(
     }
 }
 
-/// 处理奖励卡牌点击
 fn handle_reward_clicks(
     interactions: Query<
         (&Interaction, &RewardCardButton),
@@ -2390,6 +2429,8 @@ fn handle_reward_clicks(
     mut next_state: ResMut<NextState<GameState>>,
     mut player_deck: ResMut<PlayerDeck>,
     mut map_progress: ResMut<MapProgress>,
+    relics: Res<RelicCollection>, // 引入法宝资源
+    player_query: Query<(&Player, &crate::components::Cultivation)>, // 引入玩家查询
 ) {
     for (interaction, reward_btn) in interactions.iter() {
         if matches!(interaction, Interaction::Pressed) {
@@ -2410,15 +2451,157 @@ fn handle_reward_clicks(
             map_progress.complete_current_node();
             info!("节点已完成，已解锁下一层");
 
+            // --- 执行自动存档 (确保法宝不丢失) ---
+            if let Ok((player, cultivation)) = player_query.get_single() {
+                let save = crate::resources::save::GameStateSave {
+                    player: player.clone(),
+                    cultivation: cultivation.clone(),
+                    deck: player_deck.cards.clone(),
+                    relics: relics.relic.clone(),
+                    map_nodes: map_progress.nodes.clone(),
+                    current_map_node_id: map_progress.current_node_id,
+                    current_map_layer: map_progress.current_layer,
+                };
+                let _ = save.save_to_disk();
+                info!("【存档系统】领取奖励后自动保存");
+            }
+
             // 返回地图
             next_state.set(GameState::Map);
         }
     }
 }
 
-// ============================================================================
-// 游戏结束系统
-// ============================================================================
+/// 处理牌组查看交互
+fn handle_deck_view_toggle(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    deck: Res<PlayerDeck>,
+    view_btn_query: Query<&Interaction, (Changed<Interaction>, With<crate::components::cards::ViewDeckButton>)>,
+    close_btn_query: Query<&Interaction, (Changed<Interaction>, With<crate::components::cards::CloseDeckButton>)>,
+    deck_ui_query: Query<Entity, With<crate::components::cards::DeckUiRoot>>,
+) {
+    let chinese_font = asset_server.load("fonts/Arial Unicode.ttf");
+
+    // 1. 处理打开面板
+    for interaction in view_btn_query.iter() {
+        if matches!(interaction, Interaction::Pressed) {
+            info!("【藏经阁】开启功法查看面板");
+            
+            // 创建全屏半透明遮罩
+            commands.spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    position_type: PositionType::Absolute,
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.9)),
+                ZIndex(1000), // 覆盖一切
+                crate::components::cards::DeckUiRoot,
+            )).with_children(|parent| {
+                // 标题
+                parent.spawn((
+                    Text::new("藏 经 阁 (功法一览)"),
+                    TextFont { font: chinese_font.clone(), font_size: 48.0, ..default() },
+                    TextColor(Color::srgb(0.6, 0.9, 0.6)),
+                    Node { margin: UiRect::bottom(Val::Px(30.0)), ..default() },
+                ));
+
+                // 滚动区域容器
+                parent.spawn(Node {
+                    width: Val::Percent(85.0),
+                    height: Val::Percent(70.0),
+                    flex_direction: FlexDirection::Row,
+                    flex_wrap: FlexWrap::Wrap,
+                    justify_content: JustifyContent::Center,
+                    column_gap: Val::Px(20.0),
+                    row_gap: Val::Px(25.0),
+                    ..default()
+                }).with_children(|grid| {
+                    // 渲染所有已掌握的功法
+                    for card in &deck.cards {
+                        create_static_card_ui(grid, card, &chinese_font, &asset_server);
+                    }
+                });
+
+                // 关闭按钮
+                parent.spawn((
+                    Button,
+                    Node {
+                        width: Val::Px(150.0),
+                        height: Val::Px(50.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        margin: UiRect::top(Val::Px(30.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.4, 0.2, 0.2)),
+                    BorderRadius::all(Val::Px(8.0)),
+                    crate::components::cards::CloseDeckButton,
+                )).with_children(|btn| {
+                    btn.spawn((
+                        Text::new("合上经卷"),
+                        TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() },
+                        TextColor(Color::WHITE),
+                    ));
+                });
+            });
+        }
+    }
+
+    // 2. 处理关闭面板
+    for interaction in close_btn_query.iter() {
+        if matches!(interaction, Interaction::Pressed) {
+            for entity in deck_ui_query.iter() {
+                commands.entity(entity).despawn_recursive();
+            }
+        }
+    }
+}
+
+/// 辅助函数：创建一个不可交互的展示用卡牌 UI
+fn create_static_card_ui(parent: &mut ChildBuilder, card: &crate::components::cards::Card, font: &Handle<Font>, asset_server: &AssetServer) {
+    parent.spawn((
+        Node {
+            width: Val::Px(120.0),
+            height: Val::Px(170.0),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::SpaceBetween,
+            padding: UiRect::all(Val::Px(8.0)),
+            border: UiRect::all(Val::Px(2.0)),
+            ..default()
+        },
+        BackgroundColor(card.get_color()),
+        BorderColor(Color::BLACK),
+        BorderRadius::all(Val::Px(8.0)),
+    )).with_children(|card_ui| {
+        // 名称
+        card_ui.spawn((
+            Text::new(card.name.clone()),
+            TextFont { font: font.clone(), font_size: 16.0, ..default() },
+            TextColor(Color::WHITE),
+        ));
+        
+        // 插画
+        card_ui.spawn((
+            ImageNode::new(asset_server.load(card.image_path.clone())),
+            Node { width: Val::Percent(95.0), height: Val::Percent(55.0), ..default() },
+        ));
+
+        // 描述
+        card_ui.spawn((
+            Text::new(card.description.clone()),
+            TextFont { font: font.clone(), font_size: 10.0, ..default() },
+            TextColor(Color::srgb(0.9, 0.9, 0.9)),
+            Node { max_width: Val::Px(100.0), ..default() },
+        ));
+    });
+}
 
 #[derive(Component)]
 struct GameOverUiRoot;
@@ -2651,17 +2834,36 @@ fn create_relic_reward_option(parent: &mut ChildBuilder, relic: Relic, asset_ser
                 TextLayout::new_with_justify(JustifyText::Center),
             ));
         })
-        .observe(move |_entity: Trigger<Pointer<Click>>, mut relic_collection: ResMut<RelicCollection>, mut next_state: ResMut<NextState<GameState>>, mut map_progress: ResMut<MapProgress>| {
-            // 添加遗物到背包
+        .observe(move |_entity: Trigger<Pointer<Click>>, 
+                       mut relic_collection: ResMut<RelicCollection>, 
+                       mut next_state: ResMut<NextState<GameState>>, 
+                       mut map_progress: ResMut<MapProgress>,
+                       player_deck: Res<PlayerDeck>,
+                       player_query: Query<(&Player, &crate::components::Cultivation)>| {
+            info!("获得了法宝: {}", relic.name);
             let added = relic_collection.add_relic(relic.clone());
             if added {
-                info!("【遗物奖励】获得了遗物: {}", relic.name);
-            } else {
-                warn!("【遗物奖励】遗物已存在，未能添加: {}", relic.name);
+                info!("法宝已加入收藏");
+            }
+            
+            // 标记当前节点为完成
+            map_progress.complete_current_node();
+            
+            // --- 关键修复：即时存档 ---
+            if let Ok((player, cultivation)) = player_query.get_single() {
+                let save = crate::resources::save::GameStateSave {
+                    player: player.clone(),
+                    cultivation: cultivation.clone(),
+                    deck: player_deck.cards.clone(),
+                    relics: relic_collection.relic.clone(),
+                    map_nodes: map_progress.nodes.clone(),
+                    current_map_node_id: map_progress.current_node_id,
+                    current_map_layer: map_progress.current_layer,
+                };
+                let _ = save.save_to_disk();
+                info!("【存档系统】领取法宝后自动保存");
             }
 
-            // 标记当前节点为完成，解锁下一层
-            map_progress.complete_current_node();
             next_state.set(GameState::Map);
         });
 }
