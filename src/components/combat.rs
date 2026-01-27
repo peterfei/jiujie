@@ -149,6 +149,57 @@ pub struct BlockIconMarker {
 #[derive(Component)]
 pub struct BlockText;
 
+#[derive(Component)]
+pub struct StatusIndicator {
+    pub owner: Entity,
+}
+
+// --- UI 标记组件 ---
+#[derive(Component)]
+pub struct EnemyHpText {
+    pub owner: Entity,
+}
+
+#[derive(Component)]
+pub struct EnemyIntentText {
+    pub owner: Entity,
+}
+
+#[derive(Component)]
+pub struct EnemyStatusUi {
+    pub enemy_id: u32,
+}
+
+#[derive(Component)]
+pub struct PlayerHpText;
+
+#[derive(Component)]
+pub struct PlayerEnergyText;
+
+#[derive(Component)]
+pub struct PlayerBlockText;
+
+#[derive(Component)]
+pub struct TopBar;
+
+#[derive(Component)]
+pub struct TopBarHpText;
+
+#[derive(Component)]
+pub struct TopBarGoldText;
+
+#[derive(Component)]
+pub struct EnergyOrb;
+
+#[derive(Component)]
+pub struct EndTurnButton;
+
+#[derive(Component)]
+pub struct HandArea;
+
+#[derive(Component)]
+pub struct CombatUiRoot;
+
 impl DamageNumber {
     pub fn new(value: i32) -> Self {
         Self {

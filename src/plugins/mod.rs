@@ -11,7 +11,9 @@ use crate::components::{
     EnemySpriteMarker, VictoryDelay, RelicCollection, Relic, RelicId,
     EnemyActionQueue, RelicObtainedEvent, RelicTriggeredEvent,
     ParticleEmitter, PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker, DialogueLine,
-    Particle, DamageNumber, DamageEffectEvent, BlockIconMarker, BlockText, // 补全导入
+    Particle, DamageNumber, DamageEffectEvent, BlockIconMarker, BlockText, StatusIndicator,
+    EnemyHpText, EnemyIntentText, EnemyStatusUi, PlayerHpText, PlayerEnergyText, PlayerBlockText,
+    TopBar, TopBarHpText, TopBarGoldText, EnergyOrb, EndTurnButton, HandArea, CombatUiRoot,
 };
 use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, PlayerSpriteMarker, MagicSealMarker, CharacterSprite};
 use crate::systems::sprite::{spawn_character_sprite};
@@ -1015,47 +1017,9 @@ fn get_node_icon(node_type: NodeType) -> &'static str {
 // 战斗系统
 // ============================================================================
 
-#[derive(Component)]
-pub struct CombatUiRoot;
-
-#[derive(Component)]
-struct TopBar;
-
-#[derive(Component)]
-struct TopBarHpText;
-
-#[derive(Component)]
-struct TopBarGoldText;
-
-#[derive(Component)]
-struct EnergyOrb;
-
-#[derive(Component)]
-struct DrawPileIcon;
-
-#[derive(Component)]
-struct DiscardPileIcon;
-
-#[derive(Component)]
-struct PlayerHpText;
-
-#[derive(Component)]
-struct PlayerEnergyText;
-
-#[derive(Component)]
-struct PlayerBlockText;
-
-#[derive(Component)]
-struct EnemyHpText;
-
-#[derive(Component)]
-struct EnemyIntentText;
-
-/// 绑定到特定妖兽的UI面板
-#[derive(Component)]
-struct EnemyStatusUi {
-    pub enemy_id: u32,
-}
+// ============================================================================
+// 战斗UI初始化
+// ============================================================================
 
 #[derive(Component)]
 struct TurnText;
@@ -1070,9 +1034,6 @@ pub struct DiscardPileText;
 pub struct HandCountText;
 
 #[derive(Component)]
-struct EndTurnButton;
-
-#[derive(Component)]
 struct ReturnToMapButton;
 
 #[derive(Component)]
@@ -1082,10 +1043,6 @@ pub struct HandCard {
     pub base_rotation: f32,
     pub index: usize,
 }
-
-
-#[derive(Component)]
-pub struct HandArea;
 
 #[derive(Component)]
 struct RewardUiRoot;
@@ -1194,7 +1151,12 @@ fn setup_combat_ui(
                         column_gap: Val::Px(8.0),
                         ..default()
                     }).with_children(|row| {
-                        row.spawn((Text::new(format!("HP: {}/{}", hp, hp)), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(Color::srgb(1.0, 0.3, 0.3)), EnemyHpText));
+                        row.spawn((
+                            Text::new(format!("HP: {}/{}", hp, hp)),
+                            TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() },
+                            TextColor(Color::srgb(1.0, 0.3, 0.3)),
+                            EnemyHpText { owner: enemy_entity },
+                        ));
                         
                         // 护甲图标容器 (使用 Display 控制)
                         row.spawn((
@@ -1204,8 +1166,7 @@ fn setup_combat_ui(
                                 justify_content: JustifyContent::Center, align_items: AlignItems::Center,
                                 ..default()
                             },
-                            BackgroundColor(Color::srgb(0.2, 0.5, 1.0)), // 更亮的蓝色
-                            BorderRadius::all(Val::Px(6.0)),
+                            ImageNode::new(asset_server.load("textures/cards/defense.png")).with_color(Color::srgb(0.4, 0.7, 1.0)), // 蓝色护盾图标
                             BlockIconMarker { owner: enemy_entity },
                         )).with_children(|shield| {
                             shield.spawn((
@@ -1217,7 +1178,20 @@ fn setup_combat_ui(
                         });
                     });
 
-                    p.spawn((Text::new("意图: 观察"), TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() }, TextColor(Color::srgb(1.0, 0.8, 0.4)), EnemyIntentText));
+                    // 状态显示行
+                    p.spawn((
+                        Text::new(""),
+                        TextFont { font: chinese_font.clone(), font_size: 12.0, ..default() },
+                        TextColor(Color::srgb(0.8, 0.8, 0.8)),
+                        StatusIndicator { owner: enemy_entity },
+                    ));
+
+                    p.spawn((
+                        Text::new("意图: 观察"),
+                        TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() },
+                        TextColor(Color::srgb(1.0, 0.8, 0.4)),
+                        EnemyIntentText { owner: enemy_entity }
+                    ));
                 });
             });
         }
@@ -1250,7 +1224,12 @@ fn setup_combat_ui(
                         column_gap: Val::Px(8.0),
                         ..default()
                     }).with_children(|row| {
-                        row.spawn((Text::new(format!("HP: {}/{}", enemy.hp, enemy.max_hp)), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(Color::srgb(1.0, 0.3, 0.3)), EnemyHpText));
+                        row.spawn((
+                            Text::new(format!("HP: {}/{}", enemy.hp, enemy.max_hp)),
+                            TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() },
+                            TextColor(Color::srgb(1.0, 0.3, 0.3)),
+                            EnemyHpText { owner: enemy_entity },
+                        ));
                         
                         // 护甲图标容器
                         row.spawn((
@@ -1260,8 +1239,7 @@ fn setup_combat_ui(
                                 justify_content: JustifyContent::Center, align_items: AlignItems::Center,
                                 ..default()
                             },
-                            BackgroundColor(Color::srgb(0.2, 0.5, 1.0)),
-                            BorderRadius::all(Val::Px(6.0)),
+                            ImageNode::new(asset_server.load("textures/cards/defense.png")).with_color(Color::srgb(0.4, 0.7, 1.0)),
                             BlockIconMarker { owner: enemy_entity },
                         )).with_children(|shield| {
                             shield.spawn((
@@ -1273,7 +1251,20 @@ fn setup_combat_ui(
                         });
                     });
 
-                    p.spawn((Text::new("意图: 观察"), TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() }, TextColor(Color::srgb(1.0, 0.8, 0.4)), EnemyIntentText));
+                    // 状态显示行
+                    p.spawn((
+                        Text::new(""),
+                        TextFont { font: chinese_font.clone(), font_size: 12.0, ..default() },
+                        TextColor(Color::srgb(0.8, 0.8, 0.8)),
+                        StatusIndicator { owner: enemy_entity },
+                    ));
+
+                    p.spawn((
+                        Text::new("意图: 观察"),
+                        TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() },
+                        TextColor(Color::srgb(1.0, 0.8, 0.4)),
+                        EnemyIntentText { owner: enemy_entity }
+                    ));
                 });
             });
         }
@@ -1347,8 +1338,7 @@ fn setup_combat_ui(
                                 justify_content: JustifyContent::Center, align_items: AlignItems::Center,
                                 ..default()
                             },
-                            BackgroundColor(Color::srgb(1.0, 0.6, 0.0)), // 橙金色，极高辨识度
-                            BorderRadius::all(Val::Px(6.0)),
+                            ImageNode::new(asset_server.load("textures/cards/defense.png")).with_color(Color::srgb(1.0, 0.6, 0.0)), // 橙金色护盾图标
                             BlockIconMarker { owner: entity },
                         )).with_children(|shield| {
                             shield.spawn((
@@ -1362,6 +1352,16 @@ fn setup_combat_ui(
 
                     row.spawn((Text::new(format!("{}/{}", player.hp, player.max_hp)), TextFont { font: chinese_font.clone(), font_size: 22.0, ..default() }, TextColor(Color::WHITE), PlayerHpText));
                 });
+
+                // 玩家状态显示行
+                if let Some(entity) = player_entity {
+                    p.spawn((
+                        Text::new(""),
+                        TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() },
+                        TextColor(Color::srgb(0.8, 0.8, 0.8)),
+                        StatusIndicator { owner: entity },
+                    ));
+                }
             }
         });
         root.spawn((
@@ -1627,16 +1627,14 @@ fn process_enemy_turn_queue(
 fn update_combat_ui(
     player_query: Query<&Player, Changed<Player>>,
     enemy_query: Query<&Enemy, Changed<Enemy>>,
-    ui_panel_query: Query<(&EnemyStatusUi, &Children)>,
-    hp_marker_query: Query<Entity, With<EnemyHpText>>,
-    intent_marker_query: Query<Entity, With<EnemyIntentText>>,
     mut text_queries: ParamSet<(
         Query<&mut Text, With<PlayerHpText>>,
         Query<&mut Text, With<PlayerEnergyText>>,
         Query<&mut Text, With<PlayerBlockText>>,
         Query<&mut Text, With<TopBarHpText>>,
         Query<&mut Text, With<TopBarGoldText>>,
-        Query<&mut Text>, // 索引 5: 通用 Text 查询用于更新多敌人面板
+        Query<(&EnemyHpText, &mut Text)>,     // 索引 5: 敌人 HP
+        Query<(&EnemyIntentText, &mut Text)>, // 索引 6: 敌人意图
     )>,
 ) {
     if let Ok(p) = player_query.get_single() {
@@ -1647,28 +1645,22 @@ fn update_combat_ui(
         if let Ok(mut t) = text_queries.p4().get_single_mut() { t.0 = format!("灵石: {}", p.gold); }
     }
 
-    // 遍历所有敌人，同步更新它们对应的 UI 面板
-    for enemy in enemy_query.iter() {
-        for (panel, children) in ui_panel_query.iter() {
-            if panel.enemy_id == enemy.id {
-                for &child in children.iter() {
-                    if hp_marker_query.contains(child) {
-                        if let Ok(mut text) = text_queries.p5().get_mut(child) {
-                            text.0 = format!("HP: {}/{}", enemy.hp, enemy.max_hp);
-                        }
-                    }
-                    if intent_marker_query.contains(child) {
-                        if let Ok(mut text) = text_queries.p5().get_mut(child) {
-                            text.0 = match &enemy.intent {
-                                EnemyIntent::Attack { damage } => format!("意图: 攻击({} + {})", damage, enemy.strength),
-                                EnemyIntent::Defend { block } => format!("意图: 防御({})", block),
-                                EnemyIntent::Debuff { poison, weakness } => format!("意图: 邪术(毒{}/弱{})", poison, weakness),
-                                _ => "意图: 观察".to_string(),
-                            };
-                        }
-                    }
-                }
-            }
+    // 1. 同步更新所有敌人的 HP
+    for (marker, mut text) in text_queries.p5().iter_mut() {
+        if let Ok(enemy) = enemy_query.get(marker.owner) {
+            text.0 = format!("HP: {}/{}", enemy.hp, enemy.max_hp);
+        }
+    }
+
+    // 2. 同步更新所有敌人的意图
+    for (marker, mut text) in text_queries.p6().iter_mut() {
+        if let Ok(enemy) = enemy_query.get(marker.owner) {
+            text.0 = match &enemy.intent {
+                EnemyIntent::Attack { damage } => format!("意图: 攻击({} + {})", damage, enemy.strength),
+                EnemyIntent::Defend { block } => format!("意图: 防御({})", block),
+                EnemyIntent::Debuff { poison, weakness } => format!("意图: 邪术(毒{}/弱{})", poison, weakness),
+                _ => "意图: 观察".to_string(),
+            };
         }
     }
 }

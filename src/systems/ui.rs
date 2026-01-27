@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use crate::components::combat::{DamageNumber, DamageEffectEvent, BlockIconMarker, BlockText, Player, Enemy};
+use crate::components::combat::{DamageNumber, DamageEffectEvent, BlockIconMarker, BlockText, Player, Enemy, StatusIndicator};
 use crate::states::GameState;
 
 pub struct UiPlugin;
@@ -11,7 +11,30 @@ impl Plugin for UiPlugin {
             spawn_damage_numbers,
             update_damage_numbers,
             update_block_visuals,
+            update_status_indicators,
         ).run_if(in_state(GameState::Combat)));
+    }
+}
+
+fn update_status_indicators(
+    mut query: Query<(&StatusIndicator, &mut Text)>,
+    player_query: Query<&Player>,
+    enemy_query: Query<&Enemy>,
+) {
+    for (indicator, mut text) in query.iter_mut() {
+        let mut status_parts = Vec::new();
+
+        if let Ok(player) = player_query.get(indicator.owner) {
+            if player.weakness > 0 { status_parts.push(format!("虚弱:{}", player.weakness)); }
+            if player.vulnerable > 0 { status_parts.push(format!("易伤:{}", player.vulnerable)); }
+            if player.poison > 0 { status_parts.push(format!("中毒:{}", player.poison)); }
+        } else if let Ok(enemy) = enemy_query.get(indicator.owner) {
+            if enemy.weakness > 0 { status_parts.push(format!("虚弱:{}", enemy.weakness)); }
+            if enemy.vulnerable > 0 { status_parts.push(format!("易伤:{}", enemy.vulnerable)); }
+            if enemy.poison > 0 { status_parts.push(format!("中毒:{}", enemy.poison)); }
+        }
+
+        text.0 = status_parts.join(" ");
     }
 }
 

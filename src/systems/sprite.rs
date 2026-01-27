@@ -10,7 +10,7 @@ use crate::components::sprite::{
     Combatant3d, BreathAnimation, PhysicalImpact, CharacterAssets, Rotating, Ghost, ActionType,
     MagicSealMarker, RelicVisualMarker
 };
-use crate::plugins::CombatUiRoot;
+use crate::components::CombatUiRoot;
 
 pub struct SpritePlugin;
 

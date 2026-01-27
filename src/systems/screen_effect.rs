@@ -96,7 +96,7 @@ fn spawn_flash_overlay(commands: &mut Commands, color: Color, duration: f32) {
             ZIndex(2000), // 使用极高的 ZIndex 确保覆盖所有 UI 和粒子
             ScreenFlash::new(flash_color, duration),
             ScreenEffectMarker,
-            crate::plugins::CombatUiRoot, // 标记以便在清理战斗时自动移除
+            crate::components::CombatUiRoot, // 标记以便在清理战斗时自动移除
         ));
 }
 
