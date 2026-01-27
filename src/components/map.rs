@@ -62,12 +62,26 @@ impl MapProgress {
     /// 创建新地图进度
     pub fn new(config: &MapConfig) -> Self {
         let nodes = generate_map_nodes(config, 0);
-        Self {
+        let mut progress = Self {
             nodes,
             current_node_id: None,
             current_layer: 0,
             game_completed: false,
-        }
+        };
+        progress.refresh_unlocks(); // 初始刷新
+        progress
+    }
+
+    /// 从存档恢复并刷新解锁
+    pub fn from_save(nodes: Vec<MapNode>, current_node_id: Option<u32>, current_layer: u32) -> Self {
+        let mut progress = Self {
+            nodes,
+            current_node_id,
+            current_layer,
+            game_completed: false,
+        };
+        progress.refresh_unlocks();
+        progress
     }
 
     /// 获取当前节点
@@ -88,20 +102,35 @@ impl MapProgress {
         if let Some(node_id) = self.current_node_id {
             if let Some(node) = self.nodes.iter_mut().find(|n| n.id == node_id) {
                 node.completed = true;
+                // 更新当前所在的最高层级
+                self.current_layer = node.position.0 as u32;
             }
-            // 解锁下一层的所有节点
-            self.unlock_next_layer();
         }
+        
+        // 关键修复：基于最高完成层级进行全扫描解锁
+        self.refresh_unlocks();
     }
 
-    /// 解锁下一层节点
-    fn unlock_next_layer(&mut self) {
-        let current_layer = self.current_layer;
+    /// 刷新所有解锁状态 (大作级健壮性优化)
+    pub fn refresh_unlocks(&mut self) {
+        // 1. 找到当前已完成的最远层级
+        let max_completed_layer = self.nodes.iter()
+            .filter(|n| n.completed)
+            .map(|n| n.position.0)
+            .max()
+            .unwrap_or(-1);
+
+        // 2. 解锁所有层级 <= (max_completed + 1) 的节点
+        // 这样可以确保即便 current_node_id 丢失，玩家也能继续前进
         for node in &mut self.nodes {
-            // 解锁下一层的所有节点
-            if node.position.0 as u32 == current_layer + 1 {
+            if node.position.0 <= (max_completed_layer + 1) {
                 node.unlocked = true;
             }
+        }
+        
+        // 3. 自动同步 current_layer 为当前最高层
+        if max_completed_layer >= 0 {
+            self.current_layer = max_completed_layer as u32;
         }
     }
 

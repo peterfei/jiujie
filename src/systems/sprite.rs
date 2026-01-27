@@ -8,7 +8,7 @@ use crate::components::sprite::{
     CharacterSprite, AnimationState, CharacterType,
     CharacterAnimationEvent, SpriteMarker, PlayerSpriteMarker, EnemySpriteMarker,
     Combatant3d, BreathAnimation, PhysicalImpact, CharacterAssets, Rotating, Ghost, ActionType,
-    MagicSealMarker
+    MagicSealMarker, RelicVisualMarker
 };
 use crate::plugins::CombatUiRoot;
 
@@ -31,11 +31,24 @@ impl Plugin for SpritePlugin {
                 ).chain(),
                 update_rotations,
                 update_magic_seal_pulse,
+                update_relic_floating,
                 spawn_ghosts,
                 cleanup_ghosts,
                 update_sprite_animations,
             ).run_if(in_state(GameState::Combat))
         );
+    }
+}
+
+/// 更新法宝悬浮效果
+fn update_relic_floating(
+    mut query: Query<(&mut Transform, &RelicVisualMarker)>,
+    time: Res<Time>,
+) {
+    for (mut transform, marker) in query.iter_mut() {
+        // 浮动公式：base_y + sin(t * freq) * amp
+        let float_offset = (time.elapsed_secs() * 2.0).sin() * 0.15;
+        transform.translation.y = marker.base_y + float_offset;
     }
 }
 
@@ -84,13 +97,10 @@ fn update_physical_impacts(
                     // 扑杀弧线
                     action_pos_offset.y = (progress * std::f32::consts::PI).sin() * 1.5;
                     
-                    // 关键优化：动态距离感知减速逻辑
-                    // 使用存储的动态目标距离解决多敌人位移偏差
+                    // 距离感知减速
                     let target_dist = impact.target_offset_dist;
                     let current_dist = impact.current_offset.x.abs();
                     let dist_left = (target_dist - current_dist).max(0.0);
-                    
-                    // 当距离小于 1.0 时，线性降低速度，实现精准停留
                     let speed_scalar = if dist_left < 1.0 { dist_left } else { 1.0 };
                     
                     pos_damping = 10.0;
@@ -163,12 +173,10 @@ fn trigger_hit_feedback(
             match event.animation {
                 AnimationState::Hit => {
                     impact.action_type = ActionType::None;
-                    // 受击：力道减半，呈现沉重的顿挫感
                     impact.tilt_velocity = 15.0 * direction; 
                     impact.offset_velocity = Vec3::new(-2.0 * direction, 0.0, 0.0);
                 }
                 AnimationState::Death => {
-                    // 死亡：向后猛倒 + 向上飘起一小段
                     impact.action_type = ActionType::None;
                     impact.tilt_velocity = 45.0 * direction; 
                     impact.offset_velocity = Vec3::new(-5.0 * direction, 2.0, 0.0);
@@ -177,7 +185,6 @@ fn trigger_hit_feedback(
                     impact.action_type = ActionType::None;
                     let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
-                    // 普通攻击：略微削减速度
                     impact.tilt_velocity = -40.0 * direction;
                     impact.offset_velocity = Vec3::new(20.0 * direction, 0.0, 0.0);
                 }
@@ -185,74 +192,66 @@ fn trigger_hit_feedback(
                     impact.action_type = ActionType::None;
                     let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
-                    // 御剑术：极速冲锋 + 270 度逆时针暴力回旋 (velocity改为正)
                     impact.tilt_velocity = -10.0 * direction; 
                     impact.offset_velocity = Vec3::new(28.0 * direction, 0.0, 0.0);
-                    // 修正：正值代表逆时针
                     impact.special_rotation_velocity = 80.0 * direction; 
                 }
                 AnimationState::DemonAttack => {
                     impact.action_type = ActionType::None;
                     let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
-                    // 妖物突袭：更具沉重感
                     impact.tilt_velocity = -20.0 * direction;
                     impact.offset_velocity = Vec3::new(12.0 * direction, 0.0, 0.0);
                 }
                 AnimationState::DemonCast => {
-                    // 施展妖术：脉冲蓄力，强制重置所有旋转，确保站得正
                     impact.action_type = ActionType::DemonCast;
                     impact.tilt_velocity = 0.0; 
-                    impact.special_rotation = 0.0; // 强制归位
+                    impact.special_rotation = 0.0;
                     impact.special_rotation_velocity = 0.0; 
                     impact.action_timer = 0.6; 
                 }
-                AnimationState::Idle => {
-                    // 恢复待机：清除所有物理影响
-                    impact.action_type = ActionType::None;
-                    impact.action_timer = 0.0;
-                    impact.special_rotation = 0.0;
-                    impact.special_rotation_velocity = 0.0;
-                }
                 AnimationState::WolfAttack => {
-                    // 嗜血妖狼：动态计算位移距离
-                    // 敌人(dir=-1)的目标是玩家(x=-3.5)，玩家(dir=1)的目标是敌人(x=3.5)
                     let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
-                    
                     impact.action_type = ActionType::WolfBite;
                     impact.tilt_velocity = -25.0 * direction;
                     impact.offset_velocity = Vec3::new(16.0 * direction, 0.0, 0.0);
                     impact.action_timer = 1.0; 
                 }
                 AnimationState::SpiderAttack => {
+                    let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
+                    impact.target_offset_dist = (target_x - impact.home_position.x).abs();
                     impact.action_type = ActionType::SpiderWeb;
                     impact.tilt_velocity = -8.0 * direction;
                     impact.offset_velocity = Vec3::new(10.0 * direction, 0.0, 0.0);
                     impact.action_timer = 0.8;
                 }
                 AnimationState::SpiritAttack => {
-                    impact.action_type = ActionType::None;
                     let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
-                    // 怨灵：灵体突袭 (快速漂浮 + 不稳定颤动)
+                    impact.action_type = ActionType::None;
                     impact.tilt_velocity = 50.0; 
                     impact.offset_velocity = Vec3::new(22.0 * direction, 0.0, 0.0);
                     impact.special_rotation_velocity = 120.0; 
                 }
                 AnimationState::BossRoar => {
-                    impact.action_type = ActionType::DemonCast; 
+                    impact.action_type = ActionType::DemonCast;
                     impact.tilt_velocity = 0.0;
-                    impact.special_rotation_velocity = 100.0; // 剧烈摆头
+                    impact.special_rotation_velocity = 100.0; 
                     impact.action_timer = 1.2; 
                 }
                 AnimationState::BossFrenzy => {
-                    impact.action_type = ActionType::None;
                     let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
-                    // BOSS 瞬狱杀：极速三连闪 (大幅位移 + 高阻尼)
+                    impact.action_type = ActionType::None;
                     impact.offset_velocity = Vec3::new(35.0 * direction, 0.0, 0.0);
                     impact.action_timer = 0.8;
+                }
+                AnimationState::Idle => {
+                    impact.action_type = ActionType::None;
+                    impact.action_timer = 0.0;
+                    impact.special_rotation = 0.0;
+                    impact.special_rotation_velocity = 0.0;
                 }
                 _ => {}
             }
@@ -260,7 +259,7 @@ fn trigger_hit_feedback(
     }
 }
 
-/// 更新呼吸动画（2.5D 纸片人：锁定机制）
+/// 更新呼吸动画
 fn update_breath_animations(
     mut query: Query<(&mut Transform, &mut BreathAnimation, &PhysicalImpact)>,
     time: Res<Time>,
@@ -296,6 +295,8 @@ fn sync_2d_to_3d_render(
             let x_3d = (transform.translation.x / 100.0).clamp(-3.5, 3.5);
             let z_3d = transform.translation.y / 100.0;
 
+            let is_boss = char_sprite.size.x > 150.0;
+
             let mesh = meshes.add(Rectangle::new(char_sprite.size.x / 50.0, char_sprite.size.y / 50.0));
             let material = materials.add(StandardMaterial {
                 base_color: Color::WHITE,
@@ -309,10 +310,7 @@ fn sync_2d_to_3d_render(
                 ..default()
             });
 
-            // 3. 构造 3D 纸片人 (落地修正)
             let home_pos = Vec3::new(x_3d, 0.05, z_3d + 0.1);
-            let is_boss = char_sprite.size.x > 150.0; // 尺寸判定
-
             commands.entity(entity).insert((
                 Combatant3d { facing_right: true },
                 BreathAnimation::default(),
@@ -323,7 +321,6 @@ fn sync_2d_to_3d_render(
                 Transform::from_translation(home_pos).with_rotation(Quat::from_rotation_x(-0.2)), 
             )).remove::<Sprite>()
             .with_children(|parent| {
-                // BOSS 底座半径 1.2, 普通 0.8
                 let base_radius = if is_boss { 1.2 } else { 0.8 };
                 parent.spawn((
                     Mesh3d(meshes.add(Cylinder::new(base_radius, 0.02))), 
@@ -358,16 +355,13 @@ fn update_sprite_animations(
                     sprite.current_frame = sprite.total_frames - 1;
                     match sprite.state {
                         AnimationState::Death => {
-                            // 死亡动画结束，销毁实体
                             info!("角色实体 {:?} 已彻底消散", entity);
                             commands.entity(entity).despawn_recursive();
                         }
                         AnimationState::Attack | AnimationState::Hit | AnimationState::ImperialSword | 
                         AnimationState::DemonAttack | AnimationState::DemonCast | AnimationState::WolfAttack | 
                         AnimationState::SpiderAttack | AnimationState::SpiritAttack | AnimationState::BossRoar | 
-                        AnimationState::BossFrenzy => {
-                            sprite.set_idle();
-                        }
+                        AnimationState::BossFrenzy => { sprite.set_idle(); }
                         _ => {}
                     }
                 }
@@ -466,12 +460,8 @@ pub fn spawn_character_sprite(
     match character_type {
         CharacterType::Player => { entity_cmd.insert(PlayerSpriteMarker); }
         CharacterType::GreatDemon => { 
-            // 修复：使用传入的 enemy_id 而非硬编码 99
-            if let Some(id) = enemy_id {
-                entity_cmd.insert(EnemySpriteMarker { id }); 
-            } else {
-                entity_cmd.insert(EnemySpriteMarker { id: 99 }); 
-            }
+            if let Some(id) = enemy_id { entity_cmd.insert(EnemySpriteMarker { id }); }
+            else { entity_cmd.insert(EnemySpriteMarker { id: 99 }); }
         }
         _ => { if let Some(id) = enemy_id { entity_cmd.insert(EnemySpriteMarker { id }); } }
     };

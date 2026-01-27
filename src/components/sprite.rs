@@ -280,6 +280,13 @@ pub struct EnemySpriteMarker {
     pub id: u32,
 }
 
+/// 法宝 3D 视觉标记
+#[derive(Component)]
+pub struct RelicVisualMarker {
+    pub relic_id: crate::components::relic::RelicId,
+    pub base_y: f32,
+}
+
 /// 残影组件 (Ghost Trail)
 #[derive(Component)]
 pub struct Ghost {

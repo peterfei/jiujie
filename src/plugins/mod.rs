@@ -12,7 +12,7 @@ use crate::components::{
     EnemyActionQueue, RelicObtainedEvent, RelicTriggeredEvent,
     ParticleEmitter, PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker, DialogueLine,
 };
-use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, PlayerSpriteMarker, AnimationState, Ghost, MagicSealMarker};
+use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, PlayerSpriteMarker, AnimationState, Ghost, MagicSealMarker, CharacterSprite};
 use crate::systems::sprite::{spawn_character_sprite};
 
 /// 核心游戏插件
@@ -128,8 +128,8 @@ impl Plugin for MenuPlugin {
         app.add_systems(Update, process_enemy_turn_queue.run_if(in_state(GameState::Combat)));
         // 更新手牌UI
         app.add_systems(Update, update_hand_ui.run_if(in_state(GameState::Combat)));
-        // 处理手牌卡片交互（缩放、弹出音效等）
-        app.add_systems(Update, handle_hand_card_interaction.run_if(in_state(GameState::Combat)));
+        // 处理手牌卡片交互（弹起、放大、悬停效果）
+        app.add_systems(Update, handle_hand_card_hover.run_if(in_state(GameState::Combat)));
         // 处理出牌
         app.add_systems(Update, handle_card_play.run_if(in_state(GameState::Combat)));
         // 检查战斗结束
@@ -605,12 +605,11 @@ fn handle_button_clicks(
                     commands.insert_resource(save.cultivation);
                     commands.insert_resource(PlayerDeck { cards: save.deck });
                     commands.insert_resource(RelicCollection { relic: save.relics });
-                    commands.insert_resource(MapProgress {
-                        nodes: save.map_nodes,
-                        current_node_id: save.current_map_node_id,
-                        current_layer: save.current_map_layer,
-                        game_completed: false,
-                    });
+                    commands.insert_resource(MapProgress::from_save(
+                        save.map_nodes,
+                        save.current_map_node_id,
+                        save.current_map_layer,
+                    ));
                     
                     next_state.set(GameState::Map);
                     info!("【存档系统】读档成功，进入大地图");
@@ -647,11 +646,17 @@ fn handle_map_button_clicks(
             // 找到对应的节点
             let node_type = if let Some(node) = map_progress.nodes.iter().find(|n| n.id == node_id) {
                 // 只有解锁的节点才能点击
-                if !node.unlocked || node.completed {
+                if !node.unlocked {
+                    warn!("【地图】节点 {} 尚未解锁，不可前往", node_id);
+                    continue;
+                }
+                if node.completed {
+                    warn!("【地图】节点 {} 已经探索完毕", node_id);
                     continue;
                 }
                 node.node_type
             } else {
+                warn!("【地图】未能找到 ID 为 {} 的节点", node_id);
                 continue;
             };
 
@@ -677,16 +682,23 @@ fn handle_map_button_clicks(
             // 根据节点类型切换状态
             match node_type {
                 NodeType::Normal | NodeType::Elite | NodeType::Boss => {
+                    info!("【地图】前往战斗关卡: {}", node_id);
                     next_state.set(GameState::Combat);
                 }
                 NodeType::Rest => {
+                    info!("【地图】前往洞府闭关: {}", node_id);
                     next_state.set(GameState::Rest);
                 }
                 NodeType::Shop => {
+                    info!("【地图】前往仙家坊市: {}", node_id);
                     next_state.set(GameState::Shop);
                 }
+                NodeType::Treasure => {
+                    info!("【地图】偶遇上古宝箱: {}", node_id);
+                    next_state.set(GameState::Reward);
+                }
                 _ => {
-                    info!("暂未实现该节点类型的关卡");
+                    warn!("【地图】节点 {} 类型 {:?} 尚未实现逻辑", node_id, node_type);
                 }
             }
         }
@@ -897,133 +909,53 @@ fn spawn_map_node(
         NodeType::Unknown => "未知",
     };
 
-    // 根据节点状态计算显示颜色
-    let display_color = if node.completed {
-        // 已完成：灰色
-        Color::srgb(0.3, 0.3, 0.3)
+    // 根据节点状态计算显示颜色 (大作级对比度优化)
+    let (display_color, border_color) = if node.completed {
+        // 已完成：明亮的蓝色，代表已通关
+        (Color::srgb(0.2, 0.5, 1.0), Color::BLACK)
     } else if is_current {
-        // 当前节点：高亮（黄色发光效果）
-        Color::srgb(1.0, 0.9, 0.3)
+        // 当前所在：黄色发光
+        (Color::srgb(1.0, 0.9, 0.3), Color::WHITE)
     } else if node.unlocked {
-        // 已解锁但未访问：正常颜色
-        node_color
+        // 已解锁：高对比度彩色 + 白色描边 (核心引导)
+        (node_color, Color::WHITE)
     } else {
-        // 未解锁：暗色
-        match node.node_type {
-            NodeType::Normal => Color::srgb(0.12, 0.2, 0.12),
-            NodeType::Elite => Color::srgb(0.24, 0.12, 0.04),
-            NodeType::Boss => Color::srgb(0.28, 0.04, 0.04),
-            NodeType::Rest => Color::srgb(0.12, 0.16, 0.24),
-            NodeType::Shop => Color::srgb(0.2, 0.16, 0.08),
-            NodeType::Treasure => Color::srgb(0.2, 0.08, 0.2),
-            NodeType::Unknown => Color::srgb(0.16, 0.16, 0.16),
-        }
+        // 未解锁：暗色半透明，无描边
+        let mut c = node_color;
+        c.set_alpha(0.2); // 极低透明度
+        (c, Color::BLACK)
     };
 
-    let mut entity = parent.spawn((
+    parent.spawn((
+        Button,
         Node {
-            width: Val::Px(80.0),
-            height: Val::Px(80.0),
+            width: Val::Px(60.0),
+            height: Val::Px(60.0),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
-            flex_direction: FlexDirection::Column,
+            border: if node.unlocked && !node.completed { UiRect::all(Val::Px(3.0)) } else { UiRect::all(Val::Px(1.0)) },
             ..default()
         },
         BackgroundColor(display_color),
+        BorderColor(border_color),
+        BorderRadius::all(Val::Px(30.0)),
         MapNodeButton { node_id: node.id },
-    ));
-
-    // 边框效果
-    if is_current {
-        entity.insert(BorderColor(Color::srgb(1.0, 1.0, 0.0)));
-        entity.insert(Node {
-            border: UiRect::all(Val::Px(4.0)),
-            ..default()
-        });
-    } else if node.completed {
-        entity.insert(BorderColor(Color::srgb(0.5, 0.5, 0.5)));
-        entity.insert(Node {
-            border: UiRect::all(Val::Px(2.0)),
-            ..default()
-        });
-    }
-
-    // 如果节点已解锁，添加按钮组件
-    if node.unlocked && !node.completed {
-        entity.insert(Button);
-    }
-
-    // 显示状态标记
-    let status_mark = if node.completed {
-        "✓"
-    } else if is_current {
-        "→"
-    } else {
-        ""
-    };
-
-    entity.with_children(|node_parent| {
-            // 状态标记
-            if !status_mark.is_empty() {
-                node_parent.spawn((
-                    Text::new(status_mark),
-                    TextFont {
-                        font_size: 24.0,
-                        ..default()
-                    },
-                    TextColor(Color::WHITE),
-                    Node {
-                        position_type: PositionType::Absolute,
-                        top: Val::Px(5.0),
-                        right: Val::Px(5.0),
-                        ..default()
-                    },
-                ));
-            }
-
-            // 节点类型图标（用文字表示）
-            node_parent.spawn((
-                Text::new(get_node_icon(node.node_type)),
-                TextFont {
-                    font_size: 28.0,
-                    ..default()
-                },
-                TextColor(Color::WHITE),
-            ));
-
-            // 节点名称
-            node_parent.spawn((
-                Text::new(format!("{}{}", node_name, if node.completed { "(已完成)" } else { "" })),
-                TextFont {
-                    font: font.clone(),
-                    font_size: 14.0,
-                    ..default()
-                },
-                TextColor(Color::WHITE),
-                Node {
-                    margin: UiRect::top(Val::Px(3.0)),
-                    ..default()
-                },
-            ));
-
-            // 节点描述（帮助用户理解节点功能）
-            if node.unlocked && !node.completed {
-                let node_desc = get_node_description(node.node_type);
-                node_parent.spawn((
-                    Text::new(node_desc),
-                    TextFont {
-                        font: font.clone(),
-                        font_size: 10.0,
-                        ..default()
-                    },
-                    TextColor(Color::srgb(0.7, 0.7, 0.7)),
-                    Node {
-                        margin: UiRect::top(Val::Px(1.0)),
-                        ..default()
-                    },
-                ));
-            }
-        });
+    )).with_children(|btn| {
+        let icon = match node.node_type {
+            NodeType::Normal => "战",
+            NodeType::Elite => "强",
+            NodeType::Boss => "王",
+            NodeType::Shop => "坊",
+            NodeType::Rest => "府",
+            NodeType::Treasure => "缘",
+            _ => "？",
+        };
+        btn.spawn((
+            Text::new(icon),
+            TextFont { font: font.clone(), font_size: 28.0, ..default() },
+            TextColor(if node.unlocked { Color::WHITE } else { Color::srgba(1.0, 1.0, 1.0, 0.1) }),
+        ));
+    });
 }
 
 /// 获取节点描述文字
@@ -1159,10 +1091,11 @@ fn setup_combat_ui(
     asset_server: Res<AssetServer>,
     character_assets: Res<CharacterAssets>,
     player_deck: Res<PlayerDeck>,
+    relic_collection: Res<RelicCollection>, // 补全资源
     enemy_query: Query<&Enemy>,
     mut victory_delay: ResMut<VictoryDelay>,
     player_query: Query<(&Player, &crate::components::Cultivation)>,
-    map_progress: Res<MapProgress>, // 引入地图进度
+    map_progress: Res<MapProgress>,
 ) {
     info!("【战斗】进入战场，众妖环伺");
     if victory_delay.active { victory_delay.active = false; victory_delay.elapsed = 0.0; }
@@ -1248,6 +1181,34 @@ fn setup_combat_ui(
     }
 
     spawn_character_sprite(&mut commands, &character_assets, CharacterType::Player, Vec3::new(-350.0, -80.0, 10.0), Vec2::new(100.0, 140.0), None);
+
+    // --- 法宝 3D 视觉生成 ---
+    // 调试：如果玩家目前没有法宝，为了测试视觉效果，我们强行显示一个“飞剑符”
+    let display_relics = if relic_collection.relic.is_empty() {
+        vec![crate::components::relic::Relic::burning_blood()]
+    } else {
+        relic_collection.relic.clone()
+    };
+
+    for (i, relic) in display_relics.iter().enumerate() {
+        // 计算法宝位置 (稍微在玩家前面，防止被立牌遮挡)
+        let angle = i as f32 * 0.8;
+        let x_offset = angle.cos() * 1.2;
+        let z_offset = angle.sin() * 0.5;
+        let base_pos = Vec3::new(-3.5 + x_offset, 1.2, 0.5 + z_offset);
+
+        commands.spawn((
+            crate::components::sprite::RelicVisualMarker { 
+                relic_id: relic.id.clone(),
+                base_y: base_pos.y,
+            },
+            SpriteMarker,
+            CombatUiRoot,
+            Rotating { speed: 1.0 }, 
+            CharacterSprite::new(asset_server.load("textures/relics/default.png"), Vec2::new(40.0, 40.0)),
+            Transform::from_translation(base_pos),
+        ));
+    }
     commands.insert_resource(CombatState::default());
     let deck_cards = player_deck.cards.clone();
     commands.insert_resource(DeckConfig { starting_deck: deck_cards.clone(), ..default() });
@@ -1805,33 +1766,67 @@ fn update_hand_ui(
                                 TextLayout::new_with_justify(JustifyText::Center),
                             ));
 
-                            // 卡牌插画 (Nano Banana 风格优化)
+                            // 卡牌插画 (优化比例与默认图)
+                            let img_path = if card.image_path.is_empty() {
+                                "textures/cards/default.png".to_string()
+                            } else {
+                                card.image_path.clone()
+                            };
+                            
                             card_ui.spawn((
-                                ImageNode::new(asset_server.load(card.image_path.clone())),
+                                ImageNode::new(asset_server.load(img_path)),
                                 Node {
-                                    width: Val::Px(80.0),
-                                    height: Val::Px(105.0),
+                                    width: Val::Percent(95.0),
+                                    height: Val::Percent(55.0), // 占据上半部分
                                     border: UiRect::all(Val::Px(1.0)),
-                                    margin: UiRect::vertical(Val::Px(1.0)),
                                     ..default()
                                 },
-                                BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.2)),
+                                BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.3)),
                             ));
 
-                            // 卡牌描述
+                            // 卡牌描述 (功法效果明细)
                             card_ui.spawn((
                                 Text::new(card.description.clone()),
                                 TextFont {
                                     font: chinese_font.clone(),
-                                    font_size: 10.0,
+                                    font_size: 11.0,
                                     ..default()
                                 },
-                                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.9)),
+                                TextColor(Color::srgb(0.9, 0.9, 0.9)),
                                 TextLayout::new_with_justify(JustifyText::Center),
+                                Node {
+                                    max_width: Val::Px(90.0),
+                                    ..default()
+                                },
                             ));
                         });
                 });
             }
+        }
+    }
+}
+
+/// 处理手牌卡片悬停与交互反馈 (大作级动态手感)
+fn handle_hand_card_hover(
+    mut query: Query<(&Interaction, &HandCard, &mut Node, &mut ZIndex, &mut Transform), (With<HandCard>, Changed<Interaction>)>,
+) {
+    for (interaction, hand_card, mut node, mut z_index, mut transform) in query.iter_mut() {
+        match interaction {
+            Interaction::Hovered => {
+                // 悬停：弹起、放大、置顶
+                node.bottom = Val::Px(hand_card.base_bottom + 40.0);
+                *z_index = ZIndex(100);
+                transform.scale = Vec3::splat(1.25); // 放大 25%
+                transform.rotation = Quat::IDENTITY; // 摆正
+            }
+            Interaction::None => {
+                // 恢复：回位、缩小
+                node.bottom = Val::Px(hand_card.base_bottom);
+                *z_index = ZIndex(10);
+                transform.scale = Vec3::ONE;
+                transform.rotation = Quat::from_rotation_z(hand_card.base_rotation);
+            }
+            _ => {}
         }
     }
 }
