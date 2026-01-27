@@ -13,9 +13,21 @@ pub struct RestUiRoot;
 #[derive(Component)]
 pub struct BreathButton;
 
-/// 打坐悟道按钮
+/// 功法精进按钮
 #[derive(Component)]
-pub struct InsightButton;
+pub struct UpgradeButton;
+
+/// 离去按钮标记
+#[derive(Component)]
+pub struct LeaveButton;
+
+/// 选项区域标记（用于隐藏）
+#[derive(Component)]
+pub struct ChoiceArea;
+
+/// 结果文本标记
+#[derive(Component)]
+pub struct ResultText;
 
 /// 继续按钮标记
 #[derive(Component)]
@@ -27,7 +39,10 @@ pub struct RestPlugin;
 impl Plugin for RestPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(OnEnter(GameState::Rest), setup_rest_ui)
-            .add_systems(Update, handle_rest_interactions.run_if(in_state(GameState::Rest)))
+            .add_systems(Update, (
+                handle_rest_interactions,
+                handle_leave_interaction,
+            ).run_if(in_state(GameState::Rest)))
             .add_systems(OnExit(GameState::Rest), cleanup_rest_ui);
     }
 }
@@ -88,11 +103,14 @@ pub fn setup_rest_ui(
             });
 
             // 选项区域
-            parent.spawn(Node {
-                flex_direction: FlexDirection::Row,
-                column_gap: Val::Px(50.0),
-                ..default()
-            }).with_children(|choice_area| {
+            parent.spawn((
+                Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(50.0),
+                    ..default()
+                },
+                ChoiceArea,
+            )).with_children(|choice_area| {
                 // 1. 调息
                 choice_area.spawn((
                     Button,
@@ -121,10 +139,10 @@ pub fn setup_rest_ui(
                     ));
                 });
 
-                // 2. 悟道
+                // 2. 进阶
                 choice_area.spawn((
                     Button,
-                    InsightButton,
+                    UpgradeButton,
                     Node {
                         width: Val::Px(240.0),
                         height: Val::Px(180.0),
@@ -138,14 +156,49 @@ pub fn setup_rest_ui(
                     BorderRadius::all(Val::Px(15.0)),
                 )).with_children(|btn| {
                     btn.spawn((
-                        Text::new("打坐感悟"),
+                        Text::new("功法精进"),
                         TextFont { font_size: 28.0, font: chinese_font.clone(), ..default() },
                         TextColor(Color::WHITE),
                     ));
                     btn.spawn((
-                        Text::new("静思己过，获得 20 点感悟"),
+                        Text::new("磨砺招式，提升功法威力"),
                         TextFont { font_size: 14.0, font: chinese_font.clone(), ..default() },
                         TextColor(Color::srgb(0.7, 0.7, 0.7)),
+                    ));
+                });
+            });
+
+            // 结果展示区域 (初始隐藏)
+            parent.spawn((
+                Node {
+                    display: Display::None,
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    row_gap: Val::Px(30.0),
+                    ..default()
+                },
+                ResultText,
+            )).with_children(|res| {
+                res.spawn((
+                    Text::new("功法精进成功！"),
+                    TextFont { font_size: 32.0, font: chinese_font.clone(), ..default() },
+                    TextColor(Color::srgb(1.0, 0.8, 0.3)),
+                ));
+                
+                res.spawn((
+                    Button,
+                    LeaveButton,
+                    Node {
+                        padding: UiRect::axes(Val::Px(40.0), Val::Px(15.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.2, 0.2, 0.2, 0.8)),
+                    BorderRadius::all(Val::Px(10.0)),
+                )).with_children(|btn| {
+                    btn.spawn((
+                        Text::new("离开洞府"),
+                        TextFont { font_size: 24.0, font: chinese_font.clone(), ..default() },
+                        TextColor(Color::WHITE),
                     ));
                 });
             });
@@ -161,34 +214,91 @@ pub fn setup_rest_ui(
 
 /// 处理休息交互
 pub fn handle_rest_interactions(
-    mut next_state: ResMut<NextState<GameState>>,
-    mut player_query: Query<(&mut Player, &mut crate::components::Cultivation)>,
-    mut map_progress: ResMut<crate::components::map::MapProgress>, // 引入地图进度
+    player_query: Query<&Player>,
+    mut player_deck: ResMut<crate::components::PlayerDeck>,
     breath_buttons: Query<&Interaction, (Changed<Interaction>, With<BreathButton>)>,
-    insight_buttons: Query<&Interaction, (Changed<Interaction>, With<InsightButton>)>,
+    upgrade_buttons: Query<&Interaction, (Changed<Interaction>, With<UpgradeButton>)>,
+    mut choice_area_query: Query<&mut Node, (With<ChoiceArea>, Without<ResultText>)>,
+    mut result_area_query: Query<(&mut Node, Entity), (With<ResultText>, Without<ChoiceArea>)>,
+    mut text_query: Query<&mut Text>,
+    children_query: Query<&Children>,
 ) {
-    let (mut player, mut cultivation) = player_query.get_single_mut().expect("必须有玩家实体");
+    let player = player_query.get_single().expect("必须有玩家实体");
+
+    let mut trigger_result = |msg: String| {
+        // 1. 隐藏选项
+        if let Ok(mut node) = choice_area_query.get_single_mut() {
+            node.display = Display::None;
+        }
+        // 2. 显示结果
+        if let Ok((mut node, entity)) = result_area_query.get_single_mut() {
+            node.display = Display::Flex;
+            
+            // 3. 寻找结果文本实体并更新内容
+            if let Ok(children) = children_query.get(entity) {
+                if let Some(&text_entity) = children.first() {
+                    if let Ok(mut text) = text_query.get_mut(text_entity) {
+                        text.0 = msg;
+                    }
+                }
+            }
+        }
+    };
 
     // 处理调息
     for interaction in breath_buttons.iter() {
         if matches!(interaction, Interaction::Pressed) {
             let heal_amount = (player.max_hp as f32 * 0.3) as i32;
-            player.heal(heal_amount);
-            info!("【洞府闭关】调息恢复: 恢复 {} 点道行", heal_amount);
-            map_progress.complete_current_node();
-            next_state.set(GameState::Map);
+            trigger_result(format!("运转周天，恢复了 {} 点道行！", heal_amount));
             return;
         }
     }
 
-    // 处理悟道
-    for interaction in insight_buttons.iter() {
+    // 处理功法进阶
+    for interaction in upgrade_buttons.iter() {
         if matches!(interaction, Interaction::Pressed) {
-            cultivation.gain_insight(20);
-            info!("【洞府闭关】打坐感悟: 获得 20 点感悟");
+            // 找出所有未进阶的卡牌
+            let upgradable_indices: Vec<usize> = player_deck.cards.iter()
+                .enumerate()
+                .filter(|(_, card)| !card.upgraded)
+                .map(|(i, _)| i)
+                .collect();
+
+            if !upgradable_indices.is_empty() {
+                use rand::seq::SliceRandom;
+                let mut rng = rand::thread_rng();
+                if let Some(&index) = upgradable_indices.choose(&mut rng) {
+                    let old_name = player_deck.cards[index].name.clone();
+                    player_deck.cards[index].upgrade();
+                    let new_name = player_deck.cards[index].name.clone();
+                    trigger_result(format!("{} 已进阶为 {}！", old_name, new_name));
+                }
+            } else {
+                trigger_result("已无功法可进阶".to_string());
+            }
+            return;
+        }
+    }
+}
+
+/// 处理离开交互
+pub fn handle_leave_interaction(
+    mut next_state: ResMut<NextState<GameState>>,
+    mut map_progress: ResMut<crate::components::map::MapProgress>,
+    leave_buttons: Query<&Interaction, (Changed<Interaction>, With<LeaveButton>)>,
+    mut player_query: Query<&mut Player>,
+) {
+    for interaction in leave_buttons.iter() {
+        if matches!(interaction, Interaction::Pressed) {
+            // 在此处正式结算数值变更（调息）
+            if let Ok(mut player) = player_query.get_single_mut() {
+                let heal_amount = (player.max_hp as f32 * 0.3) as i32;
+                player.heal(heal_amount);
+            }
+
+            info!("【洞府闭关】玩家离去");
             map_progress.complete_current_node();
             next_state.set(GameState::Map);
-            return;
         }
     }
 }

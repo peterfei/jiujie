@@ -27,6 +27,8 @@ pub struct Card {
     pub rarity: CardRarity,
     /// 插画路径
     pub image_path: String,
+    /// 是否已进阶
+    pub upgraded: bool,
 }
 
 /// 卡牌类型
@@ -107,6 +109,7 @@ impl Card {
             effect,
             rarity,
             image_path: image_path.into(),
+            upgraded: false,
         }
     }
 
@@ -117,6 +120,43 @@ impl Card {
             CardType::Defense => Color::srgb(0.3, 0.5, 0.9),   // 蓝色
             CardType::Skill => Color::srgb(0.4, 0.7, 0.4),     // 绿色
             CardType::Power => Color::srgb(0.7, 0.3, 0.7),     // 紫色
+        }
+    }
+
+    /// 进阶功法
+    pub fn upgrade(&mut self) {
+        if self.upgraded { return; }
+        
+        self.upgraded = true;
+        self.name = format!("{}+", self.name);
+
+        match &mut self.effect {
+            CardEffect::DealDamage { amount } => {
+                *amount += 3;
+                self.description = format!("造成{}点伤害", *amount);
+            }
+            CardEffect::DealAoEDamage { amount } => {
+                *amount += 2;
+                self.description = format!("对所有妖兽造成{}点伤害", *amount);
+            }
+            CardEffect::GainBlock { amount } => {
+                *amount += 3;
+                self.description = format!("获得{}点护盾", *amount);
+            }
+            CardEffect::Heal { amount } => {
+                *amount += 2;
+                self.description = format!("恢复{}点道行", *amount);
+            }
+            CardEffect::DrawCards { amount } => {
+                *amount += 1;
+                self.description = format!("抽{}张牌", *amount);
+            }
+            CardEffect::AttackAndDraw { damage, cards } => {
+                *damage += 2;
+                *cards += 1;
+                self.description = format!("造成{}点伤害，抽{}张牌", *damage, *cards);
+            }
+            _ => {}
         }
     }
 }
