@@ -57,7 +57,10 @@ fn handle_effect_events(mut commands: Commands, assets: Res<ParticleAssets>, mut
         let config = event.effect_type.config();
         if event.burst {
             for _ in 0..event.count {
-                let particle = config.spawn_particle(event.position, event.effect_type);
+                let mut particle = config.spawn_particle(event.position, event.effect_type);
+                if let Some(target) = event.target {
+                    particle.target = Some(target);
+                }
                 spawn_particle_entity(&mut commands, &assets, particle);
             }
         } else {
@@ -191,12 +194,7 @@ fn update_particles(
 
                     // --- 大作级打磨：相位三添加剑气拖尾 ---
                     if strike_t > 0.0 && strike_t < 1.0 {
-                        events.send(SpawnEffectEvent {
-                            effect_type: EffectType::SwordEnergy,
-                            position: p.position.extend(0.6),
-                            burst: true,
-                            count: 1,
-                        });
+                        events.send(SpawnEffectEvent::new(EffectType::SwordEnergy, p.position.extend(0.6)).burst(1));
                     }
                 }
             }

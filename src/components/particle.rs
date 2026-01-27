@@ -284,11 +284,20 @@ impl EffectType {
 }
 
 #[derive(Event, Debug)]
-pub struct SpawnEffectEvent { pub effect_type: EffectType, pub position: Vec3, pub burst: bool, pub count: usize }
+pub struct SpawnEffectEvent { 
+    pub effect_type: EffectType, 
+    pub position: Vec3, 
+    pub burst: bool, 
+    pub count: usize,
+    pub target: Option<Vec2>, // 新增：目标位置
+}
 
 impl SpawnEffectEvent {
-    pub fn new(effect_type: EffectType, position: Vec3) -> Self { Self { effect_type, position, burst: true, count: 20 } }
+    pub fn new(effect_type: EffectType, position: Vec3) -> Self { 
+        Self { effect_type, position, burst: true, count: 20, target: None } 
+    }
     pub fn burst(mut self, count: usize) -> Self { self.burst = true; self.count = count; self }
+    pub fn with_target(mut self, target: Vec2) -> Self { self.target = Some(target); self }
 }
 
 #[derive(Component)]

@@ -1116,13 +1116,20 @@ fn setup_combat_ui(
     asset_server: Res<AssetServer>,
     character_assets: Res<CharacterAssets>,
     player_deck: Res<PlayerDeck>,
-    relic_collection: Res<RelicCollection>, // 补全资源
+    relic_collection: Res<RelicCollection>,
     enemy_query: Query<&Enemy>,
     mut victory_delay: ResMut<VictoryDelay>,
     player_query: Query<(&Player, &crate::components::Cultivation)>,
     map_progress: Res<MapProgress>,
+    existing_ui: Query<Entity, With<CombatUiRoot>>, // 注入现有 UI 查询
 ) {
     info!("【战斗】进入战场，众妖环伺");
+    
+    // 防御性清理：确保没有任何残留的战斗 UI
+    for entity in existing_ui.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+    
     if victory_delay.active { victory_delay.active = false; victory_delay.elapsed = 0.0; }
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
 
@@ -1705,17 +1712,12 @@ pub fn update_hand_ui(
     // 2. 检测是否需要彻底重建手牌 UI
     let mut needs_rebuild = false;
     if let Ok(hand) = hand_query.get_single() {
-        if let Ok((_, children_opt)) = hand_area_query.get_single() {
-            let ui_count = children_opt.map(|c| c.len()).unwrap_or(0).saturating_sub(1); // 减去计数文本
-            // 如果数据变了，或者 UI 实体数量与数据不符
+        if let Some((_, children_opt)) = hand_area_query.iter().next() {
+            let ui_count = children_opt.map(|c| c.len()).unwrap_or(0).saturating_sub(1); 
             if !hand_changed_query.is_empty() || ui_count != hand.cards.len() {
                 needs_rebuild = true;
-                if ui_count != hand.cards.len() {
-                    info!("【UI自愈】手牌 UI 数量({})与数据({})不符，正在强制重建", ui_count, hand.cards.len());
-                }
             }
         } else {
-            // 找不到 HandArea 或它没有子节点，只要手牌有数就尝试触发
             if !hand.cards.is_empty() { needs_rebuild = true; }
         }
     }
@@ -1723,7 +1725,7 @@ pub fn update_hand_ui(
     // 3. 执行重建
     if needs_rebuild {
         if let Ok(hand) = hand_query.get_single() {
-            if let Ok((hand_area_entity, _)) = hand_area_query.get_single_mut() {
+            if let Some((hand_area_entity, _)) = hand_area_query.iter_mut().next() {
                 info!("【战斗】重建手牌 UI 视图: {} 张", hand.cards.len());
                 
                 // 彻底清空，确保没有残留或错位
@@ -1993,31 +1995,15 @@ fn apply_card_effect(
                 // 万剑归宗全屏特效补丁 (相位二：锁定打击)
                 if card_name.contains("万剑归宗") {
                     screen_events.send(ScreenEffectEvent::Shake { trauma: 1.0, decay: 0.45 });
-                    let enemy_positions: Vec<Vec3> = enemy_sprite_query.iter().map(|(_, _, t)| t.translation * 100.0).collect();
+                    let enemy_positions: Vec<Vec3> = enemy_sprite_query.iter().map(|(_, _, t)| t.translation).collect();
 
                     for &target_pos in enemy_positions.iter() {
-                        // 增加到 60 枚粒子，呈现极长的“龙身”
-                        for i in 0..60 {
-                            let mut p = EffectType::WanJian.config().spawn_particle(Vec3::new(-350.0, -80.0, 0.5), EffectType::WanJian);
-                            p.target = Some(target_pos.truncate());
-                            p.seed = i as f32 / 60.0; 
-                            p.lifetime = 2.8; // 2.8秒足以完成 飞升 -> 聚阵 -> 游龙突刺
-
-                commands.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(640.0 + p.position.x - 10.0),
-                        top: Val::Px(360.0 - p.position.y - 10.0),
-                        width: Val::Px(20.0),
-                        height: Val::Px(20.0),
-                        ..default()
-                    },
-                    ImageNode::new(Handle::default()),
-                    ZIndex(1),
-                    p,
-                    ParticleMarker,
-                ));
-                        }
+                        // 通过发送带目标的事件，让粒子系统统一处理贴图、比例和轨迹
+                        effect_events.send(
+                            SpawnEffectEvent::new(EffectType::WanJian, Vec3::new(-350.0, -80.0, 0.5))
+                                .burst(60)
+                                .with_target(target_pos.truncate())
+                        );
                     }
                 } else {
                     screen_events.send(ScreenEffectEvent::Shake { trauma: 0.5, decay: 4.0 });
@@ -2032,7 +2018,7 @@ fn apply_card_effect(
             if let Ok((mut player, _)) = player_query.get_single_mut() {
                 player.gain_block(*amount);
                 info!("【卡牌】获得 {} 点护甲，当前: {}", amount, player.block);
-                effect_events.send(SpawnEffectEvent { effect_type: EffectType::Ice, position: Vec3::new(-3.5, 1.0, 0.5), burst: true, count: 25 });
+                effect_events.send(SpawnEffectEvent::new(EffectType::Ice, Vec3::new(-3.5, 1.0, 0.5)).burst(25));
             }
         }
         CardEffect::Heal { amount } => {
@@ -2040,7 +2026,7 @@ fn apply_card_effect(
                 let max_hp = player.max_hp;
                 player.hp = (player.hp + amount).min(max_hp);
                 info!("【卡牌】回复 {} 点生命，当前道行: {}", amount, player.hp);
-                effect_events.send(SpawnEffectEvent { effect_type: EffectType::Heal, position: Vec3::new(-3.5, 1.0, 0.5), burst: true, count: 20 });
+                effect_events.send(SpawnEffectEvent::new(EffectType::Heal, Vec3::new(-3.5, 1.0, 0.5)).burst(20));
             }
         }
         CardEffect::DrawCards { amount } => {
@@ -3092,12 +3078,7 @@ fn update_tribulation(
             for i in 0..3 {
                 let x = rng.gen_range(-450.0..450.0);
                 let y = rng.gen_range(-350.0..350.0);
-                effect_events.send(SpawnEffectEvent {
-                    effect_type: EffectType::Lightning,
-                    position: Vec3::new(x, y, 950.0 + (i as f32)), // 极高图层
-                    burst: true,
-                    count: 60, // 增加粒子数量
-                });
+                effect_events.send(SpawnEffectEvent::new(EffectType::Lightning, Vec3::new(x, y, 950.0 + (i as f32))).burst(60));
             }
 
             // 检查陨落
@@ -3157,12 +3138,7 @@ fn teardown_tribulation(
 
                 // 3. 视听反馈
                 sfx_events.send(PlaySfxEvent::new(SfxType::BreakthroughSuccess));
-                effect_events.send(SpawnEffectEvent {
-                    effect_type: EffectType::Victory,
-                    position: Vec3::new(0.0, 0.0, 999.0),
-                    burst: true,
-                    count: 100,
-                });
+                effect_events.send(SpawnEffectEvent::new(EffectType::Victory, Vec3::new(0.0, 0.0, 999.0)).burst(100));
             }
         }
     }
