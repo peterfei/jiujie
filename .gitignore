@@ -25,3 +25,5 @@ Cargo.lock
 
 # 日志
 *.log
+
+.claude/

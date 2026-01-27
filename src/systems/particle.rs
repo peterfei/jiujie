@@ -224,6 +224,13 @@ fn update_particles(
         let ui_y = 360.0 - p.position.y;
         node.left = Val::Px(ui_x - w/2.0); node.top = Val::Px(ui_y - h/2.0);
         node.width = Val::Px(w); node.height = Val::Px(h);
+        // 5. 死亡检查与销毁 (放最后且确保逻辑闭环)
+        if p.is_dead() {
+            commands.entity(entity).despawn_recursive();
+            continue; // 彻底跳过当前实体后续逻辑，防止 Panic
+        }
+
+        // 6. 应用视觉状态
         image.color = p.current_color();
         
         let final_rotation = if p.effect_type == EffectType::WanJian || p.effect_type == EffectType::SwordEnergy {
@@ -235,6 +242,5 @@ fn update_particles(
         if let Some(mut ec) = commands.get_entity(entity) { 
             ec.insert(Transform::from_rotation(Quat::from_rotation_z(final_rotation))); 
         }
-        if p.is_dead() { commands.entity(entity).despawn_recursive(); }
     }
 }

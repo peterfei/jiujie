@@ -1692,20 +1692,27 @@ pub fn update_hand_ui(
         Query<&mut Text, With<DiscardPileText>>,
         Query<&mut Text, With<HandCountText>>,
     )>,
-    mut hand_area_query: Query<(Entity, Option<&Children>), With<HandArea>>,
+    hand_area_query: Query<(Entity, Option<&Children>), With<HandArea>>,
+    hand_cards_query: Query<&HandCard>, // 新增：精确查询现有的卡牌实体
     mut commands: Commands,
     asset_server: Res<AssetServer>,
+    mut cooldown: Local<u32>, // 新增：冷却计数，防止每一帧都刷
 ) {
+    if *cooldown > 0 {
+        *cooldown -= 1;
+        return;
+    }
+
     // 1. 每帧更新文本资源 (数据 -> 文本)
     if let Ok(draw_pile) = draw_pile_query.get_single() {
-        if let Ok(mut text) = text_queries.p0().get_single_mut() { text.0 = format!("抽牌堆: {}", draw_pile.count); }
+        if let Ok(mut text) = text_queries.p0().get_single_mut() {
+            text.0 = format!("剑冢: {}", draw_pile.count);
+        }
     }
+
     if let Ok(discard_pile) = discard_pile_query.get_single() {
-        if let Ok(mut text) = text_queries.p1().get_single_mut() { text.0 = format!("弃牌堆: {}", discard_pile.count); }
-    }
-    if let Ok(hand) = hand_query.get_single() {
-        if let Ok(mut text) = text_queries.p2().get_single_mut() {
-            text.0 = format!("手牌: {}/{}", hand.cards.len(), hand.max_size);
+        if let Ok(mut text) = text_queries.p1().get_single_mut() {
+            text.0 = format!("归墟: {}", discard_pile.count);
         }
     }
 
@@ -1713,8 +1720,11 @@ pub fn update_hand_ui(
     let mut needs_rebuild = false;
     if let Ok(hand) = hand_query.get_single() {
         if let Some((_, children_opt)) = hand_area_query.iter().next() {
-            let ui_count = children_opt.map(|c| c.len()).unwrap_or(0).saturating_sub(1); 
-            if !hand_changed_query.is_empty() || ui_count != hand.cards.len() {
+            // 精确计数：当前世界中有多少张手牌实体
+            // 这是一个开销略大但 100% 准确的办法，解决重影问题
+            let actual_ui_count = hand_cards_query.iter().count();
+
+            if !hand_changed_query.is_empty() || actual_ui_count != hand.cards.len() {
                 needs_rebuild = true;
             }
         } else {
@@ -1725,9 +1735,12 @@ pub fn update_hand_ui(
     // 3. 执行重建
     if needs_rebuild {
         if let Ok(hand) = hand_query.get_single() {
-            if let Some((hand_area_entity, _)) = hand_area_query.iter_mut().next() {
+            if let Some((hand_area_entity, _)) = hand_area_query.iter().next() {
                 info!("【战斗】重建手牌 UI 视图: {} 张", hand.cards.len());
                 
+                // 设置冷却，给 Bevy 时间去应用 despawn/spawn 命令
+                *cooldown = 2; 
+
                 // 彻底清空，确保没有残留或错位
                 commands.entity(hand_area_entity).despawn_descendants();
                 
