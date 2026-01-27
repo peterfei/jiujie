@@ -200,6 +200,11 @@ pub struct HandArea;
 #[derive(Component)]
 pub struct CombatUiRoot;
 
+#[derive(Component)]
+pub struct CardDescriptionMarker {
+    pub card_id: u32,
+}
+
 #[derive(Event)]
 pub struct StatusEffectEvent {
     pub target: Entity,

@@ -8,6 +8,8 @@ use crate::components::{
     CombatState, TurnPhase, NodeType, Realm, Cultivation, MapNode, MapProgress, PlayerDeck, DeckConfig, CardPool, 
     CharacterType, EnemyAttackEvent, 
     SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, 
+    PlayerUiMarker, 
+
     ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation, 
 
 
@@ -1357,15 +1359,13 @@ fn setup_combat_ui(
                     row.spawn((Text::new(format!("{}/{}", player.hp, player.max_hp)), TextFont { font: chinese_font.clone(), font_size: 22.0, ..default() }, TextColor(Color::WHITE), PlayerHpText));
                 });
 
-                // 玩家状态显示行
-                if let Some(entity) = player_entity {
-                    p.spawn((
-                        Text::new(""),
-                        TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() },
-                        TextColor(Color::srgb(0.7, 0.4, 1.0)),
-                        StatusIndicator { owner: entity },
-                    ));
-                }
+                // 玩家状态显示行 (总是生成，标记为 Player 主体)
+                p.spawn((
+                    Text::new(""),
+                    TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() },
+                    TextColor(Color::srgb(0.7, 0.4, 1.0)),
+                    StatusIndicator { owner: player_entity.unwrap_or(Entity::PLACEHOLDER) }, // 哪怕现在没有，也占位
+                )).insert(PlayerUiMarker); // 使用 Marker 辅助定位
             }
         });
         root.spawn((
