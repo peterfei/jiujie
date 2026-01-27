@@ -63,7 +63,17 @@ pub enum CardEffect {
     AttackAndDraw { damage: i32, cards: i32 },
     /// 多重攻击
     MultiAttack { damage: i32, times: i32 },
+    /// 施加状态
+    ApplyStatus { status: StatusType, count: i32 },
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StatusType {
+    Weakness,
+    Vulnerable,
+    Poison,
+}
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CardRarity {
@@ -468,6 +478,17 @@ pub fn create_starting_deck() -> Vec<Card> {
             CardRarity::Uncommon,
             "textures/cards/skill.png",
         ),
+        // 1张状态卡 - 破绽百出
+        Card::new(
+            12,
+            "破绽百出",
+            "施加2层易伤",
+            CardType::Skill,
+            1,
+            CardEffect::ApplyStatus { status: StatusType::Vulnerable, count: 2 },
+            CardRarity::Common,
+            "textures/cards/skill.png",
+        ),
     ]
 }
 
@@ -499,6 +520,9 @@ impl CardPool {
             Card::new(300, "九天神雷", "造成20点毁灭伤害", CardType::Attack, 3, CardEffect::DealDamage { amount: 20 }, CardRarity::Rare, "textures/cards/attack.png"),
             Card::new(301, "金身法相", "获得15点护盾，恢复5点道行", CardType::Defense, 2, CardEffect::GainBlock { amount: 15 }, CardRarity::Rare, "textures/cards/defense.png"),
             Card::new(302, "万物回春", "恢复15点道行", CardType::Skill, 2, CardEffect::Heal { amount: 15 }, CardRarity::Rare, "textures/cards/skill.png"),
+            // === 状态功法 ===
+            Card::new(400, "破绽百出", "施加2层易伤", CardType::Skill, 1, CardEffect::ApplyStatus { status: StatusType::Vulnerable, count: 2 }, CardRarity::Common, "textures/cards/skill.png"),
+            Card::new(401, "迷魂烟", "施加2层虚弱", CardType::Skill, 1, CardEffect::ApplyStatus { status: StatusType::Weakness, count: 2 }, CardRarity::Common, "textures/cards/skill.png"),
         ]
     }
 

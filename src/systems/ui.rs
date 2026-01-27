@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use crate::components::combat::{DamageNumber, DamageEffectEvent, BlockIconMarker, BlockText, Player, Enemy, StatusIndicator};
+use crate::components::combat::{DamageNumber, DamageEffectEvent, BlockIconMarker, BlockText, Player, Enemy, StatusIndicator, StatusEffectEvent};
 use crate::states::GameState;
 
 pub struct UiPlugin;
@@ -7,12 +7,54 @@ pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<DamageEffectEvent>();
+        app.add_event::<StatusEffectEvent>();
         app.add_systems(Update, (
             spawn_damage_numbers,
+            spawn_status_popups,
             update_damage_numbers,
             update_block_visuals,
             update_status_indicators,
         ).run_if(in_state(GameState::Combat)));
+    }
+}
+
+fn spawn_status_popups(
+    mut commands: Commands,
+    mut events: EventReader<StatusEffectEvent>,
+    player_query: Query<&Transform, With<Player>>,
+    enemy_query: Query<&Transform, With<Enemy>>,
+) {
+    for event in events.read() {
+        // 尝试从 Transform 获取 2D 坐标（简单处理）
+        let pos = if let Ok(t) = player_query.get(event.target) {
+            t.translation.truncate()
+        } else if let Ok(t) = enemy_query.get(event.target) {
+            t.translation.truncate()
+        } else {
+            continue;
+        };
+
+        let ui_x = 640.0 + pos.x;
+        let ui_y = 360.0 - pos.y - 40.0; // 稍微偏上
+
+        commands.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(ui_x),
+                top: Val::Px(ui_y),
+                ..default()
+            },
+            Text::new(event.msg.clone()),
+            TextFont { font_size: 30.0, ..default() },
+            TextColor(event.color),
+            DamageNumber {
+                value: 0,
+                timer: 0.0,
+                lifetime: 1.5, // 稍微久一点
+                velocity: Vec2::new(0.0, 30.0),
+            },
+            ZIndex(110),
+        ));
     }
 }
 

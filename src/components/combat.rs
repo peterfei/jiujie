@@ -200,6 +200,13 @@ pub struct HandArea;
 #[derive(Component)]
 pub struct CombatUiRoot;
 
+#[derive(Event)]
+pub struct StatusEffectEvent {
+    pub target: Entity,
+    pub msg: String,
+    pub color: Color,
+}
+
 impl DamageNumber {
     pub fn new(value: i32) -> Self {
         Self {

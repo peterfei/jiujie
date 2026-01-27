@@ -14,6 +14,7 @@ use crate::components::{
     Particle, DamageNumber, DamageEffectEvent, BlockIconMarker, BlockText, StatusIndicator,
     EnemyHpText, EnemyIntentText, EnemyStatusUi, PlayerHpText, PlayerEnergyText, PlayerBlockText,
     TopBar, TopBarHpText, TopBarGoldText, EnergyOrb, EndTurnButton, HandArea, CombatUiRoot,
+    StatusEffectEvent, // 补全导入
 };
 use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, PlayerSpriteMarker, MagicSealMarker, CharacterSprite};
 use crate::systems::sprite::{spawn_character_sprite};
@@ -1182,7 +1183,7 @@ fn setup_combat_ui(
                     p.spawn((
                         Text::new(""),
                         TextFont { font: chinese_font.clone(), font_size: 12.0, ..default() },
-                        TextColor(Color::srgb(0.8, 0.8, 0.8)),
+                        TextColor(Color::srgb(0.7, 0.4, 1.0)), // 紫色，醒目且符合状态色彩
                         StatusIndicator { owner: enemy_entity },
                     ));
 
@@ -1255,7 +1256,7 @@ fn setup_combat_ui(
                     p.spawn((
                         Text::new(""),
                         TextFont { font: chinese_font.clone(), font_size: 12.0, ..default() },
-                        TextColor(Color::srgb(0.8, 0.8, 0.8)),
+                        TextColor(Color::srgb(0.7, 0.4, 1.0)), // 紫色，醒目且符合状态色彩
                         StatusIndicator { owner: enemy_entity },
                     ));
 
@@ -1358,7 +1359,7 @@ fn setup_combat_ui(
                     p.spawn((
                         Text::new(""),
                         TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() },
-                        TextColor(Color::srgb(0.8, 0.8, 0.8)),
+                        TextColor(Color::srgb(0.7, 0.4, 1.0)),
                         StatusIndicator { owner: entity },
                     ));
                 }
@@ -1594,10 +1595,11 @@ fn process_enemy_turn_queue(
                 // 4. 结算逻辑
                 match intent {
                     EnemyIntent::Attack { damage } => {
+                        let final_damage = enemy.calculate_outgoing_damage(damage);
                         if let Ok((mut player, _)) = player_query.get_single_mut() {
-                            let broken = player.block > 0 && damage >= player.block;
-                            player.take_damage(damage);
-                            attack_events.send(EnemyAttackEvent::new(damage, broken));
+                            let broken = player.block > 0 && final_damage >= player.block;
+                            player.take_damage(final_damage);
+                            attack_events.send(EnemyAttackEvent::new(final_damage, broken));
                             effect_events.send(SpawnEffectEvent::new(EffectType::Hit, Vec3::new(-3.5, 0.0, 0.2)));
                             screen_events.send(ScreenEffectEvent::Shake { trauma: 0.4, decay: 4.0 });
                         }
@@ -1777,6 +1779,7 @@ fn draw_cards_on_turn_start(
 pub fn update_hand_ui(
     hand_query: Query<&Hand>,
     hand_changed_query: Query<&Hand, Changed<Hand>>,
+    player_query: Query<&Player>, // 引入玩家状态
     draw_pile_query: Query<&DrawPile>,
     discard_pile_query: Query<&DiscardPile>,
     mut text_queries: ParamSet<(
@@ -1860,6 +1863,30 @@ pub fn update_hand_ui(
                     let base_bottom = 20.0 + arc_height;
                     let rotation = -offset_from_center * 0.06;
 
+                    // 计算动态描述
+                    let mut display_desc = card.description.clone();
+                    let mut desc_color = Color::srgb(0.7, 0.7, 0.7);
+                    
+                    if let Ok(player) = player_query.get_single() {
+                        match card.effect {
+                            CardEffect::DealDamage { amount } => {
+                                let final_damage = player.calculate_outgoing_damage(amount);
+                                if final_damage < amount {
+                                    display_desc = format!("造成{}点伤害", final_damage);
+                                    desc_color = Color::srgb(0.4, 1.0, 0.4); // 虚弱变绿
+                                }
+                            }
+                            CardEffect::DealAoEDamage { amount } => {
+                                let final_damage = player.calculate_outgoing_damage(amount);
+                                if final_damage < amount {
+                                    display_desc = format!("对所有妖兽造成{}点伤害", final_damage);
+                                    desc_color = Color::srgb(0.4, 1.0, 0.4);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+
                     commands.entity(hand_area_entity).with_children(|parent| {
                         parent
                             .spawn((
@@ -1891,9 +1918,9 @@ pub fn update_hand_ui(
                                 card_ui.spawn((ImageNode::new(asset_server.load(img_path)), Node { width: Val::Percent(95.0), height: Val::Percent(55.0), border: UiRect::all(Val::Px(1.0)), ..default() }, BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.3))));
                                 
                                 card_ui.spawn((
-                                    Text::new(card.description.clone()),
+                                    Text::new(display_desc),
                                     TextFont { font: chinese_font.clone(), font_size: 11.0, ..default() },
-                                    TextColor(Color::srgb(0.9, 0.9, 0.9)),
+                                    TextColor(desc_color),
                                     TextLayout::new_with_justify(JustifyText::Center),
                                     Node { max_width: Val::Px(90.0), ..default() },
                                 ));
@@ -1950,6 +1977,7 @@ fn handle_card_play(
     mut sfx_events: EventWriter<PlaySfxEvent>,
     mut anim_events: EventWriter<CharacterAnimationEvent>,
     mut damage_events: EventWriter<DamageEffectEvent>,
+    mut status_events: EventWriter<StatusEffectEvent>,
     queries: (
         Query<Entity, With<PlayerSpriteMarker>>,
         Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
@@ -2013,6 +2041,7 @@ fn handle_card_play(
                             &mut screen_events,
                             &mut anim_events,
                             &mut damage_events,
+                            &mut status_events,
                             &enemy_sprite_query,
                             &enemy_impact_query,
                             &camera_query,
@@ -2049,54 +2078,96 @@ fn apply_card_effect(
     screen_events: &mut EventWriter<ScreenEffectEvent>,
     anim_events: &mut EventWriter<CharacterAnimationEvent>,
     damage_events: &mut EventWriter<DamageEffectEvent>,
+    status_events: &mut EventWriter<StatusEffectEvent>,
     enemy_sprite_query: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
     enemy_impact_query: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &crate::components::sprite::PhysicalImpact)>,
     _camera_query: &Query<(&Camera, &GlobalTransform), With<Camera3d>>,
 ) {
     let card_name = card.name.clone();
     match &card.effect {
-        CardEffect::DealDamage { amount } => {
+        CardEffect::ApplyStatus { status, count } => {
             if let Some(mut enemy) = enemy_query.iter_mut().find(|e| e.hp > 0) {
                 let target_id = enemy.id;
-                enemy.take_damage(*amount);
-                let is_dead = enemy.hp <= 0;
-                info!("【卡牌】对 {} 造成 {} 点伤害，剩余 HP: {}", enemy.name, amount, enemy.hp);
-                
-                for (entity, marker, transform) in enemy_sprite_query.iter() {
-                    if marker.id == target_id {
-                        effect_events.send(SpawnEffectEvent::new(EffectType::Fire, transform.translation));
-                        
-                        // 发送受击飘字事件
-                        // 从 enemy_impact_query 寻找对应的 2D 位置
-                        if let Some((_, _, impact)) = enemy_impact_query.iter().find(|(_, m, _)| m.id == target_id) {
-                            let x_world = impact.home_position.x * 100.0;
-                            let y_world = (impact.home_position.z - 0.1) * 100.0;
-                            damage_events.send(DamageEffectEvent {
-                                position: Vec2::new(x_world, y_world),
-                                amount: *amount,
-                            });
-                        }
-
-                        if is_dead {
-                            anim_events.send(CharacterAnimationEvent { target: entity, animation: crate::components::sprite::AnimationState::Death });
-                        } else {
-                            anim_events.send(CharacterAnimationEvent { target: entity, animation: crate::components::sprite::AnimationState::Hit });
-                        }
+                match status {
+                    crate::components::cards::StatusType::Weakness => {
+                        enemy.weakness += *count;
+                        info!("【卡牌】对 {} 施加 {} 层虚弱", enemy.name, count);
+                    }
+                    crate::components::cards::StatusType::Vulnerable => {
+                        enemy.vulnerable += *count;
+                        info!("【卡牌】对 {} 施加 {} 层易伤", enemy.name, count);
+                    }
+                    crate::components::cards::StatusType::Poison => {
+                        enemy.poison += *count;
+                        info!("【卡牌】对 {} 施加 {} 层中毒", enemy.name, count);
                     }
                 }
-                screen_events.send(ScreenEffectEvent::Shake { trauma: 0.35, decay: 5.0 });
+
+                // 触发头顶弹出文字
+                for (entity, marker, _) in enemy_sprite_query.iter() {
+                    if marker.id == target_id {
+                        let (msg, color) = match status {
+                            crate::components::cards::StatusType::Weakness => ("虚弱！".to_string(), Color::srgb(0.7, 0.4, 1.0)),
+                            crate::components::cards::StatusType::Vulnerable => ("易伤！".to_string(), Color::srgb(1.0, 0.3, 0.3)),
+                            crate::components::cards::StatusType::Poison => ("中毒！".to_string(), Color::srgb(0.3, 0.8, 0.3)),
+                        };
+                        status_events.send(StatusEffectEvent { target: entity, msg, color });
+                    }
+                }
+            }
+        }
+        CardEffect::DealDamage { amount } => {
+            if let Ok((player, _)) = player_query.get_single() {
+                let final_damage = player.calculate_outgoing_damage(*amount);
+                
+                if let Some(mut enemy) = enemy_query.iter_mut().find(|e| e.hp > 0) {
+                    let target_id = enemy.id;
+                    enemy.take_damage(final_damage);
+                    let is_dead = enemy.hp <= 0;
+                    info!("【卡牌】对 {} 造成 {} 点伤害 (原始: {})", enemy.name, final_damage, amount);
+                
+                    for (entity, marker, transform) in enemy_sprite_query.iter() {
+                        if marker.id == target_id {
+                            effect_events.send(SpawnEffectEvent::new(EffectType::Fire, transform.translation));
+                            
+                            // 发送受击飘字事件
+                            // 从 enemy_impact_query 寻找对应的 2D 位置
+                            if let Some((_, _, impact)) = enemy_impact_query.iter().find(|(_, m, _)| m.id == target_id) {
+                                let x_world = impact.home_position.x * 100.0;
+                                let y_world = (impact.home_position.z - 0.1) * 100.0;
+                                damage_events.send(DamageEffectEvent {
+                                    position: Vec2::new(x_world, y_world),
+                                    amount: final_damage,
+                                });
+                            }
+
+                            if is_dead {
+                                anim_events.send(CharacterAnimationEvent { target: entity, animation: crate::components::sprite::AnimationState::Death });
+                            } else {
+                                anim_events.send(CharacterAnimationEvent { target: entity, animation: crate::components::sprite::AnimationState::Hit });
+                            }
+                        }
+                    }
+                    screen_events.send(ScreenEffectEvent::Shake { trauma: 0.35, decay: 5.0 });
+                }
             }
         }
         CardEffect::DealAoEDamage { amount } => {
             let mut hit_count = 0;
+            let final_damage = if let Ok((player, _)) = player_query.get_single() {
+                player.calculate_outgoing_damage(*amount)
+            } else {
+                *amount
+            };
+
             for mut enemy in enemy_query.iter_mut() {
                 if enemy.hp <= 0 { continue; }
-                enemy.take_damage(*amount);
+                enemy.take_damage(final_damage);
                 hit_count += 1;
             }
             
             if hit_count > 0 {
-                info!("【卡牌】施展群体杀伤，重创 {} 名妖物", hit_count);
+                info!("【卡牌】施展群体杀伤，重创 {} 名妖物 (伤害: {})", hit_count, final_damage);
 
                 // 发送 AOE 飘字事件
                 for (_, _marker, impact) in enemy_impact_query.iter() {
@@ -2104,7 +2175,7 @@ fn apply_card_effect(
                     let y_world = (impact.home_position.z - 0.1) * 100.0;
                     damage_events.send(DamageEffectEvent {
                         position: Vec2::new(x_world, y_world),
-                        amount: *amount,
+                        amount: final_damage,
                     });
                 }
 
