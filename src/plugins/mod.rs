@@ -11,9 +11,9 @@ use crate::components::{
     EnemySpriteMarker, VictoryDelay, RelicCollection, Relic, RelicId,
     EnemyActionQueue, RelicObtainedEvent, RelicTriggeredEvent,
     ParticleEmitter, PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker, DialogueLine,
-    Particle, DamageNumber, DamageEffectEvent, // 补全导入
+    Particle, DamageNumber, DamageEffectEvent, BlockIconMarker, BlockText, // 补全导入
 };
-use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, PlayerSpriteMarker, AnimationState, MagicSealMarker, CharacterSprite};
+use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, PlayerSpriteMarker, MagicSealMarker, CharacterSprite};
 use crate::systems::sprite::{spawn_character_sprite};
 
 /// 核心游戏插件
@@ -1116,9 +1116,9 @@ fn setup_combat_ui(
     character_assets: Res<CharacterAssets>,
     player_deck: Res<PlayerDeck>,
     relic_collection: Res<RelicCollection>,
-    enemy_query: Query<&Enemy>,
+    enemy_query: Query<(Entity, &Enemy)>,
     mut victory_delay: ResMut<VictoryDelay>,
-    player_query: Query<(&Player, &crate::components::Cultivation)>,
+    player_query: Query<(Entity, &Player, &crate::components::Cultivation)>,
     map_progress: Res<MapProgress>,
     existing_ui: Query<Entity, With<CombatUiRoot>>, // 注入现有 UI 查询
 ) {
@@ -1136,10 +1136,16 @@ fn setup_combat_ui(
     let is_boss_node = map_progress.is_at_boss();
 
     // 创建根容器
-    let root_entity = commands.spawn((
-        Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
-        PickingBehavior::IGNORE, CombatUiRoot,
-    )).id();
+        let root_entity = commands.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                ..default()
+            },
+            ZIndex(200), // 全局最高层级
+            PickingBehavior::IGNORE, CombatUiRoot,
+        )).id();
 
     // --- 多敌人生成 ---
     if enemy_query.is_empty() {
@@ -1161,7 +1167,7 @@ fn setup_combat_ui(
                 }
             };
             let x_world = 250.0 + (i as f32 - (num_enemies as f32 - 1.0) / 2.0) * 220.0;
-            commands.spawn(Enemy::with_type(enemy_id, name, hp, e_type));
+            let enemy_entity = commands.spawn(Enemy::with_type(enemy_id, name, hp, e_type)).id();
 
             // 根据妖兽类型选择渲染类型与尺寸 (大作级体型压制)
             let (char_type, size) = match e_type {
@@ -1177,16 +1183,47 @@ fn setup_combat_ui(
                 root.spawn((
                     Node { position_type: PositionType::Absolute, left: Val::Px(ui_left), bottom: Val::Px(480.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() },
                     EnemyStatusUi { enemy_id },
+                    ZIndex(150), // 提升层级，确保在特效上方
                 )).with_children(|p| {
                     p.spawn((Text::new(name), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE)));
-                    p.spawn((Text::new(format!("HP: {}/{}", hp, hp)), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(Color::srgb(1.0, 0.3, 0.3)), EnemyHpText));
+                    
+                    // HP & Block 栏
+                    p.spawn(Node {
+                        flex_direction: FlexDirection::Row,
+                        align_items: AlignItems::Center,
+                        column_gap: Val::Px(8.0),
+                        ..default()
+                    }).with_children(|row| {
+                        row.spawn((Text::new(format!("HP: {}/{}", hp, hp)), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(Color::srgb(1.0, 0.3, 0.3)), EnemyHpText));
+                        
+                        // 护甲图标容器 (使用 Display 控制)
+                        row.spawn((
+                            Node {
+                                display: Display::None, // 初始隐藏
+                                width: Val::Px(28.0), height: Val::Px(28.0),
+                                justify_content: JustifyContent::Center, align_items: AlignItems::Center,
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0.2, 0.5, 1.0)), // 更亮的蓝色
+                            BorderRadius::all(Val::Px(6.0)),
+                            BlockIconMarker { owner: enemy_entity },
+                        )).with_children(|shield| {
+                            shield.spawn((
+                                Text::new("0"),
+                                TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() },
+                                TextColor(Color::WHITE),
+                                BlockText,
+                            ));
+                        });
+                    });
+
                     p.spawn((Text::new("意图: 观察"), TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() }, TextColor(Color::srgb(1.0, 0.8, 0.4)), EnemyIntentText));
                 });
             });
         }
     } else {
         info!("【战斗】检测到预设妖兽，跳过随机生成");
-        for enemy in enemy_query.iter() {
+        for (enemy_entity, enemy) in enemy_query.iter() {
             let x_world = 250.0; // 简化位置
             let ui_left = 640.0 + x_world - 80.0;
             
@@ -1202,9 +1239,40 @@ fn setup_combat_ui(
                 root.spawn((
                     Node { position_type: PositionType::Absolute, left: Val::Px(ui_left), bottom: Val::Px(480.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() },
                     EnemyStatusUi { enemy_id: enemy.id },
+                    ZIndex(150),
                 )).with_children(|p| {
                     p.spawn((Text::new(enemy.name.clone()), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE)));
-                    p.spawn((Text::new(format!("HP: {}/{}", enemy.hp, enemy.max_hp)), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(Color::srgb(1.0, 0.3, 0.3)), EnemyHpText));
+                    
+                    // HP & Block 栏
+                    p.spawn(Node {
+                        flex_direction: FlexDirection::Row,
+                        align_items: AlignItems::Center,
+                        column_gap: Val::Px(8.0),
+                        ..default()
+                    }).with_children(|row| {
+                        row.spawn((Text::new(format!("HP: {}/{}", enemy.hp, enemy.max_hp)), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(Color::srgb(1.0, 0.3, 0.3)), EnemyHpText));
+                        
+                        // 护甲图标容器
+                        row.spawn((
+                            Node {
+                                display: Display::None,
+                                width: Val::Px(28.0), height: Val::Px(28.0),
+                                justify_content: JustifyContent::Center, align_items: AlignItems::Center,
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0.2, 0.5, 1.0)),
+                            BorderRadius::all(Val::Px(6.0)),
+                            BlockIconMarker { owner: enemy_entity },
+                        )).with_children(|shield| {
+                            shield.spawn((
+                                Text::new("0"),
+                                TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() },
+                                TextColor(Color::WHITE),
+                                BlockText,
+                            ));
+                        });
+                    });
+
                     p.spawn((Text::new("意图: 观察"), TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() }, TextColor(Color::srgb(1.0, 0.8, 0.4)), EnemyIntentText));
                 });
             });
@@ -1244,30 +1312,63 @@ fn setup_combat_ui(
     commands.spawn(DiscardPile::new());
     commands.spawn(Hand::new(10));
     let player_data = player_query.get_single().ok();
+    let player_entity = player_data.map(|(e, _, _)| e);
 
     commands.entity(root_entity).with_children(|root| {
         root.spawn((
             Node { position_type: PositionType::Absolute, top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Px(45.0), flex_direction: FlexDirection::Row, align_items: AlignItems::Center, padding: UiRect::horizontal(Val::Px(20.0)), column_gap: Val::Px(30.0), ..default() },
             BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.85)), TopBar,
         )).with_children(|bar| {
-            if let Some((p, c)) = player_data {
+            if let Some((_, p, c)) = player_data {
                 let r_name = match c.realm { crate::components::cultivation::Realm::QiRefining => "炼气期", crate::components::cultivation::Realm::FoundationEstablishment => "筑基期", crate::components::cultivation::Realm::GoldenCore => "金丹期", _ => "修仙者" };
                 bar.spawn((Text::new(format!("境界: {}", r_name)), TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() }, TextColor(Color::srgb(0.4, 1.0, 0.4))));
                 bar.spawn((Text::new(format!("道行: {}/{}", p.hp, p.max_hp)), TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() }, TextColor(Color::srgb(1.0, 0.4, 0.4)), TopBarHpText));
                 bar.spawn((Text::new(format!("灵石: {}", p.gold)), TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() }, TextColor(Color::srgb(1.0, 0.8, 0.2)), TopBarGoldText));
             }
         });
-        root.spawn(Node { position_type: PositionType::Absolute, left: Val::Px(150.0), bottom: Val::Px(280.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() }).with_children(|p| {
-            if let Some((player, _)) = player_data {
-                p.spawn((Text::new(format!("{}/{}", player.hp, player.max_hp)), TextFont { font: chinese_font.clone(), font_size: 22.0, ..default() }, TextColor(Color::WHITE), PlayerHpText));
-                p.spawn((Text::new(format!("护甲: {}", player.block)), TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() }, TextColor(Color::srgb(0.4, 0.7, 1.0)), PlayerBlockText));
+        root.spawn((
+            Node { position_type: PositionType::Absolute, left: Val::Px(150.0), bottom: Val::Px(280.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() },
+            ZIndex(150),
+        )).with_children(|p| {
+            if let Some((_, player, _)) = player_data {
+                // HP 与护甲并排栏
+                p.spawn(Node {
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    column_gap: Val::Px(10.0),
+                    ..default()
+                }).with_children(|row| {
+                    // 玩家护甲图标 (放在左侧)
+                    if let Some(entity) = player_entity {
+                        row.spawn((
+                            Node {
+                                display: Display::None,
+                                width: Val::Px(32.0), height: Val::Px(32.0),
+                                justify_content: JustifyContent::Center, align_items: AlignItems::Center,
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(1.0, 0.6, 0.0)), // 橙金色，极高辨识度
+                            BorderRadius::all(Val::Px(6.0)),
+                            BlockIconMarker { owner: entity },
+                        )).with_children(|shield| {
+                            shield.spawn((
+                                Text::new("0"),
+                                TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() },
+                                TextColor(Color::WHITE),
+                                BlockText,
+                            ));
+                        });
+                    }
+
+                    row.spawn((Text::new(format!("{}/{}", player.hp, player.max_hp)), TextFont { font: chinese_font.clone(), font_size: 22.0, ..default() }, TextColor(Color::WHITE), PlayerHpText));
+                });
             }
         });
         root.spawn((
             Node { position_type: PositionType::Absolute, left: Val::Px(100.0), bottom: Val::Px(120.0), width: Val::Px(90.0), height: Val::Px(90.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
             ZIndex(10), BackgroundColor(Color::srgba(0.1, 0.2, 0.5, 0.9)), EnergyOrb
         )).with_children(|orb| {
-            if let Some((p, _)) = player_data {
+            if let Some((_, p, _)) = player_data {
                 orb.spawn((Text::new(format!("{}/{}", p.energy, p.max_energy)), TextFont { font: chinese_font.clone(), font_size: 32.0, ..default() }, TextColor(Color::WHITE), PlayerEnergyText));
             }
         });

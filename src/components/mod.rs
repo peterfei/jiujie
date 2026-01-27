@@ -17,7 +17,7 @@ pub use map::{MapNode, NodeType, MapConfig, generate_map_nodes, MapProgress};
 pub use combat::{
     Player, Enemy, EnemyIntent, EnemyType, AiPattern, CombatConfig, CombatState, TurnPhase, 
     PlayerDeck, VictoryDelay, CardHoverPanelMarker, RelicHoverPanelMarker, EnemyActionQueue,
-    DamageNumber, DamageEffectEvent,
+    DamageNumber, DamageEffectEvent, BlockIconMarker, BlockText,
 };
 pub use cards::{
     Card, CardType, CardEffect, CardRarity,

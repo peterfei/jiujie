@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use crate::components::combat::{DamageNumber, DamageEffectEvent};
+use crate::components::combat::{DamageNumber, DamageEffectEvent, BlockIconMarker, BlockText, Player, Enemy};
 use crate::states::GameState;
 
 pub struct UiPlugin;
@@ -10,7 +10,42 @@ impl Plugin for UiPlugin {
         app.add_systems(Update, (
             spawn_damage_numbers,
             update_damage_numbers,
+            update_block_visuals,
         ).run_if(in_state(GameState::Combat)));
+    }
+}
+
+fn update_block_visuals(
+    mut block_ui_query: Query<(&BlockIconMarker, &mut Node, &Children)>,
+    mut text_query: Query<&mut Text, With<BlockText>>,
+    player_query: Query<&Player>,
+    enemy_query: Query<&Enemy>,
+) {
+    for (marker, mut node, children) in block_ui_query.iter_mut() {
+        // 获取护甲值
+        let block_value = if let Ok(player) = player_query.get(marker.owner) {
+            player.block
+        } else if let Ok(enemy) = enemy_query.get(marker.owner) {
+            enemy.block
+        } else {
+            0
+        };
+
+        // 更新显示状态
+        if block_value > 0 {
+            if node.display == Display::None {
+                info!("【UI调试】显示护甲图标: {}, 实体: {:?}", block_value, marker.owner);
+            }
+            node.display = Display::Flex;
+            // 更新文字内容
+            for &child in children.iter() {
+                if let Ok(mut text) = text_query.get_mut(child) {
+                    text.0 = block_value.to_string();
+                }
+            }
+        } else {
+            node.display = Display::None;
+        }
     }
 }
 

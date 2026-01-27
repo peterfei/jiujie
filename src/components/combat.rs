@@ -121,6 +121,14 @@ pub struct DamageNumber {
     pub velocity: Vec2,
 }
 
+#[derive(Component)]
+pub struct BlockIconMarker {
+    pub owner: Entity,
+}
+
+#[derive(Component)]
+pub struct BlockText;
+
 impl DamageNumber {
     pub fn new(value: i32) -> Self {
         Self {
