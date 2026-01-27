@@ -1062,13 +1062,13 @@ struct EnemyStatusUi {
 struct TurnText;
 
 #[derive(Component)]
-struct DrawPileText;
+pub struct DrawPileText;
 
 #[derive(Component)]
-struct DiscardPileText;
+pub struct DiscardPileText;
 
 #[derive(Component)]
-struct HandCountText;
+pub struct HandCountText;
 
 #[derive(Component)]
 struct EndTurnButton;
@@ -1675,7 +1675,7 @@ fn draw_cards_on_turn_start(
 }
 
 /// 更新手牌区UI
-fn update_hand_ui(
+pub fn update_hand_ui(
     hand_query: Query<&Hand>,
     hand_changed_query: Query<&Hand, Changed<Hand>>,
     draw_pile_query: Query<&DrawPile>,
@@ -1685,176 +1685,117 @@ fn update_hand_ui(
         Query<&mut Text, With<DiscardPileText>>,
         Query<&mut Text, With<HandCountText>>,
     )>,
-    mut hand_area_query: Query<(Entity, &Children), With<HandArea>>,
+    mut hand_area_query: Query<(Entity, Option<&Children>), With<HandArea>>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
 ) {
-    // 更新抽牌堆/弃牌堆文本（每帧更新，因为这些数字会变化）
+    // 1. 每帧更新文本资源 (数据 -> 文本)
     if let Ok(draw_pile) = draw_pile_query.get_single() {
-        if let Ok(mut text) = text_queries.p0().get_single_mut() {
-            text.0 = format!("抽牌堆: {}", draw_pile.count);
-        }
+        if let Ok(mut text) = text_queries.p0().get_single_mut() { text.0 = format!("抽牌堆: {}", draw_pile.count); }
     }
-
     if let Ok(discard_pile) = discard_pile_query.get_single() {
-        if let Ok(mut text) = text_queries.p1().get_single_mut() {
-            text.0 = format!("弃牌堆: {}", discard_pile.count);
-        }
+        if let Ok(mut text) = text_queries.p1().get_single_mut() { text.0 = format!("弃牌堆: {}", discard_pile.count); }
     }
-
-    // 每帧更新手牌计数文本
     if let Ok(hand) = hand_query.get_single() {
-        match text_queries.p2().get_single_mut() {
-            Ok(mut text) => {
-                let new_text = format!("手牌: {}/{}", hand.cards.len(), hand.max_size);
-                if text.0 != new_text {
-                    info!("更新手牌计数文本: {}", new_text);
-                    text.0 = new_text;
-                }
-            }
-            Err(e) => {
-                // HandCountText 查询失败（可能还没有创建）
-                trace!("HandCountText 查询失败: {:?}", e);
-            }
+        if let Ok(mut text) = text_queries.p2().get_single_mut() {
+            text.0 = format!("手牌: {}/{}", hand.cards.len(), hand.max_size);
         }
     }
 
-    // 即使手牌没有发生 Change 事件，如果 UI 里的卡片数量对不上，也要强制更新
-    let hand_needs_update = if let Ok(hand) = hand_changed_query.get_single() {
-        if let Ok((_, children)) = hand_area_query.get_single() {
-            // 注意：children 包含一个"手牌: X/Y"文本，所以要减 1
-            let ui_card_count = children.len().saturating_sub(1);
-            hand.cards.len() != ui_card_count
+    // 2. 检测是否需要彻底重建手牌 UI
+    let mut needs_rebuild = false;
+    if let Ok(hand) = hand_query.get_single() {
+        if let Ok((_, children_opt)) = hand_area_query.get_single() {
+            let ui_count = children_opt.map(|c| c.len()).unwrap_or(0).saturating_sub(1); // 减去计数文本
+            // 如果数据变了，或者 UI 实体数量与数据不符
+            if !hand_changed_query.is_empty() || ui_count != hand.cards.len() {
+                needs_rebuild = true;
+                if ui_count != hand.cards.len() {
+                    info!("【UI自愈】手牌 UI 数量({})与数据({})不符，正在强制重建", ui_count, hand.cards.len());
+                }
+            }
         } else {
-            true
+            // 找不到 HandArea 或它没有子节点，只要手牌有数就尝试触发
+            if !hand.cards.is_empty() { needs_rebuild = true; }
         }
-    } else {
-        false
-    };
+    }
 
-    if hand_needs_update {
-        if let Ok(hand) = hand_changed_query.get_single() {
-            info!("更新手牌UI，手牌数量: {}", hand.cards.len());
-            if let Ok((hand_area_entity, children)) = hand_area_query.get_single_mut() {
-            let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
-
-            // 1. 清空现有手牌显示（保留第一个子元素，即"手牌: X/Y"文本）
-            for (i, child) in children.iter().enumerate() {
-                if i > 0 {
-                    commands.entity(*child).despawn_recursive();
-                }
-            }
-
-            // 2. 为每张手牌创建UI卡片 (扇形布局)
-            let total_cards = hand.cards.len();
-            let center_index = (total_cards as f32 - 1.0) / 2.0;
-
-            for (i, card) in hand.cards.iter().enumerate() {
-                // 计算扇形布局参数
-                let offset_from_center = i as f32 - center_index;
+    // 3. 执行重建
+    if needs_rebuild {
+        if let Ok(hand) = hand_query.get_single() {
+            if let Ok((hand_area_entity, _)) = hand_area_query.get_single_mut() {
+                info!("【战斗】重建手牌 UI 视图: {} 张", hand.cards.len());
                 
-                // 水平偏移
-                let x_pos = offset_from_center * 95.0; 
+                // 彻底清空，确保没有残留或错位
+                commands.entity(hand_area_entity).despawn_descendants();
                 
-                // 垂直偏移 (形成圆弧)
-                let arc_height = -3.0 * offset_from_center * offset_from_center;
-                let base_bottom = 20.0 + arc_height;
-                
-                // 旋转
-                let rotation = -offset_from_center * 0.06;
+                let chinese_font = asset_server.load("fonts/Arial Unicode.ttf");
 
+                // A. 重建计数文本
                 commands.entity(hand_area_entity).with_children(|parent| {
-                    // 卡牌容器
-                    parent
-                        .spawn((
-                            Node {
-                                position_type: PositionType::Absolute,
-                                width: Val::Px(105.0),
-                                height: Val::Px(145.0),
-                                left: Val::Px(x_pos + 450.0), // 假设中心在450
-                                bottom: Val::Px(base_bottom),
-                                flex_direction: FlexDirection::Column,
-                                justify_content: JustifyContent::SpaceBetween,
-                                align_items: AlignItems::Center,
-                                padding: UiRect::all(Val::Px(6.0)),
-                                border: UiRect::all(Val::Px(2.0)),
-                                ..default()
-                            },
-                            Transform::from_rotation(Quat::from_rotation_z(rotation)),
-                            BackgroundColor(card.get_color()),
-                            BorderColor(Color::BLACK),
-                            HandCard { 
-                                card_id: card.id,
-                                base_bottom,
-                                base_rotation: rotation,
-                                index: i,
-                            },
-                            Button,
-                        ))
-                        .with_children(|card_ui| {
-                            // 能量消耗
-                            let cost_text = format!("{}", card.cost);
-                            card_ui.spawn((
-                                Text::new(cost_text),
-                                TextFont {
-                                    font: chinese_font.clone(),
-                                    font_size: 18.0,
-                                    ..default()
-                                },
-                                TextColor(Color::WHITE),
-                            ));
-
-                            // 卡牌名称
-                            card_ui.spawn((
-                                Text::new(card.name.clone()),
-                                TextFont {
-                                    font: chinese_font.clone(),
-                                    font_size: 14.0,
-                                    ..default()
-                                },
-                                TextColor(Color::WHITE),
-                                TextLayout::new_with_justify(JustifyText::Center),
-                            ));
-
-                            // 卡牌插画 (优化比例与默认图)
-                            let img_path = if card.image_path.is_empty() {
-                                "textures/cards/default.png".to_string()
-                            } else {
-                                card.image_path.clone()
-                            };
-                            
-                            card_ui.spawn((
-                                ImageNode::new(asset_server.load(img_path)),
-                                Node {
-                                    width: Val::Percent(95.0),
-                                    height: Val::Percent(55.0), // 占据上半部分
-                                    border: UiRect::all(Val::Px(1.0)),
-                                    ..default()
-                                },
-                                BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.3)),
-                            ));
-
-                            // 卡牌描述 (功法效果明细)
-                            card_ui.spawn((
-                                Text::new(card.description.clone()),
-                                TextFont {
-                                    font: chinese_font.clone(),
-                                    font_size: 11.0,
-                                    ..default()
-                                },
-                                TextColor(Color::srgb(0.9, 0.9, 0.9)),
-                                TextLayout::new_with_justify(JustifyText::Center),
-                                Node {
-                                    max_width: Val::Px(90.0),
-                                    ..default()
-                                },
-                            ));
-                        });
+                    parent.spawn((
+                        Text::new(format!("手牌: {}/{}", hand.cards.len(), hand.max_size)),
+                        TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() },
+                        TextColor(Color::srgba(1.0, 1.0, 1.0, 0.5)),
+                        Node { position_type: PositionType::Absolute, top: Val::Px(10.0), ..default() },
+                        HandCountText
+                    ));
                 });
+
+                // B. 重建所有卡牌
+                let total_cards = hand.cards.len();
+                let center_index = (total_cards as f32 - 1.0) / 2.0;
+
+                for (i, card) in hand.cards.iter().enumerate() {
+                    let offset_from_center = i as f32 - center_index;
+                    let x_pos = offset_from_center * 95.0; 
+                    let arc_height = -3.0 * offset_from_center * offset_from_center;
+                    let base_bottom = 20.0 + arc_height;
+                    let rotation = -offset_from_center * 0.06;
+
+                    commands.entity(hand_area_entity).with_children(|parent| {
+                        parent
+                            .spawn((
+                                Node {
+                                    position_type: PositionType::Absolute,
+                                    width: Val::Px(105.0),
+                                    height: Val::Px(145.0),
+                                    left: Val::Px(x_pos + 450.0),
+                                    bottom: Val::Px(base_bottom),
+                                    flex_direction: FlexDirection::Column,
+                                    justify_content: JustifyContent::SpaceBetween,
+                                    align_items: AlignItems::Center,
+                                    padding: UiRect::all(Val::Px(6.0)),
+                                    border: UiRect::all(Val::Px(2.0)),
+                                    ..default()
+                                },
+                                Transform::from_rotation(Quat::from_rotation_z(rotation)),
+                                BackgroundColor(card.get_color()),
+                                BorderColor(Color::BLACK),
+                                HandCard { card_id: card.id, base_bottom, base_rotation: rotation, index: i },
+                                Button,
+                            ))
+                            .with_children(|card_ui| {
+                                // 能量、名称、插画、描述 (保持原有渲染逻辑)
+                                card_ui.spawn((Text::new(format!("{}", card.cost)), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE)));
+                                card_ui.spawn((Text::new(card.name.clone()), TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() }, TextColor(Color::WHITE), TextLayout::new_with_justify(JustifyText::Center)));
+                                
+                                let img_path = if card.image_path.is_empty() { "textures/cards/default.png".to_string() } else { card.image_path.clone() };
+                                card_ui.spawn((ImageNode::new(asset_server.load(img_path)), Node { width: Val::Percent(95.0), height: Val::Percent(55.0), border: UiRect::all(Val::Px(1.0)), ..default() }, BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.3))));
+                                
+                                card_ui.spawn((
+                                    Text::new(card.description.clone()),
+                                    TextFont { font: chinese_font.clone(), font_size: 11.0, ..default() },
+                                    TextColor(Color::srgb(0.9, 0.9, 0.9)),
+                                    TextLayout::new_with_justify(JustifyText::Center),
+                                    Node { max_width: Val::Px(90.0), ..default() },
+                                ));
+                            });
+                    });
+                }
             }
         }
     }
-}
 }
 
 /// 处理手牌卡片悬停与交互反馈 (大作级动态手感)
