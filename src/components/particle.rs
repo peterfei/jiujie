@@ -235,8 +235,18 @@ impl EmitterConfig {
     pub fn wan_jian() -> Self {
         Self {
             lifetime: (1.5, 2.5), size: (12.0, 22.0), start_color: Color::srgba(1.8, 1.4, 0.3, 1.0),
-            end_color: Color::srgba(1.0, 0.2, 0.0, 0.0), speed: (0.0, 0.0), 
+            end_color: Color::srgba(1.0, 0.2, 0.0, 0.0), speed: (0.0, 0.0),
             angle: (0.0, 0.0), gravity: Vec2::ZERO, rotation_speed: (0.0, 0.0), shape: ParticleShape::Line,
+        }
+    }
+
+    /// 撞击火花 - 高亮度的微小爆炸效果
+    pub fn impact_spark() -> Self {
+        Self {
+            lifetime: (0.15, 0.35), size: (2.0, 6.0), start_color: Color::srgba(1.0, 1.0, 0.9, 1.0),
+            end_color: Color::srgba(1.0, 0.6, 0.2, 0.0), speed: (150.0, 350.0),
+            angle: (0.0, std::f32::consts::PI * 2.0), gravity: Vec2::new(0.0, -100.0),
+            rotation_speed: (-15.0, 15.0), shape: ParticleShape::Star,
         }
     }
 
@@ -261,7 +271,7 @@ impl EmitterConfig {
 pub enum ParticleShape { Circle, Square, Line, Triangle, Star }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum EffectType { Fire, Ice, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit, SwordEnergy, DemonAura, WebShot, WanJian }
+pub enum EffectType { Fire, Ice, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit, SwordEnergy, DemonAura, WebShot, WanJian, ImpactSpark }
 
 impl EffectType {
     pub fn config(&self) -> EmitterConfig {
@@ -279,6 +289,7 @@ impl EffectType {
             EffectType::DemonAura => EmitterConfig::demon_aura(),
             EffectType::WebShot => EmitterConfig::web_shot(),
             EffectType::WanJian => EmitterConfig::wan_jian(),
+            EffectType::ImpactSpark => EmitterConfig::impact_spark(),
         }
     }
 }

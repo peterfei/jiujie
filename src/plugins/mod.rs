@@ -112,13 +112,13 @@ impl Plugin for MenuPlugin {
         // 在进入Combat状态时设置战斗UI
         // 在进入Combat状态时设置战斗UI
         app.add_systems(OnEnter(GameState::Combat), (
-            setup_combat_ui, 
+            setup_combat_ui,
             setup_combat_environment, // 新增 3D 环境设置
         ));
         // 在进入Combat状态时重置玩家状态（能量、护甲等）
         app.add_systems(OnEnter(GameState::Combat), reset_player_on_combat_start);
-        // 在进入Combat状态时抽牌
-        app.add_systems(OnEnter(GameState::Combat), draw_cards_on_combat_start);
+        // 在进入Combat状态时抽牌（必须在 setup_combat_ui 之后执行）
+        app.add_systems(OnEnter(GameState::Combat), draw_cards_on_combat_start.after(setup_combat_ui));
         // 在退出Combat状态时清理战斗UI
         app.add_systems(OnExit(GameState::Combat), cleanup_combat_ui);
         // 处理战斗界面按钮点击
@@ -127,8 +127,6 @@ impl Plugin for MenuPlugin {
         app.add_systems(Update, update_combat_ui.run_if(in_state(GameState::Combat)));
         // 回合开始时抽牌
         app.add_systems(Update, draw_cards_on_turn_start.run_if(in_state(GameState::Combat)));
-        // 战斗开始时抽牌 (新注册，解决空手牌问题)
-        app.add_systems(Update, draw_cards_on_combat_start.run_if(in_state(GameState::Combat)));
         // 敌人队列处理系统
         app.add_systems(Update, process_enemy_turn_queue.run_if(in_state(GameState::Combat)));
         // 更新手牌UI

@@ -168,7 +168,8 @@ fn update_particles(
                 if move_vec.length() > 0.1 { p.rotation = (-move_vec.y).atan2(move_vec.x); }
                 p.position = new_pos;
             } else {
-                // 相位三：金龙扫尾 (55% - 100%)
+                // 相位三：游龙突刺 (55% - 100%)
+                // 视觉：飞剑划出极长且带残影的流光，不再是正弦波，而是带有弧度的切向突刺
                 if let Some(target) = p.target {
                     let strike_t = (local_prog - 0.55) / 0.45;
 
@@ -177,24 +178,43 @@ fn update_particles(
                         screen_events.send(ScreenEffectEvent::shake(0.4));
                         if p.seed < 0.03 { screen_events.send(ScreenEffectEvent::white_flash(0.1)); }
                     }
-                    
-                    // 游龙轨迹：基础直线 + 正弦波侧向位移
-                    let base_dir = (target - hub_pos).normalize();
-                    let side_dir = Vec2::new(-base_dir.y, base_dir.x); // 法向量
-                    
-                    // 波动幅度随时间减小，模拟从游动到直刺的平滑过渡
-                    let wave = (strike_t * 12.0 + p.seed * 5.0).sin() * 60.0 * (1.0 - strike_t);
-                    
-                    let base_pos = hub_pos.lerp(target, strike_t.powi(2)); // 加速度前进
-                    let new_pos = base_pos + side_dir * wave;
-                    
-                    let move_vec = new_pos - p.position;
-                    p.rotation = (-move_vec.y).atan2(base_dir.x);
-                    p.position = new_pos;
 
-                    // --- 大作级打磨：相位三添加剑气拖尾 ---
+                    // 游龙轨迹：切向弧形突刺
+                    let base_dir = (target - hub_pos).normalize();
+                    let side_dir = Vec2::new(-base_dir.y, base_dir.x);
+
+                    // 计算切向弧度：基于粒子种子的偏移，形成龙身般的曲线
+                    // 使用三次贝塞尔曲线实现平滑的弧形轨迹
+                    let arc_offset = (p.seed - 0.5) * 200.0; // 种子决定弧度方向和大小
+                    let control_point = hub_pos.lerp(target, 0.5) + side_dir * arc_offset;
+
+                    // 二次贝塞尔插值：B(t) = (1-t)²P0 + 2(1-t)tP1 + t²P2
+                    let inv_t = 1.0 - strike_t;
+                    let curve_pos = hub_pos * inv_t * inv_t
+                        + control_point * 2.0 * inv_t * strike_t
+                        + target * strike_t * strike_t;
+
+                    p.position = curve_pos;
+
+                    // 旋转角度朝向运动方向
+                    let move_dir = (target - p.position).normalize();
+                    p.rotation = (-move_dir.y).atan2(move_dir.x);
+
+                    // --- 极长流光拖尾：增加残影密度 ---
                     if strike_t > 0.0 && strike_t < 1.0 {
+                        // 增加拖尾粒子密度，从每帧1个增加到2-3个
                         events.send(SpawnEffectEvent::new(EffectType::SwordEnergy, p.position.extend(0.6)).burst(1));
+                        // 第二层残影，略微延迟
+                        if strike_t > 0.1 {
+                            events.send(SpawnEffectEvent::new(EffectType::SwordEnergy, p.position.extend(0.5)).burst(1));
+                        }
+                    }
+
+                    // --- 撞击火花：击中敌人时触发高亮度微小爆炸 ---
+                    // 当接近目标时（最后10%的行程），触发撞击火花
+                    if strike_t > 0.90 && strike_t < 0.95 {
+                        // 每把剑击中时生成多个火花粒子
+                        events.send(SpawnEffectEvent::new(EffectType::ImpactSpark, target.extend(0.0)).burst(8));
                     }
                 }
             }
