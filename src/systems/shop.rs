@@ -116,7 +116,21 @@ fn generate_shop_items(_player_deck: &PlayerDeck, _relic_collection: &RelicColle
     let mut items = vec![];
     use rand::seq::SliceRandom;
     let mut rng = rand::thread_rng();
-    for card in all_cards.choose_multiple(&mut rng, 3) { items.push(ShopItem::Card(card.clone())); }
+
+    // --- 测试专用：强制加入万剑归宗 ---
+    if let Some(wan_jian) = all_cards.iter().find(|c| c.name == "万剑归宗") {
+        items.push(ShopItem::Card(wan_jian.clone()));
+    }
+
+    // 随机选择另外 2 张卡牌
+    let remaining_cards: Vec<_> = all_cards.iter()
+        .filter(|c| c.name != "万剑归宗")
+        .cloned()
+        .collect();
+    for card in remaining_cards.choose_multiple(&mut rng, 2) { 
+        items.push(ShopItem::Card(card.clone())); 
+    }
+
     let elixirs = vec![
         ShopItem::Elixir { name: "洗髓丹".to_string(), hp_restore: 20, price: 40, description: "洗筋伐髓，恢复 20 点道行".to_string() },
         ShopItem::Elixir { name: "九转还魂丹".to_string(), hp_restore: 50, price: 90, description: "生死肉骨，恢复 50 点道行".to_string() },

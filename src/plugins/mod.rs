@@ -11,6 +11,7 @@ use crate::components::{
     EnemySpriteMarker, VictoryDelay, RelicCollection, Relic, RelicId,
     EnemyActionQueue, RelicObtainedEvent, RelicTriggeredEvent,
     ParticleEmitter, PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker, DialogueLine,
+    Particle, // 补全导入
 };
 use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, PlayerSpriteMarker, AnimationState, Ghost, MagicSealMarker, CharacterSprite};
 use crate::systems::sprite::{spawn_character_sprite};
@@ -331,7 +332,7 @@ fn setup_combat_environment(
 
     // 4. 环境灵气粒子
     commands.spawn((
-        ParticleEmitter::new(5.0, EffectType::AmbientSpirit.config()),
+        ParticleEmitter::new(5.0, EffectType::AmbientSpirit.config(), EffectType::AmbientSpirit),
         Transform::from_xyz(0.0, 0.0, 0.0),
         CombatUiRoot,
     ));
@@ -911,8 +912,8 @@ fn spawn_map_node(
     font: &Handle<Font>,
     map_progress: &MapProgress,
 ) {
-    // 检查是否是当前节点
-    let is_current = map_progress.current_node_id == Some(node.id);
+    // 检查是否是当前节点 (且尚未完成，解决视觉误导)
+    let is_current_active = map_progress.current_node_id == Some(node.id) && !node.completed;
 
     // 根据节点类型选择颜色
     let node_color = match node.node_type {
@@ -938,10 +939,10 @@ fn spawn_map_node(
 
     // 根据节点状态计算显示颜色 (大作级对比度优化)
     let (display_color, border_color) = if node.completed {
-        // 已完成：明亮的蓝色，代表已通关
-        (Color::srgb(0.2, 0.5, 1.0), Color::BLACK)
-    } else if is_current {
-        // 当前所在：黄色发光
+        // 已完成：深蓝色足迹，代表已探索完毕
+        (Color::srgb(0.1, 0.3, 0.6), Color::BLACK)
+    } else if is_current_active {
+        // 当前正处于：黄色发光
         (Color::srgb(1.0, 0.9, 0.3), Color::WHITE)
     } else if node.unlocked {
         // 已解锁：高对比度彩色 + 白色描边 (核心引导)
@@ -1283,7 +1284,7 @@ fn setup_combat_ui(
     });
 
     commands.spawn((
-        ParticleEmitter::new(25.0, EffectType::ManaFlow.config()),
+        ParticleEmitter::new(25.0, EffectType::ManaFlow.config(), EffectType::ManaFlow),
         Transform::from_xyz(-495.0, -195.0, 950.0), GlobalTransform::default(), EmitterMarker, CombatUiRoot,
     ));
 }
@@ -1902,9 +1903,10 @@ fn handle_hand_card_interaction(
 
 /// 处理卡牌点击事件
 fn handle_card_play(
-    _commands: Commands,
+    mut commands: Commands, // 改为可用的变量名
+    asset_server: Res<AssetServer>, // 引入 asset_server
     card_query: Query<(&Interaction, &HandCard), (Changed<Interaction>, With<HandCard>)>,
-    mut player_query: Query<&mut Player>,
+    mut player_query: Query<(&mut Player, &crate::components::Cultivation)>,
     mut hand_query: Query<&mut Hand>,
     mut draw_pile_query: Query<&mut DrawPile>,
     mut discard_pile_query: Query<&mut DiscardPile>,
@@ -1918,8 +1920,8 @@ fn handle_card_play(
 ) {
     for (interaction, hand_card) in card_query.iter() {
         if matches!(interaction, Interaction::Pressed) {
-            let player_energy = if let Ok(player) = player_query.get_single() {
-                player.energy
+            let player_energy = if let Ok((p, _)) = player_query.get_single() {
+                p.energy
             } else {
                 0
             };
@@ -1953,23 +1955,25 @@ fn handle_card_play(
                     }
 
                     sfx_events.send(PlaySfxEvent::new(SfxType::CardPlay));
-                    if let Ok(mut player) = player_query.get_single_mut() {
+                    if let Ok((mut player, _)) = player_query.get_single_mut() {
                         player.energy -= card.cost;
                     }
 
-                    // 2. 应用效果并触发即时死亡检查
-                    apply_card_effect(
-                        &card.effect,
-                        &mut player_query,
-                        &mut enemy_query,
-                        &mut hand_query,
-                        &mut draw_pile_query,
-                        &mut discard_pile_query,
-                        &mut effect_events,
-                        &mut screen_events,
-                        &mut anim_events,
-                        &enemy_sprite_query,
-                    );
+                        // 3. 结算卡牌效果 (万剑归宗专属分支就在此处)
+                        apply_card_effect(
+                            &card,
+                            &mut commands,
+                            &asset_server,
+                            &mut player_query,
+                            &mut enemy_query,
+                            &mut draw_pile_query,
+                            &mut discard_pile_query,
+                            &mut hand_query,
+                            &mut effect_events,
+                            &mut screen_events,
+                            &mut anim_events,
+                            &enemy_sprite_query,
+                        );
 
                     // 3. 移出手牌
                     if let Ok(mut hand) = hand_query.get_single_mut() {
@@ -1990,52 +1994,39 @@ fn handle_card_play(
 
 /// 应用卡牌效果
 fn apply_card_effect(
-    effect: &CardEffect,
-    player_query: &mut Query<&mut Player>,
+    card: &crate::components::cards::Card,
+    commands: &mut Commands, // 增加 commands
+    asset_server: &Res<AssetServer>, // 增加 asset_server
+    player_query: &mut Query<(&mut Player, &crate::components::Cultivation)>,
     enemy_query: &mut Query<&mut Enemy>,
-    hand_query: &mut Query<&mut Hand>,
     draw_pile_query: &mut Query<&mut DrawPile>,
     discard_pile_query: &mut Query<&mut DiscardPile>,
+    hand_query: &mut Query<&mut Hand>,
     effect_events: &mut EventWriter<SpawnEffectEvent>,
     screen_events: &mut EventWriter<ScreenEffectEvent>,
     anim_events: &mut EventWriter<CharacterAnimationEvent>,
     enemy_sprite_query: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
 ) {
-    match effect {
+    let card_name = card.name.clone();
+    match &card.effect {
         CardEffect::DealDamage { amount } => {
-            // 找到第一个存活的敌人作为目标
             if let Some(mut enemy) = enemy_query.iter_mut().find(|e| e.hp > 0) {
                 let target_id = enemy.id;
                 enemy.take_damage(*amount);
                 let is_dead = enemy.hp <= 0;
                 info!("【卡牌】对 {} 造成 {} 点伤害，剩余 HP: {}", enemy.name, amount, enemy.hp);
                 
-                // 触发 3D 表现
                 for (entity, marker, transform) in enemy_sprite_query.iter() {
                     if marker.id == target_id {
-                        // 在敌人精准位置触发特效
                         effect_events.send(SpawnEffectEvent::new(EffectType::Fire, transform.translation));
-
                         if is_dead {
-                            // 精准触发死亡动画
-                            anim_events.send(CharacterAnimationEvent {
-                                target: entity,
-                                animation: crate::components::sprite::AnimationState::Death,
-                            });
-                            info!("【战斗】敌人 {} 灰飞烟灭", enemy.name);
+                            anim_events.send(CharacterAnimationEvent { target: entity, animation: crate::components::sprite::AnimationState::Death });
                         } else {
-                            // 触发受击动画
-                            anim_events.send(CharacterAnimationEvent {
-                                target: entity,
-                                animation: crate::components::sprite::AnimationState::Hit,
-                            });
+                            anim_events.send(CharacterAnimationEvent { target: entity, animation: crate::components::sprite::AnimationState::Hit });
                         }
                     }
                 }
-                
                 screen_events.send(ScreenEffectEvent::Shake { trauma: 0.35, decay: 5.0 });
-            } else {
-                warn!("【战斗】没有存活的目标可供攻击！");
             }
         }
         CardEffect::DealAoEDamage { amount } => {
@@ -2048,49 +2039,54 @@ fn apply_card_effect(
             
             if hit_count > 0 {
                 info!("【卡牌】施展群体杀伤，重创 {} 名妖物", hit_count);
-                
-                // 触发敌人受击动画 (3D 立牌晃动)
-                for (entity, _, _) in enemy_sprite_query.iter() {
-                    anim_events.send(CharacterAnimationEvent {
-                        target: entity,
-                        animation: crate::components::sprite::AnimationState::Hit,
-                    });
-                }
+                // 万剑归宗全屏特效补丁 (相位二：锁定打击)
+                if card_name.contains("万剑归宗") {
+                    screen_events.send(ScreenEffectEvent::Shake { trauma: 1.0, decay: 0.45 });
+                    let enemy_positions: Vec<Vec3> = enemy_sprite_query.iter().map(|(_, _, t)| t.translation * 100.0).collect();
 
-                screen_events.send(ScreenEffectEvent::Shake { trauma: 0.5, decay: 4.0 });
+                    for &target_pos in enemy_positions.iter() {
+                        // 增加到 60 枚粒子，呈现极长的“龙身”
+                        for i in 0..60 {
+                            let mut p = EffectType::WanJian.config().spawn_particle(Vec3::new(-350.0, -80.0, 0.5), EffectType::WanJian);
+                            p.target = Some(target_pos.truncate());
+                            p.seed = i as f32 / 60.0; 
+                            p.lifetime = 2.8; // 2.8秒足以完成 飞升 -> 聚阵 -> 游龙突刺
+
+                            commands.spawn((
+                                p, ParticleMarker, crate::plugins::CombatUiRoot,
+                                Node { position_type: PositionType::Absolute, width: Val::Px(40.0), height: Val::Px(2.0), ..default() },
+                                ImageNode::new(asset_server.load("textures/cards/attack.png")).with_color(Color::srgba(2.0, 1.6, 0.5, 1.0)),
+                                ZIndex(1000),
+                            ));
+                        }
+                    }
+                } else {
+                    screen_events.send(ScreenEffectEvent::Shake { trauma: 0.5, decay: 4.0 });
+                }
+                
+                for (entity, _, _) in enemy_sprite_query.iter() {
+                    anim_events.send(CharacterAnimationEvent { target: entity, animation: crate::components::sprite::AnimationState::Hit });
+                }
             }
         }
         CardEffect::GainBlock { amount } => {
-            if let Ok(mut player) = player_query.get_single_mut() {
+            if let Ok((mut player, _)) = player_query.get_single_mut() {
                 player.gain_block(*amount);
                 info!("【卡牌】获得 {} 点护甲，当前: {}", amount, player.block);
-                effect_events.send(SpawnEffectEvent {
-                    effect_type: EffectType::Ice,
-                    position: Vec3::new(-350.0, -80.0, 999.0),
-                    burst: true, count: 25,
-                });
+                effect_events.send(SpawnEffectEvent { effect_type: EffectType::Ice, position: Vec3::new(-3.5, 1.0, 0.5), burst: true, count: 25 });
             }
         }
         CardEffect::Heal { amount } => {
-            if let Ok(mut player) = player_query.get_single_mut() {
-                player.hp = (player.hp + amount).min(player.max_hp);
+            if let Ok((mut player, _)) = player_query.get_single_mut() {
+                let max_hp = player.max_hp;
+                player.hp = (player.hp + amount).min(max_hp);
                 info!("【卡牌】回复 {} 点生命，当前道行: {}", amount, player.hp);
-                effect_events.send(SpawnEffectEvent {
-                    effect_type: EffectType::Heal,
-                    position: Vec3::new(-350.0, -80.0, 999.0),
-                    burst: true, count: 20,
-                });
+                effect_events.send(SpawnEffectEvent { effect_type: EffectType::Heal, position: Vec3::new(-3.5, 1.0, 0.5), burst: true, count: 20 });
             }
         }
         CardEffect::DrawCards { amount } => {
             let mut drawn = 0;
             if let Ok(mut draw_pile) = draw_pile_query.get_single_mut() {
-                if draw_pile.count == 0 {
-                    if let Ok(mut discard_pile) = discard_pile_query.get_single_mut() {
-                        let cards = discard_pile.clear();
-                        if !cards.is_empty() { draw_pile.shuffle_from_discard(cards); }
-                    }
-                }
                 for _ in 0..*amount {
                     if let Some(card) = draw_pile.draw_card() {
                         if let Ok(mut hand) = hand_query.get_single_mut() {

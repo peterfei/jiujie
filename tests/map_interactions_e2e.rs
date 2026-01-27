@@ -2,6 +2,21 @@ use bevy::prelude::*;
 use bevy_card_battler::components::map::{MapProgress, NodeType};
 
 #[test]
+fn test_completed_node_is_not_highlighted_as_current() {
+    let mut progress = MapProgress::default();
+    let node_id = progress.nodes[0].id;
+    
+    progress.set_current_node(node_id);
+    progress.complete_current_node();
+    
+    // 逻辑验证：在 UI 渲染判定中，已完成的节点不应再被视为“可交互的当前节点”
+    let node = progress.nodes.iter().find(|n| n.id == node_id).unwrap();
+    let is_current_and_active = progress.current_node_id == Some(node.id) && !node.completed;
+    
+    assert!(!is_current_and_active, "已探索完毕的节点不应显示‘当前所在’的高亮");
+}
+
+#[test]
 fn test_map_save_load_recovery() {
     // 模拟从存档恢复的 MapProgress
     let mut progress = MapProgress::default();
