@@ -169,6 +169,20 @@ impl Card {
             _ => {}
         }
     }
+
+    /// 获取核心效果数值 (伤害/防御等)
+    pub fn effect_amount(&self) -> i32 {
+        match self.effect {
+            CardEffect::DealDamage { amount } => amount,
+            CardEffect::DealAoEDamage { amount } => amount,
+            CardEffect::GainBlock { amount } => amount,
+            CardEffect::Heal { amount } => amount,
+            CardEffect::DrawCards { amount } => amount,
+            CardEffect::AttackAndDraw { damage, .. } => damage,
+            CardEffect::MultiAttack { damage, .. } => damage,
+            _ => 0,
+        }
+    }
 }
 
 // ============================================================================

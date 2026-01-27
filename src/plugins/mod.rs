@@ -1,13 +1,16 @@
 //! 游戏插件定义
-
+mod hand_ui_v2;
 use bevy::prelude::*;
 use crate::states::GameState;
+
 use crate::components::{
-    MapNode, NodeType, MapProgress, Player, Enemy, EnemyIntent, EnemyType, CombatState, TurnPhase, 
-    Hand, DrawPile, DiscardPile, DeckConfig, CardEffect, Card, CardType, CardRarity, 
-    CardPool, PlayerDeck, EnemyAttackEvent, CharacterType, 
+    Player, Enemy, EnemyType, EnemyIntent, Card, CardType, CardEffect, CardRarity, Hand, DrawPile, DiscardPile, 
+    CombatState, TurnPhase, NodeType, Realm, Cultivation, MapNode, MapProgress, PlayerDeck, DeckConfig, CardPool, 
+    CharacterType, EnemyAttackEvent, 
     SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, 
     ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation, 
+
+
     EnemySpriteMarker, VictoryDelay, RelicCollection, Relic, RelicId,
     EnemyActionQueue, RelicObtainedEvent, RelicTriggeredEvent,
     ParticleEmitter, PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker, DialogueLine,
@@ -133,7 +136,7 @@ impl Plugin for MenuPlugin {
         // 敌人队列处理系统
         app.add_systems(Update, process_enemy_turn_queue.run_if(in_state(GameState::Combat)));
         // 更新手牌UI
-        app.add_systems(Update, update_hand_ui.run_if(in_state(GameState::Combat)));
+        app.add_systems(Update, hand_ui_v2::update_hand_ui_v2.run_if(in_state(GameState::Combat)));
         // 处理手牌卡片交互（弹起、放大、悬停效果）
         app.add_systems(Update, handle_hand_card_hover.run_if(in_state(GameState::Combat)));
         // 处理出牌
@@ -1775,164 +1778,6 @@ fn draw_cards_on_turn_start(
     }
 }
 
-/// 更新手牌区UI
-pub fn update_hand_ui(
-    hand_query: Query<&Hand>,
-    hand_changed_query: Query<&Hand, Changed<Hand>>,
-    player_query: Query<&Player>, // 引入玩家状态
-    draw_pile_query: Query<&DrawPile>,
-    discard_pile_query: Query<&DiscardPile>,
-    mut text_queries: ParamSet<(
-        Query<&mut Text, With<DrawPileText>>,
-        Query<&mut Text, With<DiscardPileText>>,
-        Query<&mut Text, With<HandCountText>>,
-    )>,
-    hand_area_query: Query<(Entity, Option<&Children>), With<HandArea>>,
-    hand_cards_query: Query<&HandCard>, // 新增：精确查询现有的卡牌实体
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut cooldown: Local<u32>, // 新增：冷却计数，防止每一帧都刷
-) {
-    if *cooldown > 0 {
-        *cooldown -= 1;
-        return;
-    }
-
-    // 1. 每帧更新文本资源 (数据 -> 文本)
-    if let Ok(draw_pile) = draw_pile_query.get_single() {
-        if let Ok(mut text) = text_queries.p0().get_single_mut() {
-            text.0 = format!("剑冢: {}", draw_pile.count);
-        }
-    }
-
-    if let Ok(discard_pile) = discard_pile_query.get_single() {
-        if let Ok(mut text) = text_queries.p1().get_single_mut() {
-            text.0 = format!("归墟: {}", discard_pile.count);
-        }
-    }
-
-    // 2. 检测是否需要彻底重建手牌 UI
-    let mut needs_rebuild = false;
-    if let Ok(hand) = hand_query.get_single() {
-        if let Some((_, children_opt)) = hand_area_query.iter().next() {
-            // 精确计数：当前世界中有多少张手牌实体
-            // 这是一个开销略大但 100% 准确的办法，解决重影问题
-            let actual_ui_count = hand_cards_query.iter().count();
-
-            if !hand_changed_query.is_empty() || actual_ui_count != hand.cards.len() {
-                needs_rebuild = true;
-            }
-        } else {
-            if !hand.cards.is_empty() { needs_rebuild = true; }
-        }
-    }
-
-    // 3. 执行重建
-    if needs_rebuild {
-        if let Ok(hand) = hand_query.get_single() {
-            if let Some((hand_area_entity, _)) = hand_area_query.iter().next() {
-                info!("【战斗】重建手牌 UI 视图: {} 张", hand.cards.len());
-                
-                // 设置冷却，给 Bevy 时间去应用 despawn/spawn 命令
-                *cooldown = 2; 
-
-                // 彻底清空，确保没有残留或错位
-                commands.entity(hand_area_entity).despawn_descendants();
-                
-                let chinese_font = asset_server.load("fonts/Arial Unicode.ttf");
-
-                // A. 重建计数文本
-                commands.entity(hand_area_entity).with_children(|parent| {
-                    parent.spawn((
-                        Text::new(format!("手牌: {}/{}", hand.cards.len(), hand.max_size)),
-                        TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() },
-                        TextColor(Color::srgba(1.0, 1.0, 1.0, 0.5)),
-                        Node { position_type: PositionType::Absolute, top: Val::Px(10.0), ..default() },
-                        HandCountText
-                    ));
-                });
-
-                // B. 重建所有卡牌
-                let total_cards = hand.cards.len();
-                let center_index = (total_cards as f32 - 1.0) / 2.0;
-
-                for (i, card) in hand.cards.iter().enumerate() {
-                    let offset_from_center = i as f32 - center_index;
-                    let x_pos = offset_from_center * 95.0; 
-                    let arc_height = -3.0 * offset_from_center * offset_from_center;
-                    let base_bottom = 20.0 + arc_height;
-                    let rotation = -offset_from_center * 0.06;
-
-                    // 计算动态描述
-                    let mut display_desc = card.description.clone();
-                    let mut desc_color = Color::srgb(0.7, 0.7, 0.7);
-                    
-                    if let Ok(player) = player_query.get_single() {
-                        match card.effect {
-                            CardEffect::DealDamage { amount } => {
-                                let final_damage = player.calculate_outgoing_damage(amount);
-                                if final_damage < amount {
-                                    display_desc = format!("造成{}点伤害", final_damage);
-                                    desc_color = Color::srgb(0.4, 1.0, 0.4); // 虚弱变绿
-                                }
-                            }
-                            CardEffect::DealAoEDamage { amount } => {
-                                let final_damage = player.calculate_outgoing_damage(amount);
-                                if final_damage < amount {
-                                    display_desc = format!("对所有妖兽造成{}点伤害", final_damage);
-                                    desc_color = Color::srgb(0.4, 1.0, 0.4);
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-
-                    commands.entity(hand_area_entity).with_children(|parent| {
-                        parent
-                            .spawn((
-                                Node {
-                                    position_type: PositionType::Absolute,
-                                    width: Val::Px(105.0),
-                                    height: Val::Px(145.0),
-                                    left: Val::Px(x_pos + 450.0),
-                                    bottom: Val::Px(base_bottom),
-                                    flex_direction: FlexDirection::Column,
-                                    justify_content: JustifyContent::SpaceBetween,
-                                    align_items: AlignItems::Center,
-                                    padding: UiRect::all(Val::Px(6.0)),
-                                    border: UiRect::all(Val::Px(2.0)),
-                                    ..default()
-                                },
-                                Transform::from_rotation(Quat::from_rotation_z(rotation)),
-                                BackgroundColor(card.get_color()),
-                                BorderColor(Color::BLACK),
-                                HandCard { card_id: card.id, base_bottom, base_rotation: rotation, index: i },
-                                Button,
-                            ))
-                            .with_children(|card_ui| {
-                                // 能量、名称、插画、描述 (保持原有渲染逻辑)
-                                card_ui.spawn((Text::new(format!("{}", card.cost)), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE)));
-                                card_ui.spawn((Text::new(card.name.clone()), TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() }, TextColor(Color::WHITE), TextLayout::new_with_justify(JustifyText::Center)));
-                                
-                                let img_path = if card.image_path.is_empty() { "textures/cards/default.png".to_string() } else { card.image_path.clone() };
-                                card_ui.spawn((ImageNode::new(asset_server.load(img_path)), Node { width: Val::Percent(95.0), height: Val::Percent(55.0), border: UiRect::all(Val::Px(1.0)), ..default() }, BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.3))));
-                                
-                                card_ui.spawn((
-                                    Text::new(display_desc),
-                                    TextFont { font: chinese_font.clone(), font_size: 11.0, ..default() },
-                                    TextColor(desc_color),
-                                    TextLayout::new_with_justify(JustifyText::Center),
-                                    Node { max_width: Val::Px(90.0), ..default() },
-                                ));
-                            });
-                    });
-                }
-            }
-        }
-    }
-}
-
-/// 处理手牌卡片悬停与交互反馈 (大作级动态手感)
 fn handle_hand_card_hover(
     mut query: Query<(&Interaction, &HandCard, &mut ZIndex, &mut Transform), (With<HandCard>, Changed<Interaction>)>,
 ) {

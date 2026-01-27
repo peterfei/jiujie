@@ -20,6 +20,7 @@ pub use combat::{
     DamageNumber, DamageEffectEvent, BlockIconMarker, BlockText, StatusIndicator,
     EnemyHpText, EnemyIntentText, EnemyStatusUi, PlayerHpText, PlayerEnergyText, PlayerBlockText,
     TopBar, TopBarHpText, TopBarGoldText, EnergyOrb, EndTurnButton, HandArea, CombatUiRoot,
+    StatusEffectEvent,
 };
 pub use cards::{
     Card, CardType, CardEffect, CardRarity,
