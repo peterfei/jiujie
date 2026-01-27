@@ -7,8 +7,13 @@ use crate::components::particle::{
 };
 use crate::states::GameState;
 
+use std::collections::HashMap;
+
 #[derive(Resource, Clone)]
-pub struct ParticleTexture { pub handle: Handle<Image> }
+pub struct ParticleAssets {
+    pub textures: HashMap<EffectType, Handle<Image>>,
+    pub default_texture: Handle<Image>,
+}
 
 pub struct ParticlePlugin;
 
@@ -30,22 +35,34 @@ impl Plugin for ParticlePlugin {
     }
 }
 
-fn setup_particle_texture(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
-    let image = Image::default();
-    commands.insert_resource(ParticleTexture { handle: images.add(image) });
+fn setup_particle_texture(mut commands: Commands, asset_server: Res<AssetServer>, mut images: ResMut<Assets<Image>>) {
+    let mut textures = HashMap::new();
+    
+    // 加载专属贴图
+    textures.insert(EffectType::WanJian, asset_server.load("textures/cards/sword.png"));
+    textures.insert(EffectType::WebShot, asset_server.load("textures/web_effect.png"));
+    textures.insert(EffectType::SwordEnergy, asset_server.load("textures/cards/sword.png"));
+    
+    // 默认贴图（1x1 白色）
+    let default_texture = images.add(Image::default());
+    
+    commands.insert_resource(ParticleAssets { 
+        textures,
+        default_texture,
+    });
 }
 
-fn handle_effect_events(mut commands: Commands, texture: Res<ParticleTexture>, mut events: EventReader<SpawnEffectEvent>) {
+fn handle_effect_events(mut commands: Commands, assets: Res<ParticleAssets>, mut events: EventReader<SpawnEffectEvent>) {
     for event in events.read() {
         let config = event.effect_type.config();
         if event.burst {
             for _ in 0..event.count {
                 let particle = config.spawn_particle(event.position, event.effect_type);
-                spawn_particle_entity(&mut commands, &texture, particle);
+                spawn_particle_entity(&mut commands, &assets, particle);
             }
         } else {
             commands.spawn((
-                ParticleEmitter::new(30.0, config, event.effect_type),
+                ParticleEmitter::new(30.0, config).with_type(event.effect_type),
                 Transform::from_translation(event.position),
                 GlobalTransform::default(),
                 EmitterMarker,
@@ -54,23 +71,31 @@ fn handle_effect_events(mut commands: Commands, texture: Res<ParticleTexture>, m
     }
 }
 
-fn spawn_particle_entity(commands: &mut Commands, texture: &ParticleTexture, particle: Particle) {
+fn spawn_particle_entity(commands: &mut Commands, assets: &ParticleAssets, particle: Particle) {
     let size = particle.start_size;
     let ui_x = 640.0 + particle.position.x;
     let ui_y = 360.0 - particle.position.y;
 
+    let handle = assets.textures.get(&particle.effect_type).unwrap_or(&assets.default_texture).clone();
+    
+    let (w, h) = if particle.effect_type == EffectType::WanJian {
+        (size, size * 4.0)
+    } else {
+        (size, size)
+    };
+
     commands.spawn((
         Node {
             position_type: PositionType::Absolute,
-            left: Val::Px(ui_x - size/2.0), top: Val::Px(ui_y - size/2.0),
-            width: Val::Px(size), height: Val::Px(size), ..default()
+            left: Val::Px(ui_x - w/2.0), top: Val::Px(ui_y - h/2.0),
+            width: Val::Px(w), height: Val::Px(h), ..default()
         },
-        ImageNode::new(texture.handle.clone()).with_color(particle.start_color),
-        ZIndex(1000), particle, ParticleMarker, crate::plugins::CombatUiRoot,
+        ImageNode::new(handle).with_color(particle.start_color),
+        ZIndex(5), particle, ParticleMarker,
     ));
 }
 
-fn update_emitters(mut commands: Commands, texture: Res<ParticleTexture>, mut emitters: Query<(Entity, &mut ParticleEmitter, &GlobalTransform)>, time: Res<Time>) {
+fn update_emitters(mut commands: Commands, assets: Res<ParticleAssets>, mut emitters: Query<(Entity, &mut ParticleEmitter, &GlobalTransform)>, time: Res<Time>) {
     for (entity, mut emitter, transform) in emitters.iter_mut() {
         emitter.elapsed += time.delta_secs();
         if emitter.duration > 0.0 && emitter.elapsed >= emitter.duration { commands.entity(entity).despawn_recursive(); continue; }
@@ -83,13 +108,21 @@ fn update_emitters(mut commands: Commands, texture: Res<ParticleTexture>, mut em
                 break;
             }
             let particle = emitter.config.spawn_particle(transform.translation(), emitter.effect_type);
-            spawn_particle_entity(&mut commands, &texture, particle);
+            spawn_particle_entity(&mut commands, &assets, particle);
             emitter.emitted_count += 1;
         }
     }
 }
 
-fn update_particles(mut commands: Commands, mut query: Query<(Entity, &mut Particle, &mut Node, &mut ImageNode, &mut Visibility)>, time: Res<Time>) {
+use crate::components::screen_effect::ScreenEffectEvent;
+
+fn update_particles(
+    mut commands: Commands, 
+    mut query: Query<(Entity, &mut Particle, &mut Node, &mut ImageNode, &mut Visibility)>, 
+    time: Res<Time>, 
+    mut events: EventWriter<SpawnEffectEvent>,
+    mut screen_events: EventWriter<ScreenEffectEvent>,
+) {
     let delta = time.delta_secs();
     for (entity, mut p, mut node, mut image, mut visibility) in query.iter_mut() {
         p.elapsed += delta;
@@ -135,6 +168,12 @@ fn update_particles(mut commands: Commands, mut query: Query<(Entity, &mut Parti
                 // 相位三：金龙扫尾 (55% - 100%)
                 if let Some(target) = p.target {
                     let strike_t = (local_prog - 0.55) / 0.45;
+
+                    // --- 大作级：在冲击开始瞬间触发视觉补偿 ---
+                    if strike_t > 0.0 && strike_t < 0.05 && p.seed < 0.1 {
+                        screen_events.send(ScreenEffectEvent::shake(0.4));
+                        if p.seed < 0.03 { screen_events.send(ScreenEffectEvent::white_flash(0.1)); }
+                    }
                     
                     // 游龙轨迹：基础直线 + 正弦波侧向位移
                     let base_dir = (target - hub_pos).normalize();
@@ -147,8 +186,18 @@ fn update_particles(mut commands: Commands, mut query: Query<(Entity, &mut Parti
                     let new_pos = base_pos + side_dir * wave;
                     
                     let move_vec = new_pos - p.position;
-                    p.rotation = (-move_vec.y).atan2(move_vec.x);
+                    p.rotation = (-move_vec.y).atan2(base_dir.x);
                     p.position = new_pos;
+
+                    // --- 大作级打磨：相位三添加剑气拖尾 ---
+                    if strike_t > 0.0 && strike_t < 1.0 {
+                        events.send(SpawnEffectEvent {
+                            effect_type: EffectType::SwordEnergy,
+                            position: p.position.extend(0.6),
+                            burst: true,
+                            count: 1,
+                        });
+                    }
                 }
             }
         } else {
@@ -168,12 +217,26 @@ fn update_particles(mut commands: Commands, mut query: Query<(Entity, &mut Parti
         }
 
         let size = p.current_size();
+        let (w, h) = if p.effect_type == EffectType::WanJian {
+            (size, size * 4.0)
+        } else {
+            (size, size)
+        };
         let ui_x = 640.0 + p.position.x;
         let ui_y = 360.0 - p.position.y;
-        node.left = Val::Px(ui_x - size/2.0); node.top = Val::Px(ui_y - size/2.0);
-        node.width = Val::Px(size); node.height = Val::Px(size);
-        if let Some(mut ec) = commands.get_entity(entity) { ec.insert(Transform::from_rotation(Quat::from_rotation_z(p.rotation))); }
+        node.left = Val::Px(ui_x - w/2.0); node.top = Val::Px(ui_y - h/2.0);
+        node.width = Val::Px(w); node.height = Val::Px(h);
         image.color = p.current_color();
+        
+        let final_rotation = if p.effect_type == EffectType::WanJian || p.effect_type == EffectType::SwordEnergy {
+            p.rotation - std::f32::consts::PI / 2.0 // 修正纵向贴图
+        } else {
+            p.rotation
+        };
+
+        if let Some(mut ec) = commands.get_entity(entity) { 
+            ec.insert(Transform::from_rotation(Quat::from_rotation_z(final_rotation))); 
+        }
         if p.is_dead() { commands.entity(entity).despawn_recursive(); }
     }
 }

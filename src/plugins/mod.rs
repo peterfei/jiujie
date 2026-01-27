@@ -332,7 +332,7 @@ fn setup_combat_environment(
 
     // 4. 环境灵气粒子
     commands.spawn((
-        ParticleEmitter::new(5.0, EffectType::AmbientSpirit.config(), EffectType::AmbientSpirit),
+        ParticleEmitter::new(5.0, EffectType::AmbientSpirit.config()).with_type(EffectType::AmbientSpirit),
         Transform::from_xyz(0.0, 0.0, 0.0),
         CombatUiRoot,
     ));
@@ -1076,17 +1076,14 @@ struct EndTurnButton;
 #[derive(Component)]
 struct ReturnToMapButton;
 
-/// 手牌卡片标记
 #[derive(Component)]
-struct HandCard {
-    card_id: u32,
-    /// 原始位置（用于悬停恢复）
-    base_bottom: f32,
-    /// 原始旋转弧度
-    base_rotation: f32,
-    /// 原始索引
-    index: usize,
+pub struct HandCard {
+    pub card_id: u32,
+    pub base_bottom: f32,
+    pub base_rotation: f32,
+    pub index: usize,
 }
+
 
 #[derive(Component)]
 pub struct HandArea;
@@ -1272,7 +1269,19 @@ fn setup_combat_ui(
             Button, Node { position_type: PositionType::Absolute, right: Val::Px(100.0), bottom: Val::Px(140.0), width: Val::Px(160.0), height: Val::Px(50.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: UiRect::all(Val::Px(2.0)), ..default() },
             BackgroundColor(Color::srgb(0.2, 0.4, 0.2)), BorderColor(Color::BLACK), EndTurnButton
         )).with_children(|btn| { btn.spawn((Text::new("结束回合"), TextFont { font: chinese_font.clone(), font_size: 24.0, ..default() }, TextColor(Color::WHITE))); });
-        root.spawn((Node { position_type: PositionType::Absolute, left: Val::Percent(0.0), bottom: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Px(250.0), justify_content: JustifyContent::Center, ..default() }, HandArea)).with_children(|parent| {
+        root.spawn((
+            Node { 
+                position_type: PositionType::Absolute, 
+                left: Val::Percent(0.0), 
+                bottom: Val::Px(0.0), 
+                width: Val::Percent(100.0), 
+                height: Val::Px(250.0), 
+                justify_content: JustifyContent::Center, 
+                ..default() 
+            }, 
+            HandArea,
+            ZIndex(50), // 确保在粒子(5)之上
+        )).with_children(|parent| {
             parent.spawn((Text::new("手牌: 0/10"), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::srgba(1.0, 1.0, 1.0, 0.5)), Node { position_type: PositionType::Absolute, top: Val::Px(10.0), ..default() }, HandCountText));
         });
         root.spawn(Node { position_type: PositionType::Absolute, left: Val::Px(30.0), bottom: Val::Px(30.0), ..default() }).with_children(|p| {
@@ -1284,8 +1293,9 @@ fn setup_combat_ui(
     });
 
     commands.spawn((
-        ParticleEmitter::new(25.0, EffectType::ManaFlow.config(), EffectType::ManaFlow),
-        Transform::from_xyz(-495.0, -195.0, 950.0), GlobalTransform::default(), EmitterMarker, CombatUiRoot,
+                        ParticleEmitter::new(25.0, EffectType::ManaFlow.config()).with_type(EffectType::ManaFlow),
+        
+        Transform::from_xyz(-495.0, -195.0, 950.0), GlobalTransform::default(), EmitterMarker,
     ));
 }
 
@@ -2052,12 +2062,20 @@ fn apply_card_effect(
                             p.seed = i as f32 / 60.0; 
                             p.lifetime = 2.8; // 2.8秒足以完成 飞升 -> 聚阵 -> 游龙突刺
 
-                            commands.spawn((
-                                p, ParticleMarker, crate::plugins::CombatUiRoot,
-                                Node { position_type: PositionType::Absolute, width: Val::Px(40.0), height: Val::Px(2.0), ..default() },
-                                ImageNode::new(asset_server.load("textures/cards/attack.png")).with_color(Color::srgba(2.0, 1.6, 0.5, 1.0)),
-                                ZIndex(1000),
-                            ));
+                commands.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(640.0 + p.position.x - 10.0),
+                        top: Val::Px(360.0 - p.position.y - 10.0),
+                        width: Val::Px(20.0),
+                        height: Val::Px(20.0),
+                        ..default()
+                    },
+                    ImageNode::new(Handle::default()),
+                    ZIndex(1),
+                    p,
+                    ParticleMarker,
+                ));
                         }
                     }
                 } else {
@@ -2147,7 +2165,7 @@ fn check_combat_end(
 }
 
 /// 更新敌人死亡动画
-fn update_enemy_death_animation(
+pub fn update_enemy_death_animation(
     mut commands: Commands,
     mut query: Query<(Entity, &mut EnemyDeathAnimation, &mut Sprite)>,
     time: Res<Time>,
@@ -2155,6 +2173,8 @@ fn update_enemy_death_animation(
     for (entity, mut anim, mut sprite) in query.iter_mut() {
         anim.elapsed += time.delta_secs();
         anim.progress = (anim.elapsed / anim.duration).min(1.0);
+        
+        info!("死亡动画更新中: 实体={:?}, 进度={:.2}", entity, anim.progress);
 
         // 淡出效果：减少透明度
         let alpha = 1.0 - anim.progress;
@@ -2180,6 +2200,7 @@ fn update_victory_delay(
     mut commands: Commands,
     ui_query: Query<Entity, With<CombatUiRoot>>,
     _sprite_query: Query<Entity, With<SpriteMarker>>,
+    particle_query: Query<Entity, With<ParticleMarker>>,
 ) {
     if !victory_delay.active {
         return;
@@ -2204,6 +2225,13 @@ fn update_victory_delay(
 
         for entity in ui_query.iter() {
             commands.entity(entity).despawn_recursive();
+        }
+        
+        // 额外清理所有剩余粒子
+        for entity in particle_query.iter() {
+            if let Some(mut e) = commands.get_entity(entity) {
+                e.despawn_recursive();
+            }
         }
 
         // 最后切换状态

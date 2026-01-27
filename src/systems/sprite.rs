@@ -160,6 +160,7 @@ fn update_physical_impacts(
 
 /// 监听受击，触发物理反馈
 fn trigger_hit_feedback(
+    mut commands: Commands,
     mut events: EventReader<CharacterAnimationEvent>,
     mut query: Query<(&mut PhysicalImpact, Option<&PlayerSpriteMarker>)>,
 ) {
@@ -180,6 +181,9 @@ fn trigger_hit_feedback(
                     impact.action_type = ActionType::None;
                     impact.tilt_velocity = 45.0 * direction; 
                     impact.offset_velocity = Vec3::new(-5.0 * direction, 2.0, 0.0);
+                    
+                    // 关键修复：挂载死亡动画组件，触发 update_enemy_death_animation 系统进行销毁
+                    commands.entity(event.target).insert(crate::components::particle::EnemyDeathAnimation::new(1.2));
                 }
                 AnimationState::Attack => {
                     impact.action_type = ActionType::None;

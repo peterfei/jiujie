@@ -30,14 +30,19 @@ pub struct Particle {
 }
 
 impl Particle {
-    pub fn new(lifetime: f32, effect_type: EffectType) -> Self {
+    pub fn new(lifetime: f32) -> Self {
         Self {
             position: Vec2::ZERO, velocity: Vec2::ZERO, lifetime, elapsed: 0.0,
             start_size: 10.0, end_size: 0.0, start_color: Color::WHITE, end_color: Color::srgba(0.0, 0.0, 0.0, 0.0),
             rotation_speed: 0.0, rotation: 0.0, gravity: Vec2::ZERO,
             target: None, start_pos: Vec2::ZERO, seed: rand::random::<f32>(),
-            effect_type,
+            effect_type: EffectType::Hit,
         }
+    }
+
+    pub fn with_type(mut self, effect_type: EffectType) -> Self {
+        self.effect_type = effect_type;
+        self
     }
 
     pub fn current_size(&self) -> f32 {
@@ -79,11 +84,28 @@ pub struct ParticleEmitter {
 }
 
 impl ParticleEmitter {
-    pub fn new(rate: f32, config: EmitterConfig, effect_type: EffectType) -> Self {
+    pub fn new(rate: f32, config: EmitterConfig) -> Self {
         Self {
             rate, timer: 0.0, max_particles: 100, emitted_count: 0,
-            looping: true, duration: 0.0, elapsed: 0.0, config, effect_type,
+            looping: true, duration: 0.0, elapsed: 0.0, config, effect_type: EffectType::Hit,
         }
+    }
+
+    pub fn with_type(mut self, effect_type: EffectType) -> Self {
+        self.effect_type = effect_type;
+        self
+    }
+
+    pub fn once(mut self, count: usize) -> Self {
+        self.max_particles = count;
+        self.looping = false;
+        self.duration = 0.1; // 爆发模式通常很短
+        self
+    }
+
+    pub fn with_duration(mut self, duration: f32) -> Self {
+        self.duration = duration;
+        self
     }
 }
 
@@ -212,8 +234,8 @@ impl EmitterConfig {
 
     pub fn wan_jian() -> Self {
         Self {
-            lifetime: (1.8, 2.2), size: (2.0, 15.0), start_color: Color::srgba(1.5, 1.2, 0.2, 1.0),
-            end_color: Color::srgba(1.0, 0.3, 0.0, 0.0), speed: (0.0, 0.0), // 初始静止盘旋
+            lifetime: (1.5, 2.5), size: (12.0, 22.0), start_color: Color::srgba(1.8, 1.4, 0.3, 1.0),
+            end_color: Color::srgba(1.0, 0.2, 0.0, 0.0), speed: (0.0, 0.0), 
             angle: (0.0, 0.0), gravity: Vec2::ZERO, rotation_speed: (0.0, 0.0), shape: ParticleShape::Line,
         }
     }
@@ -227,7 +249,7 @@ impl EmitterConfig {
         let angle = self.angle.0 + rng.gen::<f32>() * (self.angle.1 - self.angle.0);
         let rotation_speed = self.rotation_speed.0 + rng.gen::<f32>() * (self.rotation_speed.1 - self.rotation_speed.0);
         let velocity = Vec2::new(angle.cos(), angle.sin()) * speed;
-        let mut p = Particle::new(lifetime, effect_type);
+        let mut p = Particle::new(lifetime).with_type(effect_type);
         p.position = position.truncate(); p.start_pos = position.truncate(); p.velocity = velocity;
         p.start_size = size; p.end_size = size * 0.3; p.start_color = self.start_color; p.end_color = self.end_color;
         p.rotation_speed = rotation_speed; p.gravity = self.gravity;
@@ -238,7 +260,7 @@ impl EmitterConfig {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ParticleShape { Circle, Square, Line, Triangle, Star }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EffectType { Fire, Ice, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit, SwordEnergy, DemonAura, WebShot, WanJian }
 
 impl EffectType {
