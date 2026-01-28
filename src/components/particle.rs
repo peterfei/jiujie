@@ -216,8 +216,8 @@ impl EmitterConfig {
 
     pub fn sword_energy() -> Self {
         Self {
-            lifetime: (0.3, 0.5), size: (3.0, 10.0), start_color: Color::srgba(1.0, 0.3, 0.1, 0.9),
-            end_color: Color::srgba(0.8, 0.1, 0.0, 0.0), speed: (100.0, 250.0),
+            lifetime: (0.4, 0.6), size: (10.0, 25.0), start_color: Color::srgba(1.0, 0.3, 0.1, 0.9),
+            end_color: Color::srgba(0.8, 0.1, 0.0, 0.0), speed: (200.0, 450.0),
             angle: (0.0, std::f32::consts::PI * 2.0), gravity: Vec2::ZERO,
             rotation_speed: (20.0, 40.0), shape: ParticleShape::Line,
         }
@@ -262,9 +262,9 @@ impl EmitterConfig {
     /// 斩击剑气 - 极速的线性爆发
     pub fn slash() -> Self {
         Self {
-            lifetime: (0.2, 0.4), size: (5.0, 20.0), start_color: Color::srgba(1.0, 0.2, 0.2, 1.0),
-            end_color: Color::srgba(0.8, 0.0, 0.0, 0.0), speed: (250.0, 450.0),
-            angle: (-std::f32::consts::PI / 6.0, std::f32::consts::PI / 6.0), // 集中向前
+            lifetime: (0.6, 0.8), size: (15.0, 35.0), start_color: Color::srgba(1.0, 0.2, 0.2, 1.0),
+            end_color: Color::srgba(0.8, 0.0, 0.0, 0.0), speed: (300.0, 500.0),
+            angle: (-std::f32::consts::PI / 4.0, std::f32::consts::PI / 4.0), // 稍宽一点
             gravity: Vec2::ZERO, rotation_speed: (0.0, 0.0), shape: ParticleShape::Line,
         }
     }

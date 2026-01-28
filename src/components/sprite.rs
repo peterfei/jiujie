@@ -226,6 +226,8 @@ pub struct PhysicalImpact {
     pub special_rotation_velocity: f32,
     /// 动作计时 (用于多阶段招式)
     pub action_timer: f32,
+    /// 动作阶段计数 (防止多段攻击重复触发)
+    pub action_stage: u32,
     /// 当前执行的动作类型
     pub action_type: ActionType,
     /// 动作方向记录 (-1.0 代表向左，1.0 代表向右)
@@ -247,6 +249,7 @@ impl Default for PhysicalImpact {
             special_rotation: 0.0,
             special_rotation_velocity: 0.0,
             action_timer: 0.0,
+            action_stage: 0,
             action_type: ActionType::None,
             action_direction: 1.0,
             target_offset_dist: 0.0,

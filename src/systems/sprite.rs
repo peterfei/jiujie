@@ -53,9 +53,10 @@ fn update_relic_floating(
 }
 
 /// 更新物理冲击效果（让立牌产生倾斜和弹回感）
-fn update_physical_impacts(
+pub fn update_physical_impacts(
     mut query: Query<(&mut Transform, &mut PhysicalImpact, &BreathAnimation)>,
     time: Res<Time>,
+    mut effect_events: EventWriter<crate::components::particle::SpawnEffectEvent>,
 ) {
     let dt = time.delta_secs();
     for (mut transform, mut impact, breath) in query.iter_mut() {
@@ -90,13 +91,27 @@ fn update_physical_impacts(
 
             match impact.action_type {
                 ActionType::WolfBite => {
-                    // 贪狼：空中回旋扑杀 (720度) + 2次撕咬
+                    // 贪狼：空中回旋扑杀 (720度) + 3次撕咬
                     let action_phase = impact.action_timer * 12.5;
                     action_tilt_offset = action_phase.sin() * 0.8;
                     
                     // 扑杀弧线
                     action_pos_offset.y = (progress * std::f32::consts::PI).sin() * 1.5;
                     
+                    // [大作级补丁] 同步三连击粒子：在进度 0.3, 0.6, 0.8 时触发
+                    let stage_thresholds = [0.3, 0.6, 0.8];
+                    let current_stage = impact.action_stage as usize;
+                    if current_stage < stage_thresholds.len() && progress >= stage_thresholds[current_stage] {
+                        use crate::components::particle::EffectType;
+                        // 触发一次斩击
+                        let y_offset = (current_stage as f32 - 1.0) * 0.3;
+                        effect_events.send(crate::components::particle::SpawnEffectEvent::new(
+                            EffectType::Slash, 
+                            Vec3::new(-3.5, y_offset, 0.5)
+                        ).burst(12));
+                        impact.action_stage += 1;
+                    }
+
                     // 距离感知减速
                     let target_dist = impact.target_offset_dist;
                     let current_dist = impact.current_offset.x.abs();
@@ -221,6 +236,7 @@ fn trigger_hit_feedback(
                     impact.tilt_velocity = -25.0 * direction;
                     impact.offset_velocity = Vec3::new(16.0 * direction, 0.0, 0.0);
                     impact.action_timer = 1.0; 
+                    impact.action_stage = 0; // 重置阶段计数
                 }
                 AnimationState::SpiderAttack => {
                     let target_x = if direction < 0.0 { -3.5 } else { 3.5 };

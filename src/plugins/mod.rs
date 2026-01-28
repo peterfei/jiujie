@@ -1682,7 +1682,11 @@ fn process_enemy_turn_queue(
                         let anim = match intent {
                             EnemyIntent::Attack { .. } => {
                                 match enemy.enemy_type {
-                                    EnemyType::DemonicWolf => crate::components::sprite::AnimationState::WolfAttack,
+                                    EnemyType::DemonicWolf => {
+                                        // [大作级] 魔狼连环扑杀：预警红圈 + 三连击
+                                        effect_events.send(SpawnEffectEvent::new(EffectType::SwordEnergy, transform.translation).burst(15));
+                                        crate::components::sprite::AnimationState::WolfAttack
+                                    },
                                     EnemyType::PoisonSpider => {
                                         effect_events.send(SpawnEffectEvent::new(EffectType::WebShot, transform.translation).burst(30));
                                         
@@ -1727,7 +1731,11 @@ fn process_enemy_turn_queue(
                                 EnemyType::PoisonSpider => EffectType::WebShot,
                                 _ => EffectType::Slash,
                             };
-                            effect_events.send(SpawnEffectEvent::new(attack_effect, Vec3::new(-3.5, 0.0, 0.5)));
+                            
+                            // 魔狼特效已移至 src/systems/sprite.rs 动画同步触发
+                            if enemy.enemy_type != EnemyType::DemonicWolf {
+                                effect_events.send(SpawnEffectEvent::new(attack_effect, Vec3::new(-3.5, 0.0, 0.5)));
+                            }
                             
                             screen_events.send(ScreenEffectEvent::Shake { trauma: 0.6, decay: 6.0 });
 
