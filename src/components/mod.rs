@@ -42,7 +42,7 @@ pub use sprite::{
 pub use particle::{
     Particle, ParticleEmitter, EmitterConfig, EffectType,
     SpawnEffectEvent, ParticleMarker, EmitterMarker,
-    EnemyDeathAnimation, VictoryEvent
+    EnemyDeathAnimation, VictoryEvent, LightningBolt
 };
 pub use screen_effect::{
     CameraShake, ScreenFlash, ScreenEffectEvent, ScreenEffectMarker, ScreenWarning
