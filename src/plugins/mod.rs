@@ -22,7 +22,7 @@ use crate::components::{
 
 
     EnemySpriteMarker, VictoryDelay, RelicCollection, Relic, RelicId,
-    EnemyActionQueue, RelicObtainedEvent, RelicTriggeredEvent,
+    EnemyActionQueue, RelicObtainedEvent, RelicTriggeredEvent, HeavenlyStrikeCinematic,
     ParticleEmitter, PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker, DialogueLine,
     Particle, DamageNumber, DamageEffectEvent, BlockIconMarker, BlockText, StatusIndicator,
     EnemyHpText, EnemyIntentText, EnemyStatusUi, PlayerHpText, PlayerEnergyText, PlayerBlockText,
@@ -99,6 +99,7 @@ impl Plugin for MenuPlugin {
         app.init_resource::<CurrentRewardRelic>();
         app.init_resource::<MousePosition>();
         app.init_resource::<EnemyActionQueue>();
+        app.init_resource::<crate::components::combat::HeavenlyStrikeCinematic>();
 
 
         // 在进入MainMenu状态时设置主菜单
@@ -153,6 +154,8 @@ impl Plugin for MenuPlugin {
         app.add_systems(Update, check_combat_end.run_if(in_state(GameState::Combat)));
         // 处理胜利延迟计时器
         app.add_systems(Update, update_victory_delay.run_if(in_state(GameState::Combat)));
+        // 处理天象演出系统
+        app.add_systems(Update, process_heavenly_strike_cinematic.run_if(in_state(GameState::Combat)));
         // 更新敌人死亡动画
         app.add_systems(Update, update_enemy_death_animation.run_if(in_state(GameState::Combat)));
 
@@ -1689,6 +1692,118 @@ fn setup_combat_ui(
     });
 }
 
+/// 天象打击演出处理系统
+pub fn process_heavenly_strike_cinematic(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut cinematic: ResMut<HeavenlyStrikeCinematic>,
+    mut player_query: Query<(&mut Player, &crate::components::Cultivation)>,
+    mut enemy_query: Query<&mut Enemy>,
+    mut effect_events: EventWriter<SpawnEffectEvent>,
+    mut screen_events: EventWriter<ScreenEffectEvent>,
+    mut sfx_events: EventWriter<PlaySfxEvent>,
+    mut anim_events: EventWriter<CharacterAnimationEvent>, // 新增
+    enemy_sprite_query: Query<(Entity, &EnemySpriteMarker, &Transform)>,
+    env: Option<Res<Environment>>,
+) {
+    let enemy_sprite_query_with_markers = &enemy_sprite_query;
+    if !cinematic.active { return; }
+
+    cinematic.timer.tick(time.delta());
+    cinematic.effect_timer.tick(time.delta());
+
+    let elapsed = cinematic.timer.elapsed_secs();
+    let env_ref = env.as_ref().map(|r| r.as_ref());
+
+    // --- 阶段 A: 持续预兆 (0.0s - 2.2s) ---
+    if elapsed < 2.2 {
+        if cinematic.effect_timer.just_finished() {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            let enemy_data: Vec<_> = enemy_sprite_query.iter().collect();
+            if !enemy_data.is_empty() {
+                let target_idx = rng.gen_range(0..enemy_data.len());
+                let (_, _, transform) = enemy_data[target_idx];
+                let pos = transform.translation;
+                
+                effect_events.send(SpawnEffectEvent::new(EffectType::Lightning, pos).burst(15));
+                sfx_events.send(PlaySfxEvent::with_volume(SfxType::LightningStrike, 0.4));
+                screen_events.send(ScreenEffectEvent::Shake { trauma: 0.1, decay: 4.0 });
+            }
+        }
+    }
+
+    // --- 阶段 B: 三连天罚闪击 (2.2s / 2.5s / 2.8s) ---
+    let flash_times = [2.2, 2.5, 2.8];
+    for (i, &strike_time) in flash_times.iter().enumerate() {
+        if elapsed >= strike_time && cinematic.flash_count == i as u32 {
+            info!("【天象演出】闪击 {}！", i + 1);
+            
+            screen_events.send(ScreenEffectEvent::Flash { 
+                color: Color::srgba(0.9, 0.9, 1.0, 0.6 + (i as f32 * 0.1)), 
+                duration: 0.2 
+            });
+            screen_events.send(ScreenEffectEvent::Shake { 
+                trauma: 0.4 + (i as f32 * 0.2), 
+                decay: 3.0 
+            });
+            sfx_events.send(PlaySfxEvent::with_volume(SfxType::LightningStrike, 1.0));
+
+            // 只有最后一次闪击 (2.8s) 执行最终伤害与环境切换
+            if i == 2 && !cinematic.damage_applied {
+                if cinematic.environment_name == "雷暴" {
+                    commands.insert_resource(Environment::thunder_storm());
+                }
+
+                let final_damage = if let Ok((player, _)) = player_query.get_single() {
+                    player.calculate_outgoing_damage_with_env(cinematic.pending_damage, env_ref)
+                } else {
+                    cinematic.pending_damage
+                };
+
+                for mut enemy in enemy_query.iter_mut() {
+                    if enemy.hp > 0 {
+                        enemy.take_damage_with_env(final_damage, env_ref);
+                        let is_dead = enemy.hp <= 0;
+                        
+                        // 查找对应的 3D 渲染实体位置并触发动画
+                        for (render_entity, marker, transform) in enemy_sprite_query_with_markers.iter() {
+                            if marker.id == enemy.id {
+                                // 触发受击特效
+                                effect_events.send(SpawnEffectEvent::new(EffectType::Hit, transform.translation));
+                                
+                                // [关键修复] 触发死亡或受击动画
+                                if is_dead {
+                                    anim_events.send(CharacterAnimationEvent { 
+                                        target: render_entity, 
+                                        animation: crate::components::sprite::AnimationState::Death 
+                                    });
+                                } else {
+                                    anim_events.send(CharacterAnimationEvent { 
+                                        target: render_entity, 
+                                        animation: crate::components::sprite::AnimationState::Hit 
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+                info!("【天象演出】最终天罚降临，造成 {} 点伤害", final_damage);
+                cinematic.damage_applied = true;
+            }
+
+            cinematic.flash_count += 1;
+        }
+    }
+
+    // --- 演出结束 (4.0s) ---
+    if cinematic.timer.finished() {
+        cinematic.active = false;
+        cinematic.flash_count = 0;
+        info!("【天象演出】圆满结束");
+    }
+}
+
 /// 处理手牌中的诅咒效果
 fn handle_curse_effects(
     mut player_query: Query<&mut Player>,
@@ -2249,13 +2364,16 @@ fn handle_card_play(
     mut draw_pile_query: Query<&mut DrawPile>,
     mut discard_pile_query: Query<&mut DiscardPile>,
     mut enemy_query: Query<&mut Enemy>,
-    mut effect_events: EventWriter<SpawnEffectEvent>,
-    mut screen_events: EventWriter<ScreenEffectEvent>,
-    mut sfx_events: EventWriter<PlaySfxEvent>,
-    mut anim_events: EventWriter<CharacterAnimationEvent>,
-    mut damage_events: EventWriter<DamageEffectEvent>,
-    mut status_events: EventWriter<StatusEffectEvent>,
-    env: Option<Res<Environment>>, // 新增环境资源
+    mut events: (
+        EventWriter<SpawnEffectEvent>,
+        EventWriter<ScreenEffectEvent>,
+        EventWriter<PlaySfxEvent>,
+        EventWriter<CharacterAnimationEvent>,
+        EventWriter<DamageEffectEvent>,
+        EventWriter<StatusEffectEvent>,
+    ),
+    env: Option<Res<Environment>>,
+    mut heavenly_cinematic: ResMut<HeavenlyStrikeCinematic>, 
     queries: (
         Query<Entity, With<PlayerSpriteMarker>>,
         Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
@@ -2263,6 +2381,7 @@ fn handle_card_play(
         Query<(&Camera, &GlobalTransform), With<Camera3d>>,
     ),
 ) {
+    let (mut effect_events, mut screen_events, mut sfx_events, mut anim_events, mut damage_events, mut status_events) = events;
     let (player_sprite_query, enemy_sprite_query, enemy_impact_query, camera_query) = queries;
     for (interaction, hand_card) in card_query.iter() {
         if matches!(interaction, Interaction::Pressed) {
@@ -2337,7 +2456,8 @@ fn handle_card_play(
                             &enemy_sprite_query,
                             &enemy_impact_query,
                             &camera_query,
-                            env.as_ref().map(|r| r.as_ref()), // 传递环境
+                            env.as_ref().map(|r| r.as_ref()),
+                            &mut heavenly_cinematic, // 传递演出资源
                         );
 
                     // 3. 移出手牌
@@ -2375,7 +2495,8 @@ fn apply_card_effect(
     enemy_sprite_query: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
     enemy_impact_query: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &crate::components::sprite::PhysicalImpact)>,
     _camera_query: &Query<(&Camera, &GlobalTransform), With<Camera3d>>,
-    environment: Option<&Environment>, // 新增环境
+    environment: Option<&Environment>,
+    heavenly_cinematic: &mut HeavenlyStrikeCinematic, // 新增
 ) {
     let card_name = card.name.clone();
     match &card.effect {
@@ -2447,11 +2568,23 @@ fn apply_card_effect(
             for mut enemy in enemy_query.iter_mut() {
                 if enemy.hp <= 0 { continue; }
                 enemy.take_damage_with_env(final_damage, environment);
+                let is_dead = enemy.hp <= 0;
                 hit_count += 1;
+
+                // 针对每个被击中的敌人，触发其渲染实体的动画
+                for (render_entity, marker, _) in enemy_sprite_query.iter() {
+                    if marker.id == enemy.id {
+                        if is_dead {
+                            anim_events.send(CharacterAnimationEvent { target: render_entity, animation: crate::components::sprite::AnimationState::Death });
+                        } else {
+                            anim_events.send(CharacterAnimationEvent { target: render_entity, animation: crate::components::sprite::AnimationState::Hit });
+                        }
+                    }
+                }
             }
             
             if hit_count > 0 {
-                // ... (AOE 飘字和万剑归宗逻辑保持不变)
+                // ... (后面是特效和飘字，保持不变，但删掉末尾统一发的 Hit 动画)
                 for (_, _marker, impact) in enemy_impact_query.iter() {
                     let x_world = impact.home_position.x * 100.0;
                     let y_world = (impact.home_position.z - 0.1) * 100.0;
@@ -2482,14 +2615,12 @@ fn apply_card_effect(
                             );
                         }
                     }
-                } else {
-                    screen_events.send(ScreenEffectEvent::Shake { trauma: 0.5, decay: 4.0 });
-                }
-                for (entity, _, _) in enemy_sprite_query.iter() {
-                    anim_events.send(CharacterAnimationEvent { target: entity, animation: crate::components::sprite::AnimationState::Hit });
-                }
-            }
-        }
+                                } else {
+                                    screen_events.send(ScreenEffectEvent::Shake { trauma: 0.5, decay: 4.0 });
+                                }
+                            }
+                        }
+                
         CardEffect::GainBlock { amount } => {
             if let Ok((mut player, _)) = player_query.get_single_mut() {
                 player.gain_block_with_env(*amount, environment);
@@ -2505,31 +2636,18 @@ fn apply_card_effect(
             }
         }
         CardEffect::ChangeEnvironment { name } => {
-            info!("【卡牌】天象异变！环境变为: {}", name);
-            
-            // 1. 触发环境资源替换
-            if name == "雷暴" {
-                _commands.insert_resource(Environment::thunder_storm());
-                screen_events.send(ScreenEffectEvent::Flash { color: Color::srgba(0.8, 0.8, 1.0, 0.5), duration: 0.3 });
-            } else if name == "浓雾" {
-                _commands.insert_resource(Environment::thick_fog());
-                screen_events.send(ScreenEffectEvent::Flash { color: Color::srgba(0.7, 0.7, 0.7, 0.4), duration: 0.5 });
-            } else {
-                _commands.insert_resource(Environment::default());
-            }
-
-            // 2. 补全数值效果：引雷术应造成伤害，迷踪阵应提供护盾
             if card_name.contains("引雷术") {
-                if let Ok((player, _)) = player_query.get_single() {
-                    let base_damage = 5;
-                    let final_damage = player.calculate_outgoing_damage_with_env(base_damage, environment);
-                    if let Some(mut enemy) = enemy_query.iter_mut().find(|e| e.hp > 0) {
-                        enemy.take_damage_with_env(final_damage, environment);
-                        effect_events.send(SpawnEffectEvent::new(EffectType::Lightning, Vec3::new(2.5, 0.0, 0.5)));
-                        info!("【卡牌】引动九天雷霆，造成 {} 点伤害", final_damage);
-                    }
+                info!("【卡牌】引动九天雷霆演出开始...");
+                // 仅启动演出，不立即扣血或切换环境
+                heavenly_cinematic.start(5, name.clone());
+            } else {
+                info!("【卡牌】天象异变！环境变为: {}", name);
+                if name == "浓雾" {
+                    _commands.insert_resource(Environment::thick_fog());
+                    screen_events.send(ScreenEffectEvent::Flash { color: Color::srgba(0.7, 0.7, 0.7, 0.4), duration: 0.5 });
+                } else {
+                    _commands.insert_resource(Environment::default());
                 }
-            } else if card_name.contains("迷踪阵") {
                 if let Ok((mut player, _)) = player_query.get_single_mut() {
                     player.gain_block_with_env(5, environment);
                 }

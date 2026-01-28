@@ -669,13 +669,55 @@ impl Default for CombatConfig {
     }
 }
 
-/// 当前战斗回合状态
+/// 战斗状态
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CombatState {
     /// 当前回合阶段
     pub phase: TurnPhase,
     /// 本回合是否已抽牌
     pub cards_drawn_this_turn: bool,
+}
+
+/// 天象打击演出资源
+#[derive(Resource, Debug, Clone)]
+pub struct HeavenlyStrikeCinematic {
+    pub active: bool,
+    pub timer: Timer,
+    /// 记录待造成的伤害
+    pub pending_damage: i32,
+    /// 记录环境名称
+    pub environment_name: String,
+    /// 是否已结算伤害
+    pub damage_applied: bool,
+    /// 已触发的闪光次数
+    pub flash_count: u32,
+    /// 下一次落雷特效的计时器
+    pub effect_timer: Timer,
+}
+
+impl Default for HeavenlyStrikeCinematic {
+    fn default() -> Self {
+        Self {
+            active: false,
+            // 总时长延长到 4.0 秒，确保降落完整
+            timer: Timer::from_seconds(4.0, TimerMode::Once),
+            pending_damage: 0,
+            environment_name: "".to_string(),
+            damage_applied: false,
+            flash_count: 0,
+            effect_timer: Timer::from_seconds(0.12, TimerMode::Repeating),
+        }
+    }
+}
+
+impl HeavenlyStrikeCinematic {
+    pub fn start(&mut self, damage: i32, env_name: String) {
+        self.active = true;
+        self.timer.reset();
+        self.pending_damage = damage;
+        self.environment_name = env_name;
+        self.damage_applied = false;
+    }
 }
 
 /// 胜利延迟计时器（用于延迟进入奖励界面，让粒子特效播放）

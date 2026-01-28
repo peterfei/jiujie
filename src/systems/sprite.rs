@@ -82,7 +82,7 @@ pub fn update_physical_impacts(
                 ActionType::WolfBite => 1.0,
                 ActionType::SpiderWeb => 0.8,
                 ActionType::DemonCast => 0.6,
-                ActionType::Ascend => 1.2, // 升腾动作稍微拉长
+                ActionType::Ascend => 3.5, // 延长到 3.5s，涵盖所有落雷阶段
                 _ => 1.0,
             };
             let progress = (1.0 - (impact.action_timer / action_duration)).clamp(0.0, 1.0);
@@ -210,10 +210,11 @@ fn trigger_hit_feedback(
                     impact.offset_velocity = Vec3::new(15.0 * direction, 0.0, 0.0);
                     impact.special_rotation_velocity = 150.0 * direction; 
                 }
-                AnimationState::HeavenCast => {
-                    impact.action_type = ActionType::Ascend;
-                    impact.action_timer = 1.2; 
-                    impact.tilt_velocity = 0.0; 
+                                AnimationState::HeavenCast => {
+                                    impact.action_type = ActionType::Ascend;
+                                    impact.action_timer = 3.5; 
+                                    impact.tilt_velocity = 0.0;
+                 
                     impact.special_rotation = 0.0;
                     impact.special_rotation_velocity = 0.0; 
                     impact.offset_velocity = Vec3::ZERO;
@@ -331,7 +332,7 @@ fn handle_animation_events(
             match event.animation {
                 AnimationState::Attack => { sprite.set_attack(4, 0.3); }
                 AnimationState::ImperialSword => { sprite.set_attack(8, 0.5); }
-                AnimationState::HeavenCast => { sprite.set_attack(6, 1.2); }
+                AnimationState::HeavenCast => { sprite.set_attack(6, 3.5); }
                 AnimationState::Defense => { sprite.set_attack(4, 0.3); }
                 AnimationState::DemonAttack => { sprite.set_attack(6, 0.4); }
                 AnimationState::DemonCast => { sprite.set_attack(4, 0.3); }
