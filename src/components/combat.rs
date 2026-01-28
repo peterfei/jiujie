@@ -166,6 +166,11 @@ pub struct EnemyIntentText {
 }
 
 #[derive(Component)]
+pub struct IntentIconMarker {
+    pub owner: Entity,
+}
+
+#[derive(Component)]
 pub struct EnemyStatusUi {
     pub enemy_id: u32,
 }

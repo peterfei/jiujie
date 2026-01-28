@@ -8,6 +8,8 @@ use crate::components::{
     CombatState, TurnPhase, NodeType, Realm, Cultivation, MapNode, MapProgress, PlayerDeck, DeckConfig, CardPool, 
     CharacterType, EnemyAttackEvent, 
     SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, 
+    IntentIconMarker, 
+
     ScreenWarning, 
 
     PlayerHpBarMarker, 
@@ -1196,12 +1198,28 @@ fn setup_combat_ui(
                         StatusIndicator { owner: enemy_entity },
                     ));
 
+                    // [大作级] 意图显示容器
                     p.spawn((
-                        Text::new("意图: 观察"),
-                        TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() },
-                        TextColor(Color::srgb(1.0, 0.8, 0.4)),
-                        EnemyIntentText { owner: enemy_entity }
-                    ));
+                        Node {
+                            flex_direction: FlexDirection::Row,
+                            align_items: AlignItems::Center,
+                            column_gap: Val::Px(4.0),
+                            margin: UiRect::top(Val::Px(4.0)),
+                            ..default()
+                        },
+                    )).with_children(|row| {
+                        row.spawn((
+                            Node { width: Val::Px(24.0), height: Val::Px(24.0), ..default() },
+                            ImageNode::new(asset_server.load("textures/cards/attack.png")), // 默认攻击
+                            IntentIconMarker { owner: enemy_entity },
+                        ));
+                        row.spawn((
+                            Text::new(""),
+                            TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() },
+                            TextColor(Color::srgb(1.0, 0.8, 0.4)),
+                            EnemyIntentText { owner: enemy_entity }
+                        ));
+                    });
                 });
             });
         }
@@ -1269,12 +1287,28 @@ fn setup_combat_ui(
                         StatusIndicator { owner: enemy_entity },
                     ));
 
+                    // [大作级] 意图显示容器
                     p.spawn((
-                        Text::new("意图: 观察"),
-                        TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() },
-                        TextColor(Color::srgb(1.0, 0.8, 0.4)),
-                        EnemyIntentText { owner: enemy_entity }
-                    ));
+                        Node {
+                            flex_direction: FlexDirection::Row,
+                            align_items: AlignItems::Center,
+                            column_gap: Val::Px(4.0),
+                            margin: UiRect::top(Val::Px(4.0)),
+                            ..default()
+                        },
+                    )).with_children(|row| {
+                        row.spawn((
+                            Node { width: Val::Px(24.0), height: Val::Px(24.0), ..default() },
+                            ImageNode::new(asset_server.load("textures/cards/attack.png")), // 默认攻击
+                            IntentIconMarker { owner: enemy_entity },
+                        ));
+                        row.spawn((
+                            Text::new(""),
+                            TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() },
+                            TextColor(Color::srgb(1.0, 0.8, 0.4)),
+                            EnemyIntentText { owner: enemy_entity }
+                        ));
+                    });
                 });
             });
         }
@@ -1684,6 +1718,8 @@ fn update_combat_ui(
     player_query: Query<&Player, Changed<Player>>,
     enemy_query: Query<&Enemy, Changed<Enemy>>,
     mut hp_bar_query: Query<&mut Node, With<PlayerHpBarMarker>>,
+    mut intent_icon_query: Query<(&IntentIconMarker, &mut ImageNode, &mut Visibility)>,
+    asset_server: Res<AssetServer>,
     mut text_queries: ParamSet<(
         Query<&mut Text, With<PlayerHpText>>,
         Query<&mut Text, With<PlayerEnergyText>>,
@@ -1715,15 +1751,45 @@ fn update_combat_ui(
         }
     }
 
-    // 2. 同步更新所有敌人的意图
+    // 2. 同步更新所有敌人的意图 (大作级结算版 - 增加文字说明)
+    let player_data = player_query.get_single().ok();
+    
     for (marker, mut text) in text_queries.p6().iter_mut() {
         if let Ok(enemy) = enemy_query.get(marker.owner) {
-            text.0 = match &enemy.intent {
-                EnemyIntent::Attack { damage } => format!("意图: 攻击({} + {})", damage, enemy.strength),
-                EnemyIntent::Defend { block } => format!("意图: 防御({})", block),
-                EnemyIntent::Debuff { poison, weakness } => format!("意图: 邪术(毒{}/弱{})", poison, weakness),
-                _ => "意图: 观察".to_string(),
+            match &enemy.intent {
+                EnemyIntent::Attack { damage } => {
+                    let after_weakness = enemy.calculate_outgoing_damage(*damage);
+                    let final_val = if let Some(p) = player_data {
+                        p.calculate_incoming_damage(after_weakness)
+                    } else {
+                        after_weakness
+                    };
+                    text.0 = format!("攻击 {}", final_val);
+                }
+                EnemyIntent::Defend { block } => {
+                    text.0 = format!("防御 {}", block);
+                }
+                EnemyIntent::Debuff { poison, weakness } => {
+                    text.0 = format!("邪术(毒{}/弱{})", poison, weakness);
+                }
+                _ => {
+                    text.0 = "观察中...".to_string();
+                }
+            }
+        }
+    }
+
+    // 3. 同步意图图标
+    for (marker, mut img, mut vis) in intent_icon_query.iter_mut() {
+        if let Ok(enemy) = enemy_query.get(marker.owner) {
+            let (tex, visible) = match &enemy.intent {
+                EnemyIntent::Attack { .. } => ("textures/cards/attack.png", Visibility::Visible),
+                EnemyIntent::Defend { .. } => ("textures/cards/defense.png", Visibility::Visible),
+                EnemyIntent::Debuff { .. } => ("textures/cards/special.png", Visibility::Visible),
+                _ => ("textures/cards/default.png", Visibility::Hidden),
             };
+            img.image = asset_server.load(tex);
+            *vis = visible;
         }
     }
 }
