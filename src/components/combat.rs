@@ -630,10 +630,10 @@ impl PlayerDeck {
     /// 创建新牌组并初始化数值
     pub fn new() -> Self {
         Self {
-            cards: create_starting_deck(),
-            hp: 100,
-            max_hp: 100,
-            gold: 0,
+            hp: 80,
+            max_hp: 80,
+            gold: 100, // 初始灵石
+            cards: vec![],
         }
     }
 

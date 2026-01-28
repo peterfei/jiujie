@@ -2348,6 +2348,18 @@ fn apply_card_effect(
 // 战斗结算与延迟系统
 // ============================================================================
 
+/// 战斗结算包装器 (仅供集成测试使用)
+pub fn check_combat_end_wrapper(
+    state: Res<State<GameState>>,
+    player_query: Query<(&mut Player, &mut crate::components::Cultivation)>,
+    enemy_query: Query<&Enemy>,
+    next_state: ResMut<NextState<GameState>>,
+    victory_events: EventWriter<VictoryEvent>,
+    victory_delay: ResMut<VictoryDelay>,
+) {
+    check_combat_end(state, player_query, enemy_query, next_state, victory_events, victory_delay);
+}
+
 /// 检查战斗是否结束
 fn check_combat_end(
     state: Res<State<GameState>>,
@@ -2376,11 +2388,18 @@ fn check_combat_end(
 
         info!("【战斗】众妖肃清，机缘显现！");
         
-        // 获得感悟
-        if let Ok((_, mut cultivation)) = player_query.get_single_mut() {
+        // 1. 获得感悟
+        if let Ok((mut player, mut cultivation)) = player_query.get_single_mut() {
             let insight_gain = 50;
             cultivation.gain_insight(insight_gain);
             info!("【修仙】获得 {} 点感悟，当前: {}/{}", insight_gain, cultivation.insight, cultivation.get_threshold());
+
+            // 2. [新增] 战后搜刮：获得灵石掉落 (10-25 随机)
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            let gold_drop = rng.gen_range(10..26);
+            player.gold += gold_drop;
+            info!("【战斗】搜刮战场，获得 {} 块灵石！当前持有: {}", gold_drop, player.gold);
         }
 
         victory_events.send(VictoryEvent);
