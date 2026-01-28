@@ -20,17 +20,18 @@ pub struct Relic {
     pub description: String,
     /// 遗物稀有度
     pub rarity: RelicRarity,
-    /// 遗物效果
-    pub effect: RelicEffect,
+    /// 遗物效果列表 (支持复合效果)
+    pub effects: Vec<RelicEffect>,
 }
 
-/// 遗物ID
+/// 遗物ID (支持预定义与自定义扩展)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum RelicId {
-    BurningBlood,     // 燃烧之血 - 战斗开始时对所有敌人造成3点伤害
-    BagOfPreparation, // 准备背包 - 每场战斗开始时获得1张随机卡牌
-    Anchor,           // 锚 - 每回合结束时，保留最多3张牌到下回合
-    StrangeSpoon,     // 奇怪勺子 - 每打出第3张牌时，抽1张牌
+    BurningBlood,     // 飞剑符
+    BagOfPreparation, // 乾坤袋
+    Anchor,           // 定风珠
+    StrangeSpoon,     // 聚灵阵
+    Custom(u32),      // 自定义遗物 (用于扩展和测试)
 }
 
 /// 遗物稀有度
@@ -112,7 +113,7 @@ impl Relic {
             name: "飞剑符".to_string(),
             description: "每场战斗开始时，对所有敌人造成 3 点剑气伤害".to_string(),
             rarity: RelicRarity::Common,
-            effect: RelicEffect::OnCombatStart { damage: 3, block: 0, draw_cards: 0 },
+            effects: vec![RelicEffect::OnCombatStart { damage: 3, block: 0, draw_cards: 0 }],
         }
     }
 
@@ -123,7 +124,7 @@ impl Relic {
             name: "乾坤袋".to_string(),
             description: "每场战斗开始时，从乾坤袋中额外获得 1 张随机功法".to_string(),
             rarity: RelicRarity::Common,
-            effect: RelicEffect::OnCombatStart { damage: 0, block: 0, draw_cards: 1 },
+            effects: vec![RelicEffect::OnCombatStart { damage: 0, block: 0, draw_cards: 1 }],
         }
     }
 
@@ -134,7 +135,7 @@ impl Relic {
             name: "定风珠".to_string(),
             description: "每回合结束时，保留最多 3 张手牌到下回合".to_string(),
             rarity: RelicRarity::Uncommon,
-            effect: RelicEffect::OnTurnEnd { keep_cards: 3 },
+            effects: vec![RelicEffect::OnTurnEnd { keep_cards: 3 }],
         }
     }
 
@@ -145,7 +146,7 @@ impl Relic {
             name: "聚灵阵".to_string(),
             description: "每打出第 3 张牌时，灵气涌动，抽 1 张牌".to_string(),
             rarity: RelicRarity::Rare,
-            effect: RelicEffect::OnCardPlayed { every_nth: 3, draw_cards: 1 },
+            effects: vec![RelicEffect::OnCardPlayed { every_nth: 3, draw_cards: 1 }],
         }
     }
 
@@ -187,7 +188,7 @@ pub struct RelicObtainedEvent {
 #[derive(Event, Debug)]
 pub struct RelicTriggeredEvent {
     pub relic_id: RelicId,
-    pub effect: RelicEffect,
+    pub effects: Vec<RelicEffect>,
 }
 
 // ============================================================================

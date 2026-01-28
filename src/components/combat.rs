@@ -633,7 +633,7 @@ impl PlayerDeck {
             hp: 80,
             max_hp: 80,
             gold: 100, // 初始灵石
-            cards: vec![],
+            cards: crate::components::cards::create_starting_deck(), // 还原初始功法
         }
     }
 

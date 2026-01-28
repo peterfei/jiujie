@@ -14,7 +14,10 @@ pub use animation::AnimationPlugin;
 pub use sprite::SpritePlugin;
 pub use particle::ParticlePlugin;
 pub use screen_effect::ScreenEffectPlugin;
-pub use relic::{RelicPlugin, RelicUiPlugin, CombatStartProcessed};
+pub use relic::{
+    RelicPlugin, RelicUiPlugin, CombatStartProcessed, 
+    trigger_relics_on_combat_start, trigger_relics_on_phase_change, trigger_relics_on_card_played
+};
 pub use shop::{ShopPlugin, update_gold_display};
 pub use rest::RestPlugin;
 pub use audio::SfxPlugin;

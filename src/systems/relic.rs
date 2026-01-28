@@ -72,7 +72,7 @@ fn reset_relic_triggers(mut combat_start_processed: ResMut<CombatStartProcessed>
 }
 
 /// 战斗开始时触发遗物效果
-fn trigger_relics_on_combat_start(
+pub fn trigger_relics_on_combat_start(
     mut combat_start_processed: ResMut<CombatStartProcessed>,
     relic_collection: Res<RelicCollection>,
     mut enemy_query: Query<&mut Enemy>,
@@ -90,57 +90,59 @@ fn trigger_relics_on_combat_start(
     info!("【遗物系统】战斗开始，触发遗物效果");
 
     for relic in &relic_collection.relic {
-        match &relic.effect {
-            RelicEffect::OnCombatStart { damage, block, draw_cards } => {
-                // 造成伤害
-                if *damage > 0 {
-                    if let Ok(mut enemy) = enemy_query.get_single_mut() {
-                        enemy.take_damage(*damage);
-                        info!("  遗物 [{}] 触发：对敌人造成 {} 点伤害", relic.name, damage);
+        for effect in &relic.effects {
+            match effect {
+                RelicEffect::OnCombatStart { damage, block, draw_cards } => {
+                    // 造成伤害
+                    if *damage > 0 {
+                        if let Ok(mut enemy) = enemy_query.get_single_mut() {
+                            enemy.take_damage(*damage);
+                            info!("  遗物 [{}] 触发：对敌人造成 {} 点伤害", relic.name, damage);
+                        }
                     }
-                }
 
-                // 获得护甲
-                if *block > 0 {
-                    if let Ok(mut player) = player_query.get_single_mut() {
-                        player.gain_block(*block);
-                        info!("  遗物 [{}] 触发：获得 {} 点护甲", relic.name, block);
+                    // 获得护甲
+                    if *block > 0 {
+                        if let Ok(mut player) = player_query.get_single_mut() {
+                            player.gain_block(*block);
+                            info!("  遗物 [{}] 触发：获得 {} 点护甲", relic.name, block);
+                        }
                     }
-                }
 
-                // 抽牌
-                if *draw_cards > 0 {
-                    let mut drawn = 0;
-                    for _ in 0..*draw_cards {
-                        if let Ok(mut draw_pile) = draw_pile_query.get_single_mut() {
-                            if draw_pile.count == 0 {
-                                if let Ok(mut discard_pile) = discard_pile_query.get_single_mut() {
-                                    let cards = discard_pile.clear();
-                                    if !cards.is_empty() {
-                                        draw_pile.shuffle_from_discard(cards);
+                    // 抽牌
+                    if *draw_cards > 0 {
+                        let mut drawn = 0;
+                        for _ in 0..*draw_cards {
+                            if let Ok(mut draw_pile) = draw_pile_query.get_single_mut() {
+                                if draw_pile.count == 0 {
+                                    if let Ok(mut discard_pile) = discard_pile_query.get_single_mut() {
+                                        let cards = discard_pile.clear();
+                                        if !cards.is_empty() {
+                                            draw_pile.shuffle_from_discard(cards);
+                                        }
                                     }
                                 }
-                            }
 
-                            if let Some(card) = draw_pile.draw_card() {
-                                if let Ok(mut hand) = hand_query.get_single_mut() {
-                                    if hand.add_card(card) {
-                                        drawn += 1;
+                                if let Some(card) = draw_pile.draw_card() {
+                                    if let Ok(mut hand) = hand_query.get_single_mut() {
+                                        if hand.add_card(card) {
+                                            drawn += 1;
+                                        }
                                     }
                                 }
                             }
                         }
+                        info!("  遗物 [{}] 触发：抽了 {} 张牌", relic.name, drawn);
                     }
-                    info!("  遗物 [{}] 触发：抽了 {} 张牌", relic.name, drawn);
                 }
+                _ => {}
             }
-            _ => {}
         }
     }
 }
 
 /// 监听回合阶段变化，在适当时机触发遗物效果
-fn trigger_relics_on_phase_change(
+pub fn trigger_relics_on_phase_change(
     relic_collection: Res<RelicCollection>,
     mut player_query: Query<&mut Player>,
     hand_query: Query<&Hand>,
@@ -163,16 +165,19 @@ fn trigger_relics_on_phase_change(
         (Some(TurnPhase::EnemyTurn), TurnPhase::PlayerAction) => {
             info!("【遗物系统】新回合开始，触发回合开始遗物");
             for relic in &relic_collection.relic {
-                match &relic.effect {
-                    RelicEffect::OnTurnStart { energy, .. } => {
-                        if *energy > 0 {
-                            if let Ok(mut player) = player_query.get_single_mut() {
-                                player.gain_energy(*energy);
-                                info!("  遗物 [{}] 触发：获得 {} 点能量", relic.name, energy);
+                for effect in &relic.effects {
+                    match effect {
+                        RelicEffect::OnTurnStart { energy, draw_cards } => {
+                            if *energy > 0 {
+                                if let Ok(mut player) = player_query.get_single_mut() {
+                                    player.gain_energy(*energy);
+                                    info!("  遗物 [{}] 触发：获得 {} 点能量", relic.name, energy);
+                                }
                             }
+                            // 还可以处理 draw_cards 等其他效果
                         }
+                        _ => {}
                     }
-                    _ => {}
                 }
             }
         }
@@ -180,27 +185,22 @@ fn trigger_relics_on_phase_change(
         (Some(TurnPhase::PlayerAction), TurnPhase::EnemyTurn) => {
             info!("【遗物系统】回合结束，触发回合结束遗物");
             for relic in &relic_collection.relic {
-                match &relic.effect {
-                    RelicEffect::OnTurnEnd { keep_cards } => {
-                        if let Ok(hand) = hand_query.get_single() {
-                            if hand.cards.len() > *keep_cards as usize {
-                                info!("  遗物 [{}] 触发：保留最多 {} 张牌（当前手牌: {} 张）",
-                                    relic.name, keep_cards, hand.cards.len());
+                for effect in &relic.effects {
+                    match effect {
+                        RelicEffect::OnTurnEnd { keep_cards } => {
+                            if let Ok(hand) = hand_query.get_single() {
+                                if hand.cards.len() > *keep_cards as usize {
+                                    info!("  遗物 [{}] 触发：保留最多 {} 张牌（当前手牌: {} 张）",
+                                        relic.name, keep_cards, hand.cards.len());
+                                }
                             }
                         }
+                        _ => {}
                     }
-                    _ => {}
                 }
             }
         }
-        // 战斗开始：PlayerStart → PlayerAction
-        (Some(TurnPhase::PlayerStart), TurnPhase::PlayerAction) => {
-            info!("【遗物系统】战斗开始后的首次行动");
-            // 这里可以处理战斗开始后的额外逻辑
-        }
-        _ => {
-            // 其他阶段转换，不需要处理
-        }
+        _ => {}
     }
 }
 
@@ -212,7 +212,7 @@ fn trigger_relics_on_draw(
 }
 
 /// 打出牌时触发遗物效果（如奇怪勺子）
-fn trigger_relics_on_card_played(
+pub fn trigger_relics_on_card_played(
     relic_collection: Res<RelicCollection>,
     mut card_played_count: Local<CardPlayedCount>,
     mut hand_query: Query<&mut Hand>,
@@ -222,38 +222,40 @@ fn trigger_relics_on_card_played(
     card_played_count.0 += 1;
 
     for relic in &relic_collection.relic {
-        match &relic.effect {
-            RelicEffect::OnCardPlayed { every_nth, draw_cards } => {
-                if card_played_count.0 % *every_nth == 0 {
-                    // 触发抽牌
-                    let mut drawn = 0;
-                    for _ in 0..*draw_cards {
-                        if let Ok(mut draw_pile) = draw_pile_query.get_single_mut() {
-                            if draw_pile.count == 0 {
-                                if let Ok(mut discard_pile) = discard_pile_query.get_single_mut() {
-                                    let cards = discard_pile.clear();
-                                    if !cards.is_empty() {
-                                        draw_pile.shuffle_from_discard(cards);
+        for effect in &relic.effects {
+            match effect {
+                RelicEffect::OnCardPlayed { every_nth, draw_cards } => {
+                    if card_played_count.0 % every_nth == 0 {
+                        // 触发抽牌
+                        let mut drawn = 0;
+                        for _ in 0..*draw_cards {
+                            if let Ok(mut draw_pile) = draw_pile_query.get_single_mut() {
+                                if draw_pile.count == 0 {
+                                    if let Ok(mut discard_pile) = discard_pile_query.get_single_mut() {
+                                        let cards = discard_pile.clear();
+                                        if !cards.is_empty() {
+                                            draw_pile.shuffle_from_discard(cards);
+                                        }
                                     }
                                 }
-                            }
 
-                            if let Some(card) = draw_pile.draw_card() {
-                                if let Ok(mut hand) = hand_query.get_single_mut() {
-                                    if hand.add_card(card) {
-                                        drawn += 1;
+                                if let Some(card) = draw_pile.draw_card() {
+                                    if let Ok(mut hand) = hand_query.get_single_mut() {
+                                        if hand.add_card(card) {
+                                            drawn += 1;
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    if drawn > 0 {
-                        info!("  遗物 [{}] 触发：第 {} 张牌，抽 {} 张", relic.name, card_played_count.0, drawn);
+                        if drawn > 0 {
+                            info!("  遗物 [{}] 触发：第 {} 张牌，抽 {} 张", relic.name, card_played_count.0, drawn);
+                        }
                     }
                 }
+                _ => {}
             }
-            _ => {}
         }
     }
 }
