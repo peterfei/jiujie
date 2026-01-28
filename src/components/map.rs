@@ -7,19 +7,19 @@ use serde::{Serialize, Deserialize};
 // 地图组件
 // ============================================================================
 
-/// 地图节点
 #[derive(Component, Debug, Clone, Serialize, Deserialize)]
 pub struct MapNode {
-    /// 节点ID
     pub id: u32,
-    /// 节点类型（普通、精英、Boss、休息等）
     pub node_type: NodeType,
-    /// 节点位置（地图坐标）
-    pub position: (i32, i32),
-    /// 是否已解锁
+    pub position: (i32, i32), // (layer, index)
     pub unlocked: bool,
-    /// 是否已完成
     pub completed: bool,
+}
+
+impl MapNode {
+    pub fn layer(&self) -> u32 {
+        self.position.0 as u32
+    }
 }
 
 /// 节点类型
