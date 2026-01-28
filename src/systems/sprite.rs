@@ -58,7 +58,7 @@ pub fn update_physical_impacts(
     time: Res<Time>,
     mut effect_events: EventWriter<crate::components::particle::SpawnEffectEvent>,
 ) {
-    let dt = time.delta_secs();
+    let dt = time.delta_secs().min(0.033); // 限制单帧最大时长，防止物理弹簧爆炸导致闪烁
     for (mut transform, mut impact, breath) in query.iter_mut() {
         // 1. 模拟旋转弹簧力 (Tilt)
         let spring_k = 25.0; 

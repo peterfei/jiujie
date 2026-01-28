@@ -3490,6 +3490,11 @@ fn handle_card_hover(
     for (interaction, card_button) in interactions.iter() {
         match interaction {
             Interaction::Hovered => {
+                // 如果 ID 没变，说明已经显示了，跳过重建防止闪烁
+                if hovered_card.card_id == Some(card_button.card_id) {
+                    continue;
+                }
+
                 info!("【悬停】卡牌 ID: {}", card_button.card_id);
 
                 // 更新悬停状态
@@ -3536,6 +3541,11 @@ fn handle_relic_hover(
     for (interaction, relic_button) in interactions.iter() {
         match interaction {
             Interaction::Hovered => {
+                // 防止重复重建
+                if hovered_relic.relic_id == Some(relic_button.relic_id) {
+                    continue;
+                }
+
                 info!("【悬停】遗物 ID: {:?}", relic_button.relic_id);
 
                 // 更新悬停状态
@@ -3596,11 +3606,6 @@ fn cleanup_hover_panels(
     let card_panel_count = card_panels.iter().count();
     let relic_panel_count = relic_panels.iter().count();
 
-    if card_panel_count > 0 || relic_panel_count > 0 {
-        info!("【清理系统】检查清理 - 卡牌悬停: {:?}, 遗物悬停: {:?}, 卡牌面板: {}, 遗物面板: {}",
-            hovered_card.card_id, hovered_relic.relic_id, card_panel_count, relic_panel_count);
-    }
-
     // 如果没有悬停的卡牌，清理卡牌面板
     if hovered_card.card_id.is_none() {
         if card_panel_count > 0 {
@@ -3624,6 +3629,7 @@ fn cleanup_hover_panels(
 
 /// 创建卡牌悬停详情面板
 fn spawn_card_hover_panel(commands: &mut Commands, card: &Card, asset_server: &AssetServer, mouse_pos: &MousePosition) {
+    // ... (前略：颜色计算逻辑保持不变)
     let card_color = match card.card_type {
         CardType::Attack => Color::srgb(0.8, 0.2, 0.2),
         CardType::Defense => Color::srgb(0.2, 0.5, 0.8),
@@ -3681,18 +3687,10 @@ fn spawn_card_hover_panel(commands: &mut Commands, card: &Card, asset_server: &A
         ..default()
     };
 
-    if let Some(left) = position_left {
-        node.left = left;
-    }
-    if let Some(right) = position_right {
-        node.right = right;
-    }
-    if let Some(top) = position_top {
-        node.top = top;
-    }
-    if let Some(bottom) = position_bottom {
-        node.bottom = bottom;
-    }
+    if let Some(left) = position_left { node.left = left; }
+    if let Some(right) = position_right { node.right = right; }
+    if let Some(top) = position_top { node.top = top; }
+    if let Some(bottom) = position_bottom { node.bottom = bottom; }
 
     commands
         .spawn((
@@ -3700,6 +3698,8 @@ fn spawn_card_hover_panel(commands: &mut Commands, card: &Card, asset_server: &A
             BackgroundColor(Color::srgba(0.15, 0.15, 0.2, 0.95)),
             BorderColor(rarity_color),
             CardHoverPanelMarker,
+            ZIndex(1000), // 确保在最上层
+            CombatUiRoot, // 标记为战斗 UI，支持自动清理
         ))
         .with_children(|parent| {
             // 稀有度标签
@@ -3841,6 +3841,8 @@ fn spawn_relic_hover_panel(commands: &mut Commands, relic: &Relic, asset_server:
             BackgroundColor(Color::srgba(0.15, 0.15, 0.2, 0.95)),
             BorderColor(rarity_color),
             RelicHoverPanelMarker,
+            ZIndex(1000), // 确保在最上层
+            CombatUiRoot, // 标记为战斗 UI
         ))
         .with_children(|parent| {
             // 稀有度标签
