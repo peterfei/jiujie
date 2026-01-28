@@ -567,7 +567,7 @@ impl CardPool {
             Card::new(400, "破绽百出", "施加2层易伤", CardType::Skill, 1, CardEffect::ApplyStatus { status: StatusType::Vulnerable, count: 2 }, CardRarity::Common, "textures/cards/skill.png"),
             Card::new(401, "迷魂烟", "施加2层虚弱", CardType::Skill, 1, CardEffect::ApplyStatus { status: StatusType::Weakness, count: 2 }, CardRarity::Common, "textures/cards/skill.png"),
             // === 天象功法 ===
-            Card::new(500, "天象·引雷术", "造成5点伤害。将环境变为【雷暴】：伤害提升 20%", CardType::Attack, 1, CardEffect::ChangeEnvironment { name: "雷暴".to_string() }, CardRarity::Uncommon, "textures/cards/attack.png"),
+            Card::new(500, "天象·引雷术", "造成20点全场伤害。将环境变为【雷暴】：伤害提升 20%", CardType::Attack, 1, CardEffect::ChangeEnvironment { name: "雷暴".to_string() }, CardRarity::Uncommon, "textures/cards/attack.png"),
             Card::new(501, "天象·迷踪阵", "获得5点护盾。将环境变为【浓雾】：防御提升 20%", CardType::Defense, 1, CardEffect::ChangeEnvironment { name: "浓雾".to_string() }, CardRarity::Uncommon, "textures/cards/defense.png"),
         ]
     }

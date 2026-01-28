@@ -305,10 +305,11 @@ fn trigger_hit_feedback(
 /// 更新精灵动画
 fn update_sprite_animations(
     mut commands: Commands,
-    mut query: Query<(Entity, &mut CharacterSprite)>,
+    mut query: Query<(Entity, &mut CharacterSprite, Option<&PlayerSpriteMarker>)>,
+    character_assets: Res<CharacterAssets>,
     time: Res<Time>,
 ) {
-    for (entity, mut sprite) in query.iter_mut() {
+    for (entity, mut sprite, is_player) in query.iter_mut() {
         if sprite.total_frames <= 1 { continue; }
         sprite.elapsed += time.delta_secs();
         if sprite.elapsed >= sprite.frame_duration {
@@ -325,7 +326,13 @@ fn update_sprite_animations(
                         AnimationState::Attack | AnimationState::Hit | AnimationState::ImperialSword | 
                         AnimationState::HeavenCast | AnimationState::Defense | AnimationState::DemonAttack | 
                         AnimationState::DemonCast | AnimationState::WolfAttack | AnimationState::SpiderAttack | 
-                        AnimationState::SpiritAttack | AnimationState::BossRoar | AnimationState::BossFrenzy => { sprite.set_idle(); }
+                        AnimationState::SpiritAttack | AnimationState::BossRoar | AnimationState::BossFrenzy => { 
+                            // 自动恢复待机
+                            if is_player.is_some() {
+                                sprite.texture = character_assets.player_idle.clone();
+                            }
+                            sprite.set_idle(); 
+                        }
                         _ => {}
                     }
                 }
@@ -337,25 +344,62 @@ fn update_sprite_animations(
 /// 处理动画事件
 fn handle_animation_events(
     mut events: EventReader<CharacterAnimationEvent>,
-    mut query: Query<&mut CharacterSprite>,
+    mut query: Query<(&mut CharacterSprite, Option<&PlayerSpriteMarker>)>,
+    character_assets: Res<CharacterAssets>,
 ) {
     for event in events.read() {
-        if let Ok(mut sprite) = query.get_mut(event.target) {
+        if let Ok((mut sprite, is_player)) = query.get_mut(event.target) {
             match event.animation {
-                AnimationState::Attack => { sprite.set_attack(4, 0.3); }
-                AnimationState::ImperialSword => { sprite.set_attack(8, 0.5); }
-                AnimationState::HeavenCast => { sprite.set_attack(6, 3.5); }
-                AnimationState::Defense => { sprite.set_attack(4, 0.3); }
-                AnimationState::DemonAttack => { sprite.set_attack(6, 0.4); }
-                AnimationState::DemonCast => { sprite.set_attack(4, 0.3); }
-                AnimationState::WolfAttack => { sprite.set_attack(10, 1.0); }
-                AnimationState::SpiderAttack => { sprite.set_attack(8, 0.8); }
-                AnimationState::SpiritAttack => { sprite.set_attack(6, 0.4); }
-                AnimationState::BossRoar => { sprite.set_attack(12, 1.2); }
-                AnimationState::BossFrenzy => { sprite.set_attack(10, 0.8); }
-                AnimationState::Hit => { sprite.set_hit(3, 0.2); }
-                AnimationState::Death => { sprite.set_death(6, 0.5); }
-                AnimationState::Idle => { sprite.set_idle(); }
+                AnimationState::Attack => {
+                    sprite.set_attack(4, 0.3);
+                }
+                AnimationState::ImperialSword => {
+                    sprite.set_attack(8, 0.5);
+                }
+                AnimationState::HeavenCast => {
+                    // 天象施法：如果是玩家，切换到祈祷贴图
+                    if is_player.is_some() {
+                        sprite.texture = character_assets.player_prise.clone();
+                    }
+                    sprite.set_attack(6, 3.5);
+                }
+                AnimationState::Defense => {
+                    sprite.set_attack(4, 0.3);
+                }
+                AnimationState::DemonAttack => {
+                    sprite.set_attack(6, 0.4);
+                }
+                AnimationState::DemonCast => {
+                    sprite.set_attack(4, 0.3);
+                }
+                AnimationState::WolfAttack => {
+                    sprite.set_attack(10, 1.0);
+                }
+                AnimationState::SpiderAttack => {
+                    sprite.set_attack(8, 0.8);
+                }
+                AnimationState::SpiritAttack => {
+                    sprite.set_attack(6, 0.4);
+                }
+                AnimationState::BossRoar => {
+                    sprite.set_attack(12, 1.2);
+                }
+                AnimationState::BossFrenzy => {
+                    sprite.set_attack(10, 0.8);
+                }
+                AnimationState::Hit => {
+                    sprite.set_hit(3, 0.2);
+                }
+                AnimationState::Death => {
+                    sprite.set_death(6, 0.5);
+                }
+                AnimationState::Idle => {
+                    // 恢复待机：如果是玩家，切回默认贴图
+                    if is_player.is_some() {
+                        sprite.texture = character_assets.player_idle.clone();
+                    }
+                    sprite.set_idle();
+                }
             }
         }
     }
@@ -388,12 +432,13 @@ fn update_breath_animations(
 /// 同步系统：将 2D 贴图同步到 3D 立牌材质
 fn sync_2d_to_3d_render(
     mut commands: Commands,
-    sprite_query: Query<(Entity, &CharacterSprite, &Transform, Option<&Combatant3d>), (With<SpriteMarker>, Changed<CharacterSprite>)>,
+    sprite_query: Query<(Entity, &CharacterSprite, &Transform, Option<&Combatant3d>, Option<&MeshMaterial3d<StandardMaterial>>), (With<SpriteMarker>, Changed<CharacterSprite>)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for (entity, char_sprite, transform, combatant_3d) in sprite_query.iter() {
+    for (entity, char_sprite, transform, combatant_3d, mat_handle_opt) in sprite_query.iter() {
         if combatant_3d.is_none() {
+            // --- 初始化流程 (仅首次) ---
             let x_3d = transform.translation.x / 100.0;
             let z_3d = transform.translation.y / 100.0;
             let is_boss = char_sprite.size.x > 150.0;
@@ -434,6 +479,15 @@ fn sync_2d_to_3d_render(
                     Transform::from_xyz(0.0, -0.02, 0.0),
                 ));
             });
+        } else {
+            // --- 更新流程 (贴图切换时触发) ---
+            if let Some(mat_handle) = mat_handle_opt {
+                if let Some(material) = materials.get_mut(mat_handle) {
+                    material.base_color_texture = Some(char_sprite.texture.clone());
+                    material.emissive_texture = Some(char_sprite.texture.clone());
+                    info!("【3D同步】已更新实体贴图");
+                }
+            }
         }
     }
 }

@@ -30,6 +30,10 @@ impl ShopItem {
     pub fn get_price(&self) -> i32 {
         match self {
             ShopItem::Card(card) => {
+                // 特殊处理：大招售价 100
+                if card.name.contains("天象·引雷术") {
+                    return 100;
+                }
                 match card.rarity {
                     crate::components::CardRarity::Common => 30,
                     crate::components::CardRarity::Uncommon => 50,

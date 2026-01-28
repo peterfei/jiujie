@@ -2632,8 +2632,8 @@ fn apply_card_effect(
         CardEffect::ChangeEnvironment { name } => {
             if card_name.contains("引雷术") {
                 info!("【卡牌】引动九天雷霆演出开始...");
-                // 仅启动演出，不立即扣血或切换环境
-                heavenly_cinematic.start(5, name.clone());
+                // 仅启动演出，不立即扣血或切换环境，基础伤害提升至 20
+                heavenly_cinematic.start(20, name.clone());
             } else {
                 info!("【卡牌】天象异变！环境变为: {}", name);
                 if name == "浓雾" {
