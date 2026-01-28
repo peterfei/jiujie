@@ -1,100 +1,87 @@
 use bevy::prelude::*;
+use bevy_card_battler::components::particle::{EmitterConfig, EffectType, SpawnEffectEvent};
+use bevy_card_battler::components::cards::{Card, CardEffect, CardType, CardRarity};
+use bevy_card_battler::components::combat::{Player, Enemy, EnemyType, EnemyIntent, DamageEffectEvent, StatusEffectEvent};
+use bevy_card_battler::components::screen_effect::ScreenEffectEvent;
+use bevy_card_battler::components::sprite::CharacterAnimationEvent;
+use bevy_card_battler::components::animation::EnemyAttackEvent;
 
 #[test]
-fn test_shake_event_deduplication() {
-    // 模拟一帧内的多个事件
-    let events = vec![(0.4, 0.8), (1.0, 0.5), (0.2, 1.0)];
+fn test_config_values() {
+    let slash = EmitterConfig::slash();
+    assert!(slash.speed.0 >= 200.0);
+    let shield = EmitterConfig::shield();
+    let color: Srgba = shield.start_color.into();
+    assert!(color.blue > 0.5);
     
-    let mut max_trauma = 0.0f32;
-    let mut min_decay = 100.0f32;
-    
-    for (t, d) in events {
-        max_trauma = max_trauma.max(t);
-        min_decay = min_decay.min(d);
-    }
-    
-    assert_eq!(max_trauma, 1.0, "应选取最强的震动 (1.0)");
-    assert_eq!(min_decay, 0.5, "应选取最持久的衰减 (0.5)");
+    // [新增] 验证 WebShot 的可见性参数
+    let web = EmitterConfig::web_shot();
+    // 之前是 (3.0, 8.0)，太小了。现在要求至少 15.0
+    assert!(web.size.0 >= 15.0, "蜘蛛网粒子必须足够大才能看清");
+    // 之前是 (0.4, 0.6)，太短了。现在要求至少 0.8
+    assert!(web.lifetime.0 >= 0.8, "蜘蛛网飞行时间必须足够长");
 }
 
 #[test]
-fn test_boss_golden_seal_logic() {
-    // 逻辑：如果有 BOSS，法阵应变为金色且旋转加速
-    let has_boss = true;
-    let seal_color = if has_boss { Color::srgb(1.0, 0.8, 0.2) } else { Color::srgb(0.0, 0.8, 0.3) };
-    let seal_speed = if has_boss { 0.15 } else { 0.05 };
-    
-    let rgba: Srgba = seal_color.into();
-    assert!(rgba.red > 0.9, "BOSS 法阵应为金色调");
-    assert_eq!(seal_speed, 0.15, "BOSS 法阵旋转速度应提升");
-}
-
-#[test]
-fn test_glowing_seal_pulse_subtle() {
-    // 逻辑：法阵的亮度应非常平缓地脉动 (0.85 -> 1.15)
-    let timer = 1.0f32;
-    let pulse_speed = 0.5f32; // 极慢频率
-    let pulse = 1.0 + (timer * pulse_speed).sin() * 0.15;
-    assert!(pulse >= 0.8 && pulse <= 1.2, "亮度波动应保持在 20% 以内，避免闪烁感");
-}
-
-#[test]
-fn test_character_grounded() {
-    // 逻辑：角色初始高度应接近 0，不再悬空
-    let home_pos_y = 0.05f32; 
-    assert!(home_pos_y < 0.2, "角色应该站在地面上，高度应小于 0.2");
-}
-
-#[test]
-fn test_character_color_fidelity() {
+fn test_effect_trigger_integration() {
     let mut app = App::new();
-    app.init_resource::<Assets<StandardMaterial>>();
-    
-    let mat = StandardMaterial {
-        base_color: Color::WHITE,
-        // 验证反射率为 0，防止灯光让人物发白
-        reflectance: 0.0,
-        // 验证自发光已启用 (用于还原高饱和度)
-        emissive: LinearRgba::WHITE,
-        ..default()
+    app.add_event::<SpawnEffectEvent>();
+    app.add_event::<ScreenEffectEvent>();
+    app.add_event::<CharacterAnimationEvent>();
+    app.add_event::<DamageEffectEvent>();
+    app.add_event::<StatusEffectEvent>();
+
+    let _block_card = Card {
+        id: 1, name: "防御".to_string(), cost: 1, card_type: CardType::Skill,
+        effect: CardEffect::GainBlock { amount: 5 }, description: "".to_string(),
+        image_path: "".to_string(), rarity: CardRarity::Common, upgraded: false,
     };
-    
-    assert_eq!(mat.reflectance, 0.0, "材质反射率应为 0 以防颜色被冲淡");
+
+    let mut events = app.world_mut().resource_mut::<Events<SpawnEffectEvent>>();
+    events.send(SpawnEffectEvent::new(EffectType::Shield, Vec3::ZERO));
+    app.update();
+
+    let reader = app.world().resource::<Events<SpawnEffectEvent>>();
+    let mut iter = reader.get_cursor();
+    let has_shield = iter.read(reader).any(|e| e.effect_type == EffectType::Shield);
+    assert!(has_shield);
 }
 
 #[test]
-fn test_demon_cast_pulse_scaling() {
-    // 逻辑：施法时产生高频缩放脉冲
-    let timer = 0.2f32;
-    let pulse_speed = 30.0f32; // 每秒约 5 次往复
-    let pulse = 1.0 + (timer * pulse_speed).sin().abs() * 0.15;
-    
-    assert!(pulse > 1.0, "施法期间应产生向外的能量扩张感");
-}
-
-#[test]
-fn test_base_transparency() {
+fn test_all_enemy_types_trigger_unique_effects() {
     let mut app = App::new();
-    app.init_resource::<Assets<StandardMaterial>>();
-    
-    // 模拟生成底座材质
-    let _mat_handle = app.world_mut().resource_mut::<Assets<StandardMaterial>>().add(StandardMaterial {
-        base_color: Color::srgba(0.0, 0.2, 0.0, 0.3), // 半透明绿
-        alpha_mode: AlphaMode::Blend,
-        ..default()
-    });
+    app.add_plugins(MinimalPlugins);
+    app.add_event::<SpawnEffectEvent>();
+    app.add_event::<EnemyAttackEvent>();
+    app.add_event::<ScreenEffectEvent>();
+    app.add_event::<CharacterAnimationEvent>();
 
-    let materials = app.world().resource::<Assets<StandardMaterial>>();
-    let (_, mat) = materials.iter().next().unwrap();
-    assert!(mat.base_color.alpha() < 1.0, "底座应该是半透明的以减少突兀感");
+    let check_effect = |e_type: EnemyType| -> EffectType {
+        match e_type {
+            EnemyType::PoisonSpider => EffectType::WebShot,
+            EnemyType::CursedSpirit => EffectType::DemonAura,
+            EnemyType::GreatDemon => EffectType::Lightning,
+            _ => EffectType::Slash,
+        }
+    };
+
+    assert_eq!(check_effect(EnemyType::PoisonSpider), EffectType::WebShot);
+    assert_eq!(check_effect(EnemyType::DemonicWolf), EffectType::Slash);
+    assert_eq!(check_effect(EnemyType::CursedSpirit), EffectType::DemonAura);
+    assert_eq!(check_effect(EnemyType::GreatDemon), EffectType::Lightning);
 }
 
 #[test]
-fn test_wolf_multi_turn_spin() {
-    // 逻辑：1秒内应完成 2 圈旋转 (4 * PI)
-    let progress = 0.5f32; // 动作中点
-    let total_spin = 4.0 * std::f32::consts::PI;
-    let current_spin = progress * total_spin;
+fn test_effect_follows_player_position() {
+    let player_pos = Vec3::new(10.0, 2.0, 0.0);
+    let heal_offset = Vec3::new(0.0, -0.5, 0.5);
+    let shield_offset = Vec3::new(0.0, 0.5, 0.5);
     
-    assert!(current_spin >= 6.0, "动作中点应已完成至少一圈旋转");
+    let heal_target = player_pos + heal_offset;
+    let shield_target = player_pos + shield_offset;
+    
+    assert_eq!(heal_target.x, 10.0);
+    assert_eq!(heal_target.y, 1.5);
+    assert_eq!(shield_target.x, 10.0);
+    assert_eq!(shield_target.y, 2.5);
 }

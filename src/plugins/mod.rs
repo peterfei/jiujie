@@ -1093,14 +1093,14 @@ fn setup_combat_ui(
     mut victory_delay: ResMut<VictoryDelay>,
     player_query: Query<(Entity, &Player, &crate::components::Cultivation)>,
     map_progress: Res<MapProgress>,
-    existing_ui: Query<Entity, With<CombatUiRoot>>, // 注入现有 UI 查询
+    existing_ui: Query<Entity, With<CombatUiRoot>>,
+    map_ui: Query<Entity, With<MapUiRoot>>, // 新增：清理地图残留
 ) {
     info!("【战斗】进入战场，众妖环伺");
     
-    // 防御性清理：确保没有任何残留的战斗 UI
-    for entity in existing_ui.iter() {
-        commands.entity(entity).despawn_recursive();
-    }
+    // 防御性清理：确保没有任何残留的 UI (包括战斗和地图)
+    for entity in existing_ui.iter() { commands.entity(entity).despawn_recursive(); }
+    for entity in map_ui.iter() { commands.entity(entity).despawn_recursive(); }
     
     if victory_delay.active { victory_delay.active = false; victory_delay.elapsed = 0.0; }
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
@@ -1155,7 +1155,7 @@ fn setup_combat_ui(
             commands.entity(root_entity).with_children(|root| {
                 root.spawn((
                     Node { position_type: PositionType::Absolute, left: Val::Px(ui_left), bottom: Val::Px(480.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() },
-                    EnemyStatusUi { enemy_id },
+                    EnemyStatusUi { owner: enemy_entity },
                     ZIndex(150), // 提升层级，确保在特效上方
                 )).with_children(|p| {
                     p.spawn((Text::new(name), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE)));
@@ -1268,7 +1268,7 @@ fn setup_combat_ui(
             commands.entity(root_entity).with_children(|root| {
                 root.spawn((
                     Node { position_type: PositionType::Absolute, left: Val::Px(ui_left), bottom: Val::Px(480.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() },
-                    EnemyStatusUi { enemy_id: enemy.id },
+                    EnemyStatusUi { owner: enemy_entity },
                     ZIndex(150),
                 )).with_children(|p| {
                     p.spawn((Text::new(enemy.name.clone()), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE)));
@@ -1543,12 +1543,6 @@ fn setup_combat_ui(
             p.spawn((Text::new("归墟: 0"), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE), DiscardPileText));
         });
     });
-
-    commands.spawn((
-                        ParticleEmitter::new(25.0, EffectType::ManaFlow.config()).with_type(EffectType::ManaFlow),
-        
-        Transform::from_xyz(-495.0, -195.0, 950.0), GlobalTransform::default(), EmitterMarker,
-    ));
 }
 
 pub fn cleanup_combat_ui(
@@ -1556,16 +1550,28 @@ pub fn cleanup_combat_ui(
     query: Query<Entity, With<CombatUiRoot>>,
     player_query: Query<&Player>,
     mut player_deck: ResMut<PlayerDeck>,
+    // 增加对残留实体的查询
+    enemy_query: Query<Entity, With<Enemy>>,
+    sprite_query: Query<Entity, With<SpriteMarker>>,
+    particle_query: Query<Entity, With<ParticleMarker>>,
+    emitter_query: Query<Entity, With<EmitterMarker>>,
+    piles_query: Query<Entity, Or<(With<DrawPile>, With<DiscardPile>, With<Hand>)>>,
 ) {
-    // 1. 持久化同步：在销毁实体前，保存数值
+    // 1. 持久化同步
     if let Ok(player) = player_query.get_single() {
         player_deck.update_from_player(player);
         info!("【持久化】修士状态已同步至存档：HP={}, 灵石={}", player_deck.hp, player_deck.gold);
     }
 
-    for entity in query.iter() {
-        commands.entity(entity).despawn_recursive();
-    }
+    // 2. 彻底肃清战斗实体
+    for entity in query.iter() { commands.entity(entity).despawn_recursive(); }
+    for entity in enemy_query.iter() { commands.entity(entity).despawn_recursive(); }
+    for entity in sprite_query.iter() { commands.entity(entity).despawn_recursive(); }
+    for entity in particle_query.iter() { commands.entity(entity).despawn_recursive(); }
+    for entity in emitter_query.iter() { commands.entity(entity).despawn_recursive(); }
+    for entity in piles_query.iter() { commands.entity(entity).despawn_recursive(); }
+    
+    info!("【战斗清理】已彻底销毁所有战斗相关实体");
 }
 
 /// 处理战斗界面按钮点击
@@ -1699,10 +1705,16 @@ fn process_enemy_turn_queue(
                             let broken = player.block > 0 && final_damage >= player.block;
                             player.take_damage(final_damage);
                             attack_events.send(EnemyAttackEvent::new(final_damage, broken));
-                            effect_events.send(SpawnEffectEvent::new(EffectType::Hit, Vec3::new(-3.5, 0.0, 0.2)));
-                            screen_events.send(ScreenEffectEvent::Shake { trauma: 0.4, decay: 4.0 });
+                            
+                            // [关键修复] 恢复敌人特色攻击特效
+                            let attack_effect = match enemy.enemy_type {
+                                EnemyType::PoisonSpider => EffectType::WebShot,
+                                _ => EffectType::Slash,
+                            };
+                            effect_events.send(SpawnEffectEvent::new(attack_effect, Vec3::new(-3.5, 0.0, 0.5)));
+                            
+                            screen_events.send(ScreenEffectEvent::Shake { trauma: 0.6, decay: 6.0 });
 
-                            // [关键修复] 死亡判定与游戏结束
                             if player.hp <= 0 {
                                 info!("【战报】修仙者陨落！正在清理战场...");
                                 next_state.set(GameState::GameOver);
@@ -1712,7 +1724,9 @@ fn process_enemy_turn_queue(
                         }
                     }
                     EnemyIntent::Defend { .. } => {
-                        effect_events.send(SpawnEffectEvent::new(EffectType::Ice, Vec3::new(2.5, 1.0, 0.2)));
+                        // [大作级] 敌人护盾特效
+                        // 暂时使用固定位置，后续可优化为动态位置
+                        effect_events.send(SpawnEffectEvent::new(EffectType::Shield, Vec3::new(2.5, 0.5, 0.5)));
                     }
                     _ => {}
                 }
@@ -1734,11 +1748,13 @@ fn process_enemy_turn_queue(
 
 /// 更新战斗UI显示
 fn update_combat_ui(
+    mut commands: Commands,
     time: Res<Time>,
-    player_query: Query<&Player, Changed<Player>>,
-    enemy_query: Query<&Enemy, Changed<Enemy>>,
+    player_query: Query<&Player>, // 移除 Changed，确保缓冲条每帧都能平滑下降
+    enemy_query: Query<&Enemy>, // 移除 Changed，否则静止的敌人会被误判为不存在
     mut hp_bar_query: Query<(&mut Node, Has<PlayerHpBarMarker>, Has<PlayerHpBufferMarker>, Option<&EnemyHpBarMarker>, Option<&EnemyHpBufferMarker>)>,
     mut intent_icon_query: Query<(&IntentIconMarker, &mut ImageNode, &mut Visibility)>,
+    ui_query: Query<(Entity, &EnemyStatusUi)>, // 新增 UI 查询
     asset_server: Res<AssetServer>,
     mut text_queries: ParamSet<(
         Query<&mut Text, With<PlayerHpText>>,
@@ -1843,6 +1859,20 @@ fn update_combat_ui(
             };
             img.image = asset_server.load(tex);
             *vis = visible;
+        }
+    }
+
+    // [关键修复] 自动清理已死亡敌人的 UI
+    // 现在直接通过 owner 实体引用检查，无需遍历匹配 ID，效率和安全性大幅提升
+    for (ui_entity, status_ui) in ui_query.iter() {
+        if let Ok(enemy) = enemy_query.get(status_ui.owner) {
+            // 实体存在，检查生命值
+            if enemy.hp <= 0 {
+                commands.entity(ui_entity).despawn_recursive();
+            }
+        } else {
+            // 实体已不存在 (被 despawn) -> 清理 UI
+            commands.entity(ui_entity).despawn_recursive();
         }
     }
 }
@@ -2170,8 +2200,26 @@ fn apply_card_effect(
                             }
                         }
                     }
-                    screen_events.send(ScreenEffectEvent::Shake { trauma: 0.35, decay: 5.0 });
+                    // [大作级] 斩击震动参数微调
+                    effect_events.send(SpawnEffectEvent::new(EffectType::Slash, Vec3::new(0.0, 0.0, 5.0))); // 全屏斩击感
+                    screen_events.send(ScreenEffectEvent::Shake { trauma: 0.5, decay: 8.0 });
                 }
+            }
+        }
+        CardEffect::GainBlock { amount } => {
+            if let Ok((mut player, _)) = player_query.get_single_mut() {
+                player.block += *amount;
+                info!("【卡牌】获得 {} 点护甲", amount);
+                // [大作级] 护盾特效
+                effect_events.send(SpawnEffectEvent::new(EffectType::Shield, Vec3::new(-3.5, 0.5, 0.5)));
+            }
+        }
+        CardEffect::Heal { amount } => {
+            if let Ok((mut player, _)) = player_query.get_single_mut() {
+                player.heal(*amount);
+                info!("【卡牌】回复 {} 点生命", amount);
+                // [大作级] 治疗特效
+                effect_events.send(SpawnEffectEvent::new(EffectType::Heal, Vec3::new(-3.5, -0.5, 0.5)));
             }
         }
         CardEffect::DealAoEDamage { amount } => {
@@ -2254,21 +2302,7 @@ fn apply_card_effect(
                 }
             }
         }
-        CardEffect::GainBlock { amount } => {
-            if let Ok((mut player, _)) = player_query.get_single_mut() {
-                player.gain_block(*amount);
-                info!("【卡牌】获得 {} 点护甲，当前: {}", amount, player.block);
-                effect_events.send(SpawnEffectEvent::new(EffectType::Ice, Vec3::new(-3.5, 1.0, 0.5)).burst(25));
-            }
-        }
-        CardEffect::Heal { amount } => {
-            if let Ok((mut player, _)) = player_query.get_single_mut() {
-                let max_hp = player.max_hp;
-                player.hp = (player.hp + amount).min(max_hp);
-                info!("【卡牌】回复 {} 点生命，当前道行: {}", amount, player.hp);
-                effect_events.send(SpawnEffectEvent::new(EffectType::Heal, Vec3::new(-3.5, 1.0, 0.5)).burst(20));
-            }
-        }
+
         CardEffect::DrawCards { amount } => {
             let mut drawn = 0;
             if let Ok(mut draw_pile) = draw_pile_query.get_single_mut() {
@@ -3066,6 +3100,7 @@ fn handle_game_over_clicks(
     mut cultivation_query: Query<&mut crate::components::Cultivation>,
     mut deck: ResMut<PlayerDeck>,
     mut relics: ResMut<RelicCollection>,
+    mut map_progress: ResMut<MapProgress>, // 新增
     button_queries: Query<(&Interaction, &RestartButton), Changed<Interaction>>,
 ) {
     for (interaction, _) in button_queries.iter() {
@@ -3086,9 +3121,12 @@ fn handle_game_over_clicks(
             }
 
             // 4. 重置牌组与遗物
-            deck.reset(); // 使用 reset 方法，同时重置 HP/Gold/卡牌
+            deck.reset(); 
             relics.relic.clear();
             relics.add_relic(crate::components::relic::Relic::burning_blood());
+
+            // 5. 重置地图进度 (关键修复)
+            map_progress.reset();
 
             next_state.set(GameState::Prologue);
             return;

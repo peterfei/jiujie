@@ -234,7 +234,7 @@ impl EmitterConfig {
 
     pub fn web_shot() -> Self {
         Self {
-            lifetime: (0.4, 0.6), size: (3.0, 8.0), start_color: Color::srgba(0.9, 0.9, 1.0, 0.9),
+            lifetime: (0.8, 1.2), size: (15.0, 25.0), start_color: Color::srgba(0.9, 0.9, 1.0, 0.9),
             end_color: Color::srgba(0.7, 0.7, 0.8, 0.0), speed: (250.0, 400.0),
             angle: (std::f32::consts::PI * 0.9, std::f32::consts::PI * 1.1),
             gravity: Vec2::new(0.0, -20.0), rotation_speed: (0.0, 0.0), shape: ParticleShape::Line,
@@ -259,6 +259,26 @@ impl EmitterConfig {
         }
     }
 
+    /// 斩击剑气 - 极速的线性爆发
+    pub fn slash() -> Self {
+        Self {
+            lifetime: (0.2, 0.4), size: (5.0, 20.0), start_color: Color::srgba(1.0, 0.2, 0.2, 1.0),
+            end_color: Color::srgba(0.8, 0.0, 0.0, 0.0), speed: (250.0, 450.0),
+            angle: (-std::f32::consts::PI / 6.0, std::f32::consts::PI / 6.0), // 集中向前
+            gravity: Vec2::ZERO, rotation_speed: (0.0, 0.0), shape: ParticleShape::Line,
+        }
+    }
+
+    /// 灵能护盾 - 持续的环绕光晕
+    pub fn shield() -> Self {
+        Self {
+            lifetime: (1.0, 1.5), size: (10.0, 25.0), start_color: Color::srgba(0.2, 0.8, 1.0, 0.6),
+            end_color: Color::srgba(0.0, 0.4, 0.8, 0.0), speed: (10.0, 30.0),
+            angle: (0.0, std::f32::consts::PI * 2.0), gravity: Vec2::ZERO,
+            rotation_speed: (-1.0, 1.0), shape: ParticleShape::Circle,
+        }
+    }
+
     pub fn spawn_particle(&self, position: Vec3, effect_type: EffectType) -> Particle {
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -280,7 +300,7 @@ impl EmitterConfig {
 pub enum ParticleShape { Circle, Square, Line, Triangle, Star }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum EffectType { Fire, Ice, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit, SwordEnergy, DemonAura, WebShot, WanJian, ImpactSpark }
+pub enum EffectType { Fire, Ice, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit, SwordEnergy, DemonAura, WebShot, WanJian, ImpactSpark, Slash, Shield }
 
 impl EffectType {
     pub fn config(&self) -> EmitterConfig {
@@ -299,6 +319,8 @@ impl EffectType {
             EffectType::WebShot => EmitterConfig::web_shot(),
             EffectType::WanJian => EmitterConfig::wan_jian(),
             EffectType::ImpactSpark => EmitterConfig::impact_spark(),
+            EffectType::Slash => EmitterConfig::slash(),
+            EffectType::Shield => EmitterConfig::shield(),
         }
     }
 }

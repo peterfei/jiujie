@@ -172,7 +172,7 @@ pub struct IntentIconMarker {
 
 #[derive(Component)]
 pub struct EnemyStatusUi {
-    pub enemy_id: u32,
+    pub owner: Entity,
 }
 
 #[derive(Component)]

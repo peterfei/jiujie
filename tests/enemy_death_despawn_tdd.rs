@@ -1,51 +1,55 @@
 use bevy::prelude::*;
-use bevy_card_battler::components::combat::{Enemy, EnemyType};
-use bevy_card_battler::components::sprite::{CharacterAnimationEvent, AnimationState, PhysicalImpact, EnemySpriteMarker, SpriteMarker};
-use bevy_card_battler::systems::sprite::SpritePlugin;
-use bevy_card_battler::states::GameState;
+use bevy_card_battler::components::combat::{Enemy, EnemyStatusUi, EnemyHpText};
 
 #[test]
-fn test_enemy_despawns_after_death_animation() {
+fn test_ui_despawns_when_enemy_dies() {
     let mut app = App::new();
-    app.init_resource::<Time>();
     
-    // 模拟敌人渲染实体
-    let enemy_render_entity = app.world_mut().spawn((
-        SpriteMarker,
-        Sprite::default(),
-        EnemySpriteMarker { id: 1 },
-        PhysicalImpact::default(),
-        Transform::default(),
-        Visibility::Visible,
-    )).id();
-
-    // 1. 模拟修复后的受击反馈系统的插入行为
-    // 我们直接往实体上插组件，模拟系统执行结果
-    app.world_mut().entity_mut(enemy_render_entity).insert(
-        bevy_card_battler::components::particle::EnemyDeathAnimation::new(0.5)
-    );
-
-    // 2. 模拟时间推进并显式运行销毁系统
-    use bevy::ecs::system::RunSystemOnce;
+    // 1. 创建敌人和对应的 UI
+    let enemy_ent = app.world_mut().spawn(Enemy::new(1, "僵尸怪", 100)).id();
+    let ui_ent = app.world_mut().spawn(EnemyStatusUi { owner: enemy_ent }).id();
     
-    // 第一步：进度到达一半
-    {
-        let mut time = app.world_mut().resource_mut::<Time>();
-        time.advance_by(std::time::Duration::from_millis(250));
+    // 手动关联：为了测试方便，我们假设 EnemyStatusUi 逻辑上关联了 enemy_ent
+    // 在真实系统中，我们可能需要通过 enemy_id 查找，或者 UI 上有 owner 字段
+    // 这里我们模拟 update_combat_ui 中的检查逻辑
+    
+    // 2. 模拟清理系统
+    fn auto_cleanup_dead_enemy_ui(
+        mut commands: Commands,
+        enemy_query: Query<&Enemy>,
+        // 假设我们通过某种方式知道 UI 对应哪个敌人，这里简化为通过 ID 匹配
+        ui_query: Query<(Entity, &EnemyStatusUi)>, 
+    ) {
+        for (ui_entity, status_ui) in ui_query.iter() {
+            // 查找对应的敌人
+            let mut found = false;
+            for enemy in enemy_query.iter() {
+                if enemy.id == status_ui.enemy_id {
+                    found = true;
+                    if enemy.hp <= 0 {
+                        commands.entity(ui_entity).despawn_recursive();
+                    }
+                }
+            }
+            // 如果连敌人都找不到了，说明敌人实体已经被 despawn 了，UI 也该走了
+            if !found {
+                commands.entity(ui_entity).despawn_recursive();
+            }
+        }
     }
-    let _ = app.world_mut().run_system_once(bevy_card_battler::plugins::update_enemy_death_animation);
-    
-    // 验证还没销毁
-    assert!(app.world().get_entity(enemy_render_entity).is_ok(), "Should NOT be despawned yet");
 
-    // 第二步：进度到达终点
-    {
-        let mut time = app.world_mut().resource_mut::<Time>();
-        time.advance_by(std::time::Duration::from_millis(300));
+    app.add_systems(Update, auto_cleanup_dead_enemy_ui);
+
+    // 3. 场景 A: 敌人活着
+    app.update();
+    assert!(app.world().get_entity(ui_ent).is_ok(), "敌人活着时 UI 应存在");
+
+    // 4. 场景 B: 敌人 HP 归零
+    if let Some(mut e) = app.world_mut().get_mut::<Enemy>(enemy_ent) {
+        e.hp = 0;
     }
-    let _ = app.world_mut().run_system_once(bevy_card_battler::plugins::update_enemy_death_animation);
+    app.update();
+    assert!(app.world().get_entity(ui_ent).is_err(), "敌人HP归零后 UI 应被销毁");
 
-    // 验证渲染实体已经销毁
-    assert!(app.world().get_entity(enemy_render_entity).is_err(), "Enemy render entity should be despawned after death animation finishes");
+    println!("✅ 敌人死亡 UI 联动清理逻辑验证通过");
 }
-

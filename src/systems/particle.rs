@@ -113,8 +113,9 @@ fn spawn_particle_entity(commands: &mut Commands, assets: &ParticleAssets, parti
         ZIndex(5),
         particle,
         ParticleMarker,
-        // 添加 Transform 和 GlobalTransform 以支持 2D 旋转
-        Transform::from_rotation(Quat::from_rotation_z(initial_rotation)),
+        // 添加 Transform 和 GlobalTransform 以支持 2D 旋转和微小的 Z 轴随机偏移
+        Transform::from_translation(Vec3::new(0.0, 0.0, rand::random::<f32>() * 0.01))
+            .with_rotation(Quat::from_rotation_z(initial_rotation)),
         GlobalTransform::default(),
     ));
 }
