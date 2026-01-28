@@ -209,7 +209,15 @@ pub struct CombatUiRoot;
 pub struct PlayerHpBarMarker;
 
 #[derive(Component)]
+pub struct PlayerHpBufferMarker;
+
+#[derive(Component)]
 pub struct EnemyHpBarMarker {
+    pub owner: Entity,
+}
+
+#[derive(Component)]
+pub struct EnemyHpBufferMarker {
     pub owner: Entity,
 }
 

@@ -8,6 +8,8 @@ use crate::components::{
     CombatState, TurnPhase, NodeType, Realm, Cultivation, MapNode, MapProgress, PlayerDeck, DeckConfig, CardPool, 
     CharacterType, EnemyAttackEvent, 
     SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, 
+    PlayerHpBufferMarker, EnemyHpBarMarker, EnemyHpBufferMarker, 
+
     IntentIconMarker, 
 
     ScreenWarning, 
@@ -1156,7 +1158,7 @@ fn setup_combat_ui(
                 )).with_children(|p| {
                     p.spawn((Text::new(name), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE)));
                     
-                    // HP & Block 栏
+                    // HP & Block 栏 (三层血条重构)
                     p.spawn(Node {
                         flex_direction: FlexDirection::Row,
                         align_items: AlignItems::Center,
@@ -1164,11 +1166,34 @@ fn setup_combat_ui(
                         ..default()
                     }).with_children(|row| {
                         row.spawn((
-                            Text::new(format!("HP: {}/{}", hp, hp)),
-                            TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() },
-                            TextColor(Color::srgb(1.0, 0.3, 0.3)),
+                            Text::new(format!("{}/{}", hp, hp)),
+                            TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() },
+                            TextColor(Color::WHITE),
                             EnemyHpText { owner: enemy_entity },
                         ));
+
+                        // 血条主体
+                        row.spawn((
+                            Node {
+                                width: Val::Px(120.0),
+                                height: Val::Px(12.0),
+                                border: UiRect::all(Val::Px(1.5)),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0.15, 0.15, 0.15)),
+                            BorderColor(Color::srgb(0.4, 0.4, 0.4)),
+                        )).with_children(|bar| {
+                            bar.spawn((
+                                Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+                                BackgroundColor(Color::srgb(0.6, 0.2, 0.2)),
+                                EnemyHpBufferMarker { owner: enemy_entity },
+                            ));
+                            bar.spawn((
+                                Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+                                BackgroundColor(Color::srgb(0.9, 0.1, 0.1)),
+                                EnemyHpBarMarker { owner: enemy_entity },
+                            ));
+                        });
                         
                         // 护甲图标容器 (使用 Display 控制)
                         row.spawn((
@@ -1176,6 +1201,7 @@ fn setup_combat_ui(
                                 display: Display::None, // 初始隐藏
                                 width: Val::Px(28.0), height: Val::Px(28.0),
                                 justify_content: JustifyContent::Center, align_items: AlignItems::Center,
+                                margin: UiRect::left(Val::Px(-10.0)),
                                 ..default()
                             },
                             ImageNode::new(asset_server.load("textures/cards/defense.png")).with_color(Color::srgb(0.4, 0.7, 1.0)), // 蓝色护盾图标
@@ -1245,7 +1271,7 @@ fn setup_combat_ui(
                 )).with_children(|p| {
                     p.spawn((Text::new(enemy.name.clone()), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE)));
                     
-                    // HP & Block 栏
+                    // HP & Block 栏 (三层血条重构)
                     p.spawn(Node {
                         flex_direction: FlexDirection::Row,
                         align_items: AlignItems::Center,
@@ -1253,11 +1279,34 @@ fn setup_combat_ui(
                         ..default()
                     }).with_children(|row| {
                         row.spawn((
-                            Text::new(format!("HP: {}/{}", enemy.hp, enemy.max_hp)),
-                            TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() },
-                            TextColor(Color::srgb(1.0, 0.3, 0.3)),
+                            Text::new(format!("{}/{}", enemy.hp, enemy.max_hp)),
+                            TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() },
+                            TextColor(Color::WHITE),
                             EnemyHpText { owner: enemy_entity },
                         ));
+
+                        // 血条主体
+                        row.spawn((
+                            Node {
+                                width: Val::Px(120.0),
+                                height: Val::Px(12.0),
+                                border: UiRect::all(Val::Px(1.5)),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0.15, 0.15, 0.15)),
+                            BorderColor(Color::srgb(0.4, 0.4, 0.4)),
+                        )).with_children(|bar| {
+                            bar.spawn((
+                                Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+                                BackgroundColor(Color::srgb(0.6, 0.2, 0.2)),
+                                EnemyHpBufferMarker { owner: enemy_entity },
+                            ));
+                            bar.spawn((
+                                Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+                                BackgroundColor(Color::srgb(0.9, 0.1, 0.1)),
+                                EnemyHpBarMarker { owner: enemy_entity },
+                            ));
+                        });
                         
                         // 护甲图标容器
                         row.spawn((
@@ -1265,6 +1314,7 @@ fn setup_combat_ui(
                                 display: Display::None,
                                 width: Val::Px(28.0), height: Val::Px(28.0),
                                 justify_content: JustifyContent::Center, align_items: AlignItems::Center,
+                                margin: UiRect::left(Val::Px(-10.0)),
                                 ..default()
                             },
                             ImageNode::new(asset_server.load("textures/cards/defense.png")).with_color(Color::srgb(0.4, 0.7, 1.0)),
@@ -1417,27 +1467,31 @@ fn setup_combat_ui(
                         });
                     }
 
-                    // B. 血条主体
+                    // B. 血条主体 (三层结构：深灰槽、亮红缓冲、鲜红当前)
                     row.spawn((
                         Node {
                             width: Val::Px(200.0),
-                            height: Val::Px(20.0),
-                            border: UiRect::all(Val::Px(2.0)),
+                            height: Val::Px(18.0),
+                            border: UiRect::all(Val::Px(1.5)),
                             ..default()
                         },
-                        BackgroundColor(Color::srgb(0.2, 0.0, 0.0)), // 暗红色背景
-                        BorderColor(Color::BLACK),
+                        BackgroundColor(Color::srgb(0.15, 0.15, 0.15)), // 深灰色槽，消除“黑影”感
+                        BorderColor(Color::srgb(0.4, 0.4, 0.4)), // 灰色边框
                     )).with_children(|bar| {
-                        // 实际血量填充
                         let hp_percent = (player.hp as f32 / player.max_hp as f32) * 100.0;
+                        
+                        // 1. 缓冲层
                         bar.spawn((
-                            Node {
-                                width: Val::Percent(hp_percent),
-                                height: Val::Percent(100.0),
-                                ..default()
-                            },
-                            BackgroundColor(Color::srgb(0.8, 0.1, 0.1)), // 鲜红色
-                            PlayerHpBarMarker, // 用于后续动态更新宽度
+                            Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(hp_percent), height: Val::Percent(100.0), ..default() },
+                            BackgroundColor(Color::srgb(0.6, 0.2, 0.2)), // 缓冲暗红
+                            PlayerHpBufferMarker,
+                        ));
+
+                        // 2. 当前血量
+                        bar.spawn((
+                            Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(hp_percent), height: Val::Percent(100.0), ..default() },
+                            BackgroundColor(Color::srgb(0.9, 0.1, 0.1)), // 鲜亮红
+                            PlayerHpBarMarker,
                         ));
                     });
 
@@ -1715,9 +1769,10 @@ fn process_enemy_turn_queue(
 
 /// 更新战斗UI显示
 fn update_combat_ui(
+    time: Res<Time>,
     player_query: Query<&Player, Changed<Player>>,
     enemy_query: Query<&Enemy, Changed<Enemy>>,
-    mut hp_bar_query: Query<&mut Node, With<PlayerHpBarMarker>>,
+    mut hp_bar_query: Query<(&mut Node, Has<PlayerHpBarMarker>, Has<PlayerHpBufferMarker>, Option<&EnemyHpBarMarker>, Option<&EnemyHpBufferMarker>)>,
     mut intent_icon_query: Query<(&IntentIconMarker, &mut ImageNode, &mut Visibility)>,
     asset_server: Res<AssetServer>,
     mut text_queries: ParamSet<(
@@ -1736,18 +1791,51 @@ fn update_combat_ui(
         if let Ok(mut t) = text_queries.p2().get_single_mut() { t.0 = format!("护甲: {}", p.block); }
         if let Ok(mut t) = text_queries.p3().get_single_mut() { t.0 = format!("道行: {}/{}", p.hp, p.max_hp); }
         if let Ok(mut t) = text_queries.p4().get_single_mut() { t.0 = format!("灵石: {}", p.gold); }
+    }
 
-        // 同步血条宽度
-        if let Ok(mut node) = hp_bar_query.get_single_mut() {
-            let hp_percent = (p.hp as f32 / p.max_hp as f32) * 100.0;
-            node.width = Val::Percent(hp_percent.clamp(0.0, 100.0));
+    // 全局血条同步 (Player + Enemies)
+    let p_data = player_query.get_single().ok();
+    
+    for (mut node, is_p_bar, is_p_buf, e_bar_opt, e_buf_opt) in hp_bar_query.iter_mut() {
+        // A. 处理玩家血条
+        if is_p_bar || is_p_buf {
+            if let Some(p) = p_data {
+                let hp_percent = (p.hp as f32 / p.max_hp as f32) * 100.0;
+                if is_p_bar {
+                    node.width = Val::Percent(hp_percent.clamp(0.0, 100.0));
+                } else {
+                    if let Val::Percent(curr_w) = node.width {
+                        if curr_w > hp_percent {
+                            let new_w = (curr_w - 40.0 * time.delta_secs()).max(hp_percent);
+                            node.width = Val::Percent(new_w);
+                        } else { node.width = Val::Percent(hp_percent); }
+                    }
+                }
+            }
+        }
+        // B. 处理敌人血条
+        else if let Some(e_bar) = e_bar_opt {
+            if let Ok(enemy) = enemy_query.get(e_bar.owner) {
+                let hp_percent = (enemy.hp as f32 / enemy.max_hp as f32) * 100.0;
+                node.width = Val::Percent(hp_percent.clamp(0.0, 100.0));
+            }
+        } else if let Some(e_buf) = e_buf_opt {
+            if let Ok(enemy) = enemy_query.get(e_buf.owner) {
+                let hp_percent = (enemy.hp as f32 / enemy.max_hp as f32) * 100.0;
+                if let Val::Percent(curr_w) = node.width {
+                    if curr_w > hp_percent {
+                        let new_w = (curr_w - 40.0 * time.delta_secs()).max(hp_percent);
+                        node.width = Val::Percent(new_w);
+                    } else { node.width = Val::Percent(hp_percent); }
+                }
+            }
         }
     }
 
-    // 1. 同步更新所有敌人的 HP
+    // 1. 同步更新所有敌人的 HP 数值
     for (marker, mut text) in text_queries.p5().iter_mut() {
         if let Ok(enemy) = enemy_query.get(marker.owner) {
-            text.0 = format!("HP: {}/{}", enemy.hp, enemy.max_hp);
+            text.0 = format!("{}/{}", enemy.hp, enemy.max_hp);
         }
     }
 
