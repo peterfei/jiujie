@@ -1718,18 +1718,9 @@ pub fn process_heavenly_strike_cinematic(
     // --- 阶段 A: 持续预兆 (0.0s - 2.2s) ---
     if elapsed < 2.2 {
         if cinematic.effect_timer.just_finished() {
-            use rand::Rng;
-            let mut rng = rand::thread_rng();
-            let enemy_data: Vec<_> = enemy_sprite_query.iter().collect();
-            if !enemy_data.is_empty() {
-                let target_idx = rng.gen_range(0..enemy_data.len());
-                let (_, _, transform) = enemy_data[target_idx];
-                let pos = transform.translation;
-                
-                effect_events.send(SpawnEffectEvent::new(EffectType::Lightning, pos).burst(15));
-                sfx_events.send(PlaySfxEvent::with_volume(SfxType::LightningStrike, 0.4));
-                screen_events.send(ScreenEffectEvent::Shake { trauma: 0.1, decay: 4.0 });
-            }
+            // 预兆期不再降下真实闪电，改为灵气涌动和轻微震动
+            screen_events.send(ScreenEffectEvent::Shake { trauma: 0.1, decay: 5.0 });
+            sfx_events.send(PlaySfxEvent::with_volume(SfxType::LightningStrike, 0.2));
         }
     }
 
@@ -1739,7 +1730,7 @@ pub fn process_heavenly_strike_cinematic(
         if elapsed >= strike_time && cinematic.flash_count == i as u32 {
             info!("【天象演出】闪击 {}！", i + 1);
             
-            // 每次闪击的视觉反馈 (透明度从 0.7 递增到 1.0)
+            // 1. 全屏视觉反馈
             screen_events.send(ScreenEffectEvent::Flash { 
                 color: Color::srgba(0.9, 0.9, 1.0, 0.7 + (i as f32 * 0.15)), 
                 duration: 0.2 
@@ -1750,7 +1741,12 @@ pub fn process_heavenly_strike_cinematic(
             });
             sfx_events.send(PlaySfxEvent::with_volume(SfxType::LightningStrike, 1.0));
 
-            // 只有最后一次闪击 (2.8s) 执行最终伤害与环境切换
+            // 2. [关键修复] 在所有存活敌人位置降下真实折线闪电
+            for (_, _, transform) in enemy_sprite_query.iter() {
+                effect_events.send(SpawnEffectEvent::new(EffectType::Lightning, transform.translation));
+            }
+
+            // 3. 只有最后一次闪击 (2.8s) 执行最终伤害与环境切换
             if i == 2 && !cinematic.damage_applied {
                 if cinematic.environment_name == "雷暴" {
                     commands.insert_resource(Environment::thunder_storm());
@@ -2412,10 +2408,7 @@ fn handle_card_play(
                                 effect_events.send(SpawnEffectEvent::new(EffectType::SwordEnergy, Vec3::new(-3.5, 1.0, 0.2)));
                                 crate::components::sprite::AnimationState::ImperialSword
                             } else if card.name.contains("天象") {
-                                // 天象法术：原地施法
-                                if card.name.contains("天象·引雷术") {
-                                    effect_events.send(SpawnEffectEvent::new(EffectType::Lightning, Vec3::new(-3.5, 1.0, 0.2)));
-                                }
+                                // 天象法术：原地施法 (不再即时产生雷击)
                                 crate::components::sprite::AnimationState::HeavenCast
                             } else {
                                 // 近战类执行冲刺
