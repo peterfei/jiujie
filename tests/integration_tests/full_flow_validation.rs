@@ -7,7 +7,8 @@ use crate::test_utils::*;
 use bevy::prelude::*;
 use bevy_card_battler::components::{Player, MapNode, NodeType, MapProgress};
 use bevy_card_battler::states::GameState;
-use bevy_card_battler::plugins::{MapUiRoot, CombatUiRoot};
+use bevy_card_battler::components::combat::CombatUiRoot;
+use bevy_card_battler::plugins::MapUiRoot;
 
 #[test]
 fn test_e2e_full_shop_and_combat_flow() {

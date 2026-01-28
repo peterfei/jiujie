@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_card_battler::components::map::{MapProgress, NodeType};
+use bevy_card_battler::components::map::{MapNode, MapProgress, NodeType};
 
 #[test]
 fn test_completed_node_is_not_highlighted_as_current() {

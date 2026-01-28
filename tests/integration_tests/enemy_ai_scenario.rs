@@ -73,6 +73,8 @@ fn scenario_ai_003_demonic_wolf_intent_selection() {
             EnemyIntent::Defend { .. } => defend_count += 1,
             EnemyIntent::Buff { .. } => buff_count += 1,
             EnemyIntent::Debuff { .. } => {},
+            EnemyIntent::Curse { .. } => {},
+            EnemyIntent::Seal { .. } => {},
             EnemyIntent::Wait => {}
         }
     }
@@ -94,11 +96,12 @@ fn scenario_ai_101_poison_spider_pattern() {
     let enemy = Enemy::with_type(0, "剧毒蛛", 20, EnemyType::PoisonSpider);
 
     assert_eq!(enemy.enemy_type, EnemyType::PoisonSpider);
-    assert_eq!(enemy.ai_pattern.attack_chance, 0.4);
+    assert_eq!(enemy.ai_pattern.attack_chance, 0.3);
     assert_eq!(enemy.ai_pattern.defend_chance, 0.2);
-    assert_eq!(enemy.ai_pattern.debuff_chance, 0.4);
+    assert_eq!(enemy.ai_pattern.debuff_chance, 0.3);
+    assert_eq!(enemy.ai_pattern.seal_chance, 0.2);
 
-    println!("✓ 场景101：剧毒蛛AI配置正确 (攻击40%, 防御20%, 邪术40%)");
+    println!("✓ 场景101：剧毒蛛AI配置正确 (攻击30%, 防御20%, 邪术30%, 封印20%)");
 }
 
 #[test]
@@ -120,11 +123,12 @@ fn scenario_ai_201_cursed_spirit_pattern() {
     let enemy = Enemy::with_type(0, "怨灵", 40, EnemyType::CursedSpirit);
 
     assert_eq!(enemy.enemy_type, EnemyType::CursedSpirit);
-    assert_eq!(enemy.ai_pattern.attack_chance, 0.3);
-    assert_eq!(enemy.ai_pattern.defend_chance, 0.3);
-    assert_eq!(enemy.ai_pattern.debuff_chance, 0.4);
+    assert_eq!(enemy.ai_pattern.attack_chance, 0.2);
+    assert_eq!(enemy.ai_pattern.defend_chance, 0.2);
+    assert_eq!(enemy.ai_pattern.debuff_chance, 0.2);
+    assert_eq!(enemy.ai_pattern.curse_chance, 0.4);
 
-    println!("✓ 场景201：怨灵AI配置正确 (攻击30%, 防御30%, 邪术40%)");
+    println!("✓ 场景201：怨灵AI配置正确 (攻击20%, 防御20%, 邪术20%, 诅咒40%)");
 }
 
 #[test]
@@ -146,11 +150,11 @@ fn scenario_ai_301_great_demon_powerful_pattern() {
     let enemy = Enemy::with_type(0, "筑基大妖", 100, EnemyType::GreatDemon);
 
     assert_eq!(enemy.enemy_type, EnemyType::GreatDemon);
-    assert_eq!(enemy.ai_pattern.attack_chance, 0.6);
+    assert_eq!(enemy.ai_pattern.attack_chance, 0.5);
     assert_eq!(enemy.ai_pattern.defend_chance, 0.2);
-    assert_eq!(enemy.ai_pattern.buff_chance, 0.2);
+    assert_eq!(enemy.ai_pattern.buff_chance, 0.1);
 
-    println!("✓ 场景301：筑基大妖 AI配置正确 (攻击60%, 防御20%, 强化20%)");
+    println!("✓ 场景301：筑基大妖 AI配置正确 (攻击50%, 防御20%, 强化10%)");
 }
 
 #[test]
@@ -285,16 +289,16 @@ fn scenario_ai_601_all_enemy_types_valid() {
     let great_demon = Enemy::with_type(3, "筑基大妖", 100, EnemyType::GreatDemon);
 
     // 验证概率总和为1.0
-    let wolf_sum = demonic_wolf.ai_pattern.attack_chance + demonic_wolf.ai_pattern.defend_chance + demonic_wolf.ai_pattern.buff_chance + demonic_wolf.ai_pattern.debuff_chance;
+    let wolf_sum = demonic_wolf.ai_pattern.attack_chance + demonic_wolf.ai_pattern.defend_chance + demonic_wolf.ai_pattern.buff_chance + demonic_wolf.ai_pattern.debuff_chance + demonic_wolf.ai_pattern.curse_chance + demonic_wolf.ai_pattern.seal_chance;
     assert!((wolf_sum - 1.0).abs() < 0.01, "妖狼概率总和应为1.0，实际: {:.2}", wolf_sum);
 
-    let spider_sum = poison_spider.ai_pattern.attack_chance + poison_spider.ai_pattern.defend_chance + poison_spider.ai_pattern.buff_chance + poison_spider.ai_pattern.debuff_chance;
+    let spider_sum = poison_spider.ai_pattern.attack_chance + poison_spider.ai_pattern.defend_chance + poison_spider.ai_pattern.buff_chance + poison_spider.ai_pattern.debuff_chance + poison_spider.ai_pattern.curse_chance + poison_spider.ai_pattern.seal_chance;
     assert!((spider_sum - 1.0).abs() < 0.01, "毒蛛概率总和应为1.0，实际: {:.2}", spider_sum);
 
-    let spirit_sum = cursed_spirit.ai_pattern.attack_chance + cursed_spirit.ai_pattern.defend_chance + cursed_spirit.ai_pattern.buff_chance + cursed_spirit.ai_pattern.debuff_chance;
+    let spirit_sum = cursed_spirit.ai_pattern.attack_chance + cursed_spirit.ai_pattern.defend_chance + cursed_spirit.ai_pattern.buff_chance + cursed_spirit.ai_pattern.debuff_chance + cursed_spirit.ai_pattern.curse_chance + cursed_spirit.ai_pattern.seal_chance;
     assert!((spirit_sum - 1.0).abs() < 0.01, "怨灵概率总和应为1.0，实际: {:.2}", spirit_sum);
 
-    let demon_sum = great_demon.ai_pattern.attack_chance + great_demon.ai_pattern.defend_chance + great_demon.ai_pattern.buff_chance + great_demon.ai_pattern.debuff_chance;
+    let demon_sum = great_demon.ai_pattern.attack_chance + great_demon.ai_pattern.defend_chance + great_demon.ai_pattern.buff_chance + great_demon.ai_pattern.debuff_chance + great_demon.ai_pattern.curse_chance + great_demon.ai_pattern.seal_chance;
     assert!((demon_sum - 1.0).abs() < 0.01, "筑基大妖概率总和应为1.0，实际: {:.2}", demon_sum);
 
     println!("✓ 场景601：所有敌人类型的AI概率配置有效");
@@ -313,9 +317,11 @@ fn scenario_ai_602_enemy_types_have_distinct_patterns() {
     // 怨灵防御概率较高
     assert!(cursed_spirit.ai_pattern.defend_chance > demonic_wolf.ai_pattern.defend_chance);
 
-    // 毒蛛和怨灵都有较高的邪术概率
-    assert_eq!(poison_spider.ai_pattern.debuff_chance, 0.4);
-    assert_eq!(cursed_spirit.ai_pattern.debuff_chance, 0.4);
+    // 毒蛛和怨灵都有较高的邪术/负面概率
+    assert_eq!(poison_spider.ai_pattern.debuff_chance, 0.3);
+    assert_eq!(cursed_spirit.ai_pattern.debuff_chance, 0.2);
+    assert_eq!(poison_spider.ai_pattern.seal_chance, 0.2);
+    assert_eq!(cursed_spirit.ai_pattern.curse_chance, 0.4);
 
     println!("✓ 场景602：敌人类型有明显的AI模式差异");
 }

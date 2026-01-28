@@ -463,6 +463,7 @@ impl Enemy {
 
     /// 创建指定类型的敌人
     pub fn with_type(id: u32, name: impl Into<String>, hp: i32, enemy_type: EnemyType) -> Self {
+        let ai_pattern = AiPattern::from_enemy_type(enemy_type);
         Self {
             id,
             name: name.into(),
@@ -470,7 +471,7 @@ impl Enemy {
             hp,
             max_hp: hp,
             intent: EnemyIntent::Wait,
-            ai_pattern: AiPattern::demonic_wolf(),
+            ai_pattern,
             strength: 0,
             block: 0,
             turn_count: 0,

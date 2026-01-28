@@ -17,7 +17,7 @@ fn test_relic_accumulation_persistence() {
             name: "定风珠".to_string(),
             description: "测试".to_string(),
             rarity: RelicRarity::Common,
-            effect: RelicEffect::OnTurnEnd { keep_cards: 1 },
+            effects: vec![RelicEffect::OnTurnEnd { keep_cards: 1 }],
         });
     }
     

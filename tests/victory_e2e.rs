@@ -329,19 +329,26 @@ fn e2e_602_reward_card_effects_match_type() {
             CardType::Attack => {
                 // 攻击卡应该有伤害效果
                 assert!(matches!(card.effect, CardEffect::DealDamage { .. }
-                        | CardEffect::AttackAndDraw { .. }),
-                       "攻击卡应该有伤害相关效果");
+                        | CardEffect::AttackAndDraw { .. }
+                        | CardEffect::DealAoEDamage { .. }
+                        | CardEffect::ChangeEnvironment { .. }
+                        | CardEffect::MultiAttack { .. }),
+                       "攻击卡应该有伤害或天象相关效果");
             }
             CardType::Defense => {
                 // 防御卡应该有护甲效果
-                assert!(matches!(card.effect, CardEffect::GainBlock { .. }),
-                       "防御卡应该有护甲效果");
+                assert!(matches!(card.effect, CardEffect::GainBlock { .. }
+                        | CardEffect::ChangeEnvironment { .. }),
+                       "防御卡应该有护甲或天象相关效果");
             }
             CardType::Skill => {
                 // 技能卡可以是各种效果
             }
             CardType::Power => {
-                // 能力卡（暂未实现）
+                // 能力卡
+            }
+            CardType::Curse => {
+                // 诅咒卡
             }
         }
     }

@@ -107,18 +107,30 @@ fn e2e_screenshot_002_victory_particles_count() {
         position: Vec3::new(0.0, 100.0, 999.0),
         burst: true,
         count: 50,
+        target: None,
+        target_entity: None,
+        target_group: None,
+        target_index: None,
     };
     let event2 = SpawnEffectEvent {
         effect_type: EffectType::Victory,
         position: Vec3::new(-50.0, 80.0, 999.0),
         burst: true,
         count: 30,
+        target: None,
+        target_entity: None,
+        target_group: None,
+        target_index: None,
     };
     let event3 = SpawnEffectEvent {
         effect_type: EffectType::Victory,
         position: Vec3::new(50.0, 80.0, 999.0),
         burst: true,
         count: 30,
+        target: None,
+        target_entity: None,
+        target_group: None,
+        target_index: None,
     };
 
     // 总共应该触发110个粒子

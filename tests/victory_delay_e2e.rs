@@ -168,7 +168,7 @@ fn e2e_delay_202_delay_longer_than_particle_lifetime() {
     use bevy_card_battler::components::EmitterConfig;
 
     let config = EmitterConfig::victory();
-    let delay = VictoryDelay::new(2.1); // 使用比2.0略大的值进行比较测试
+    let delay = VictoryDelay::new(4.1); // 使用比4.0略大的值进行比较测试
 
     // 粒子最大生命周期
     let max_particle_lifetime = config.lifetime.1;

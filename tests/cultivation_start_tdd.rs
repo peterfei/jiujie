@@ -9,7 +9,7 @@ mod tests {
         let starting_deck = deck_config.starting_deck;
 
         // Assert
-        assert_eq!(starting_deck.len(), 12, "初始牌组数量应为12张");
+        assert_eq!(starting_deck.len(), 13, "初始牌组数量应为13张");
 
         let first_card = &starting_deck[0];
         assert_eq!(first_card.name, "御剑术", "初始攻击卡名称应为'御剑术'");

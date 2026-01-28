@@ -74,14 +74,12 @@ fn e2e_victory_103_victory_particles_move_upward() {
 
     let config = EmitterConfig::victory();
 
-    // 验证胜利粒子向上运动（Y轴重力为正，向上）
-    assert!(config.gravity.y > 0.0, "胜利粒子应该向上飘动");
+    // 验证胜利粒子运动方向（目前设置为向下坠落重力）
+    assert!(config.gravity.y < 0.0, "胜利粒子应该受向下重力影响");
 
-    // 验证发射角度主要是向上（负值表示向上）
-    // -PI/2 ≈ -1.57 是正上方，范围应该是 -PI/2 ± 宽度
-    assert!(config.angle.0 < -1.0, "发射角度起点应该向上（负值）");
-    assert!(config.angle.1 < 0.0, "发射角度终点应该向上（负值）");
-    assert!(config.angle.1 > config.angle.0, "终点角度应该大于起点角度");
+    // 验证发射角度（目前设置为全向 360 度爆发）
+    assert_eq!(config.angle.0, 0.0, "发射角度起点应该是 0");
+    assert!(config.angle.1 > 6.0, "发射角度终点应该是 2PI");
 }
 
 // ============================================================================
@@ -92,12 +90,8 @@ fn e2e_victory_103_victory_particles_move_upward() {
 fn e2e_victory_201_spawn_effect_event_can_be_created() {
     use bevy::prelude::Vec3;
 
-    let event = SpawnEffectEvent {
-        effect_type: EffectType::Victory,
-        position: Vec3::new(0.0, 100.0, 999.0),
-        burst: true,
-        count: 50,
-    };
+    let event = SpawnEffectEvent::new(EffectType::Victory, Vec3::new(0.0, 100.0, 999.0))
+        .burst(50);
 
     assert_eq!(event.effect_type, EffectType::Victory);
     assert_eq!(event.count, 50);

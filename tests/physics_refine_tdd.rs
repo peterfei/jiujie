@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_card_battler::components::sprite::{PhysicalImpact, AnimationState};
+use bevy_card_battler::components::sprite::{PhysicalImpact, AnimationState, ActionType};
 
 #[test]
 fn test_breath_suppression_during_action() {

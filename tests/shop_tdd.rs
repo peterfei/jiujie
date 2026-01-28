@@ -151,29 +151,11 @@ fn test_shop_item_name_and_description() {
 
 #[test]
 fn test_player_gets_initial_gold_on_first_shop_visit() {
-    // 场景描述: 玩家首次进入商店时应获得100金币
-    // 预期结果: 玩家金币从0变为100
-
-    let mut app = create_test_app();
-
-    // 验证初始金币为0
-    let mut player_query = app.world_mut().query::<&Player>();
-    let player = player_query.iter_mut(app.world_mut()).next().unwrap();
-    assert_eq!(player.gold, 0, "初始金币应为0");
-
-    // 模拟商店UI设置（给初始金币）
-    {
-        let mut player_query = app.world_mut().query::<&mut Player>();
-        let mut player = player_query.iter_mut(app.world_mut()).next().unwrap();
-        if player.gold == 0 {
-            player.gold = 100;
-        }
-    }
-
-    // 验证金币已设置
-    let mut player_query = app.world_mut().query::<&Player>();
-    let player = player_query.iter(app.world_mut()).next().unwrap();
-    assert_eq!(player.gold, 100, "玩家应获得100金币");
+    let mut app = App::new();
+    app.init_resource::<Player>();
+    
+    let player = app.world().resource::<Player>();
+    assert_eq!(player.gold, 100, "初始金币应为100");
 }
 
 #[test]

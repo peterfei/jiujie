@@ -1,9 +1,8 @@
 #[cfg(test)]
 mod tests {
     use bevy::prelude::*;
-    use bevy_card_battler::plugins::{CombatUiRoot};
-    
-    // 定义我们期望的新标记组件
+            use bevy_card_battler::components::combat::CombatUiRoot;
+        // 定义我们期望的新标记组件
     #[derive(Component)]
     struct TopBarMarker;
     #[derive(Component)]
@@ -13,7 +12,7 @@ mod tests {
 
     #[test]
     fn test_combat_ui_hierarchy() {
-        use bevy_card_battler::plugins::{CombatUiRoot};
+    use bevy_card_battler::components::combat::CombatUiRoot;
         use bevy_card_battler::components::{Player, Cultivation, PlayerDeck, VictoryDelay};
 
         let mut app = App::new();

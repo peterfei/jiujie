@@ -20,22 +20,14 @@ fn test_ui_despawns_when_enemy_dies() {
         // 假设我们通过某种方式知道 UI 对应哪个敌人，这里简化为通过 ID 匹配
         ui_query: Query<(Entity, &EnemyStatusUi)>, 
     ) {
-        for (ui_entity, status_ui) in ui_query.iter() {
-            // 查找对应的敌人
-            let mut found = false;
-            for enemy in enemy_query.iter() {
-                if enemy.id == status_ui.enemy_id {
-                    found = true;
+            for (ui_entity, status_ui) in ui_query.iter() {
+                if let Ok(enemy) = enemy_query.get(status_ui.owner) {
                     if enemy.hp <= 0 {
                         commands.entity(ui_entity).despawn_recursive();
                     }
                 }
             }
-            // 如果连敌人都找不到了，说明敌人实体已经被 despawn 了，UI 也该走了
-            if !found {
-                commands.entity(ui_entity).despawn_recursive();
-            }
-        }
+
     }
 
     app.add_systems(Update, auto_cleanup_dead_enemy_ui);

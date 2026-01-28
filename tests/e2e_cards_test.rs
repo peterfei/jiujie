@@ -177,34 +177,22 @@ fn e2e_hand_max_size_limit() {
 
 #[test]
 fn e2e_starting_deck_size() {
-    // GIVEN: 使用默认牌组配置
-    let config = DeckConfig::default();
-
-    // THEN: 初始牌组应该有12张卡
-    // 5张打击 + 1张突刺 + 4张防御 + 2张治疗
-    assert_eq!(config.starting_deck.len(), 12);
+    let deck = create_starting_deck();
+    assert_eq!(deck.len(), 13);
 }
 
 #[test]
 fn e2e_starting_deck_composition() {
-    // GIVEN: 使用默认牌组配置
-    let config = DeckConfig::default();
-
-    // WHEN: 统计卡牌类型
-    let attack_count = config.starting_deck.iter()
-        .filter(|c| c.card_type == CardType::Attack)
-        .count();
-    let defense_count = config.starting_deck.iter()
-        .filter(|c| c.card_type == CardType::Defense)
-        .count();
-    let skill_count = config.starting_deck.iter()
-        .filter(|c| c.card_type == CardType::Skill)
-        .count();
-
-    // THEN: 应该有6张攻击卡、4张防御卡、2张技能卡
-    assert_eq!(attack_count, 6);
+    let deck = create_starting_deck();
+    
+    let attack_count = deck.iter().filter(|c| c.name == "御剑术").count();
+    assert_eq!(attack_count, 5);
+    
+    let defense_count = deck.iter().filter(|c| c.name == "金光咒").count();
     assert_eq!(defense_count, 4);
-    assert_eq!(skill_count, 2);
+
+    let heal_count = deck.iter().filter(|c| c.name == "回春术").count();
+    assert_eq!(heal_count, 2); 
 }
 
 // ============================================================================

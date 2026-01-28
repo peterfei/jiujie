@@ -11,19 +11,14 @@ fn test_changed_filter_causes_ui_genocide() {
     // 1. 模拟错误的清理系统 (使用了 Changed 过滤器)
     fn flawed_cleanup_system(
         mut commands: Commands,
-        // 错误：只查询发生变化的敌人
         enemy_query: Query<&Enemy, Changed<Enemy>>, 
         ui_query: Query<(Entity, &EnemyStatusUi)>,
     ) {
         for (ui_entity, status_ui) in ui_query.iter() {
             let mut found = false;
-            for enemy in enemy_query.iter() {
-                if enemy.id == status_ui.enemy_id {
-                    found = true; 
-                    // 如果这行执行了，说明 Changed 触发了
-                }
+            if enemy_query.get(status_ui.owner).is_ok() {
+                found = true; 
             }
-            // 如果没找到 (因为没变化)，就误杀
             if !found {
                 commands.entity(ui_entity).despawn_recursive();
             }
@@ -54,17 +49,11 @@ fn test_without_changed_filter_is_safe() {
     // 2. 修正后的清理系统 (移除 Changed)
     fn correct_cleanup_system(
         mut commands: Commands,
-        enemy_query: Query<&Enemy>, // 正确：全量查询
+        enemy_query: Query<&Enemy>, 
         ui_query: Query<(Entity, &EnemyStatusUi)>,
     ) {
         for (ui_entity, status_ui) in ui_query.iter() {
-            let mut found = false;
-            for enemy in enemy_query.iter() {
-                if enemy.id == status_ui.enemy_id {
-                    found = true;
-                }
-            }
-            if !found {
+            if enemy_query.get(status_ui.owner).is_err() {
                 commands.entity(ui_entity).despawn_recursive();
             }
         }

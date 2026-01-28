@@ -103,7 +103,7 @@ fn test_multiple_relics_stack_effects() {
         name: "石盾".to_string(),
         description: "战斗开始时获得5点护甲".to_string(),
         rarity: RelicRarity::Common,
-        effect: RelicEffect::OnCombatStart { damage: 0, block: 5, draw_cards: 0 },
+        effects: vec![RelicEffect::OnCombatStart { damage: 0, block: 5, draw_cards: 0 }],
     };
     relic_collection.add_relic(stone_shield);
     info!("遗物数量: {}", relic_collection.count());

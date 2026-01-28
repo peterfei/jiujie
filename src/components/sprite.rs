@@ -130,7 +130,7 @@ pub enum CharacterType {
 }
 
 /// 角色资源配置
-#[derive(Resource)]
+#[derive(Resource, Default, Clone)]
 pub struct CharacterAssets {
     /// 玩家待机图
     pub player_idle: Handle<Image>,

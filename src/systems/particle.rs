@@ -106,7 +106,9 @@ fn spawn_particle_entity(commands: &mut Commands, assets: &ParticleAssets, parti
     ));
 }
 
-fn update_emitters(mut commands: Commands, assets: Res<ParticleAssets>, mut emitters: Query<(Entity, &mut ParticleEmitter, &GlobalTransform)>, time: Res<Time>) {
+pub fn update_emitters(
+
+mut commands: Commands, assets: Res<ParticleAssets>, mut emitters: Query<(Entity, &mut ParticleEmitter, &GlobalTransform)>, time: Res<Time>) {
     for (entity, mut emitter, transform) in emitters.iter_mut() {
         emitter.elapsed += time.delta_secs();
         if emitter.duration > 0.0 && emitter.elapsed >= emitter.duration { commands.entity(entity).despawn_recursive(); continue; }

@@ -5,13 +5,15 @@ use bevy_card_battler::components::sprite::RelicVisualMarker;
 #[test]
 fn test_relic_3d_spawning_logic() {
     let mut collection = RelicCollection::default();
-    collection.add_relic(Relic {
+    let relic = Relic {
         id: RelicId::Anchor,
         name: "定风珠".to_string(),
-        description: "增加防御".to_string(),
+        description: "每回合保留手牌".to_string(),
         rarity: RelicRarity::Common,
-        effect: RelicEffect::OnTurnEnd { keep_cards: 1 },
-    });
+        effects: vec![RelicEffect::OnTurnEnd { keep_cards: 1 }],
+    };
+    
+    collection.add_relic(relic);
     
     // 逻辑验证
     assert!(!collection.relic.is_empty());

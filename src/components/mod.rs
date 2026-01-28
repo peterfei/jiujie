@@ -27,6 +27,7 @@ pub use cards::{
     Card, CardType, CardEffect, CardRarity,
     DrawPile, DiscardPile, Hand,
     DeckConfig, CardPool, RewardCard,
+    create_starting_deck,
 };
 pub use cultivation::{Cultivation, Realm};
 pub use dialogue::{Dialogue, DialogueLine};

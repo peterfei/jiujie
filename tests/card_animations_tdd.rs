@@ -16,20 +16,25 @@ fn test_card_hover_visual_logic() {
 }
 
 #[test]
-fn test_card_rarity_color_mapping() {
-    let card = Card {
+fn test_card_type_color_mapping() {
+    let mut card = Card {
         id: 1,
-        name: "测试功法".to_string(),
+        name: "测试卡".to_string(),
+        description: "造成10点伤害".to_string(),
         card_type: CardType::Attack,
-        rarity: CardRarity::Rare,
         cost: 1,
-        description: "".to_string(),
-        image_path: "".to_string(),
         effect: CardEffect::DealDamage { amount: 10 },
+        rarity: CardRarity::Common,
+        image_path: "".to_string(),
+        upgraded: false,
     };
-    
-    // 紫色代表稀有
-    let color = card.get_color();
-    let rgba: Srgba = color.into();
-    assert!(rgba.red > 0.5 && rgba.blue > 0.5, "稀有功法应显示为紫色调");
+
+    // 攻击卡应为红色调
+    let color = card.get_color().to_srgba();
+    assert!(color.red > color.blue && color.red > color.green, "攻击卡应显示为红色调");
+
+    // 能力卡应为紫色调
+    card.card_type = CardType::Power;
+    let color = card.get_color().to_srgba();
+    assert!(color.red > 0.5 && color.blue > 0.5, "能力卡应显示为紫色调");
 }

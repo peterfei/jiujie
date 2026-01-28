@@ -20,6 +20,7 @@
 use bevy::prelude::*;
 use bevy::text::TextPlugin;
 use bevy_card_battler::plugins::{CorePlugin, MenuPlugin};
+use bevy_card_battler::components::sprite::CharacterAssets;
 use bevy_card_battler::systems::{AnimationPlugin, SpritePlugin, ParticlePlugin, ScreenEffectPlugin, ShopPlugin, RestPlugin};
 use bevy_card_battler::states::GameState;
 use bevy_card_battler::components::{VictoryDelay, Enemy, Player, PlayerDeck, MapProgress, CombatConfig, RelicCollection};
@@ -53,6 +54,8 @@ pub fn create_test_app() -> App {
     app.init_asset::<Image>();
     app.init_asset::<Font>();
     app.init_asset::<TextureAtlasLayout>();
+    app.init_asset::<Mesh>();
+    app.init_asset::<StandardMaterial>();
 
     // 初始化游戏状态
     app.init_state::<GameState>();
@@ -62,6 +65,8 @@ pub fn create_test_app() -> App {
     app.add_event::<ScreenEffectEvent>();
     app.add_event::<EnemyAttackEvent>();
     app.add_event::<bevy_card_battler::components::PlaySfxEvent>();
+    app.add_event::<bevy_card_battler::components::DamageEffectEvent>();
+    app.add_event::<bevy_card_battler::components::StatusEffectEvent>();
 
     // 注册核心插件
     app.add_plugins(CorePlugin);
@@ -75,8 +80,10 @@ pub fn create_test_app() -> App {
     app.add_plugins(ParticlePlugin);
     app.add_plugins(ScreenEffectPlugin);
 
-    // 设置测试资源
-    app.insert_resource(VictoryDelay::new(0.8));
+    // 设置测试资源 (缩短延迟以加快测试运行并提高状态转换可靠性)
+    app.insert_resource(VictoryDelay::new(0.1));
+    app.insert_resource(CharacterAssets::default());
+    app.insert_resource(bevy_card_battler::components::Environment::default());
     app.insert_resource(PlayerDeck::default());
     app.insert_resource(MapProgress::default());
     app.insert_resource(CombatConfig::default());
@@ -124,6 +131,10 @@ pub fn kill_enemy(app: &mut App, enemy_entity: Entity) {
 /// 运行指定次数的帧更新
 pub fn advance_frames(app: &mut App, frame_count: u32) {
     for _ in 0..frame_count {
+        // 手动推进时间，以确保依赖时间的系统正常运行
+        let mut time = app.world_mut().resource_mut::<Time>();
+        time.advance_by(std::time::Duration::from_millis(16));
+        
         app.update();
     }
 }

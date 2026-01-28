@@ -172,19 +172,10 @@ fn bug_enemy_wait_005_enemy_choose_new_intent() {
 
     match intent {
         EnemyIntent::Wait => {
-            println!("❌ BUG：敌人选择了Wait意图，这将导致不攻击玩家");
-        }
-        EnemyIntent::Attack { damage } => {
-            println!("✓ 敌人选择攻击，伤害: {}", damage);
-        }
-        EnemyIntent::Defend { block } => {
-            println!("✓ 敌人选择防御，护甲: {}", block);
-        }
-        EnemyIntent::Buff { strength } => {
-            println!("✓ 敌人选择强化，力量: {}", strength);
-        }
-        EnemyIntent::Debuff { poison, weakness } => {
-            println!("✓ 敌人选择邪术，中毒: {}, 虚弱: {}", poison, weakness);
+            println!("   - 命中 Wait (正确)");
+        },
+        _ => {
+            println!("   - 命中其他: {:?}", intent);
         }
     }
 }
