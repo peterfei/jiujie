@@ -1684,7 +1684,23 @@ fn process_enemy_turn_queue(
                                 match enemy.enemy_type {
                                     EnemyType::DemonicWolf => crate::components::sprite::AnimationState::WolfAttack,
                                     EnemyType::PoisonSpider => {
-                                        effect_events.send(SpawnEffectEvent::new(EffectType::WebShot, transform.translation));
+                                        effect_events.send(SpawnEffectEvent::new(EffectType::WebShot, transform.translation).burst(30));
+                                        
+                                        // [还原关键视觉] 生成覆盖全屏的实体蛛网 Mesh
+                                        let web_texture = asset_server.load("textures/web_effect.png");
+                                        commands.spawn((
+                                            crate::components::sprite::Ghost { ttl: 1.2 },
+                                            Mesh3d(meshes.add(Rectangle::new(2.5, 2.5))), // 巨大网
+                                            MeshMaterial3d(materials.add(StandardMaterial {
+                                                base_color: Color::srgba(1.0, 1.0, 1.0, 0.8),
+                                                base_color_texture: Some(web_texture),
+                                                alpha_mode: AlphaMode::Blend,
+                                                unlit: true, // 不受光照影响，最清晰
+                                                ..default()
+                                            })),
+                                            Transform::from_xyz(-3.5, 0.0, 0.5).with_rotation(Quat::from_rotation_z(0.3)),
+                                            CombatUiRoot,
+                                        ));
                                         crate::components::sprite::AnimationState::SpiderAttack
                                     },
                                     EnemyType::CursedSpirit => crate::components::sprite::AnimationState::SpiritAttack,
