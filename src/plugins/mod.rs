@@ -693,6 +693,11 @@ fn handle_map_button_clicks(
             // 更新当前位置
             map_progress.set_current_node(node_id);
 
+            // [同步清理加固] 在切换状态前手动清理地图UI，防止遮挡
+            // 注意：虽然 OnExit 也有，但这里手动触发可以消除一帧的延迟
+            // 我们通过查询 MapUiRoot 实体进行清理
+            // 由于系统无法在这里直接 Query，我们依赖 OnExit 逻辑，但确保状态切换是最高优先级
+            
             // --- 执行自动存档 ---
             if let Ok((player, cultivation)) = player_query.get_single() {
                 let save = crate::resources::save::GameStateSave {
@@ -797,6 +802,7 @@ fn setup_map_ui(
             },
             BackgroundColor(Color::srgb(0.05, 0.05, 0.05)),
             MapUiRoot,
+            ZIndex(100), // 确保在中间层级
         ))
         .with_children(|parent| {
             // 地图标题与境界显示
@@ -2278,18 +2284,33 @@ fn handle_card_play(
                 if player_energy >= card.cost {
                     info!("打出卡牌: {} (消耗: {})", card.name, card.cost);
                     
+                    // 1. 触发玩家动画 (精准隔离：御剑冲刺，天象原地)
                     if let Ok(player_entity) = player_sprite_query.get_single() {
                         if card.card_type == CardType::Attack {
-                            let anim = if card.name == "御剑术" {
+                            let anim = if card.name.contains("御剑术") {
+                                // 真正的御剑术：回旋冲刺
                                 effect_events.send(SpawnEffectEvent::new(EffectType::SwordEnergy, Vec3::new(-3.5, 1.0, 0.2)));
                                 crate::components::sprite::AnimationState::ImperialSword
+                            } else if card.name.contains("天象") {
+                                // 天象法术：原地施法
+                                if card.name.contains("天象·引雷术") {
+                                    effect_events.send(SpawnEffectEvent::new(EffectType::Lightning, Vec3::new(-3.5, 1.0, 0.2)));
+                                }
+                                crate::components::sprite::AnimationState::HeavenCast
                             } else {
+                                // 近战类执行冲刺
                                 crate::components::sprite::AnimationState::Attack
                             };
 
                             anim_events.send(CharacterAnimationEvent {
                                 target: player_entity,
                                 animation: anim,
+                            });
+                        } else if card.card_type == CardType::Defense {
+                            // 防御功法：彻底原地不动
+                            anim_events.send(CharacterAnimationEvent {
+                                target: player_entity,
+                                animation: crate::components::sprite::AnimationState::Defense,
                             });
                         }
                     }
@@ -2485,12 +2506,33 @@ fn apply_card_effect(
         }
         CardEffect::ChangeEnvironment { name } => {
             info!("【卡牌】天象异变！环境变为: {}", name);
+            
+            // 1. 触发环境资源替换
             if name == "雷暴" {
                 _commands.insert_resource(Environment::thunder_storm());
+                screen_events.send(ScreenEffectEvent::Flash { color: Color::srgba(0.8, 0.8, 1.0, 0.5), duration: 0.3 });
             } else if name == "浓雾" {
                 _commands.insert_resource(Environment::thick_fog());
+                screen_events.send(ScreenEffectEvent::Flash { color: Color::srgba(0.7, 0.7, 0.7, 0.4), duration: 0.5 });
             } else {
                 _commands.insert_resource(Environment::default());
+            }
+
+            // 2. 补全数值效果：引雷术应造成伤害，迷踪阵应提供护盾
+            if card_name.contains("引雷术") {
+                if let Ok((player, _)) = player_query.get_single() {
+                    let base_damage = 5;
+                    let final_damage = player.calculate_outgoing_damage_with_env(base_damage, environment);
+                    if let Some(mut enemy) = enemy_query.iter_mut().find(|e| e.hp > 0) {
+                        enemy.take_damage_with_env(final_damage, environment);
+                        effect_events.send(SpawnEffectEvent::new(EffectType::Lightning, Vec3::new(2.5, 0.0, 0.5)));
+                        info!("【卡牌】引动九天雷霆，造成 {} 点伤害", final_damage);
+                    }
+                }
+            } else if card_name.contains("迷踪阵") {
+                if let Ok((mut player, _)) = player_query.get_single_mut() {
+                    player.gain_block_with_env(5, environment);
+                }
             }
         }
 

@@ -62,6 +62,7 @@ pub fn setup_shop_ui(
             },
             BackgroundColor(Color::srgb(0.02, 0.05, 0.02)), 
             ShopUiRoot,
+            ZIndex(300), // 确保在最高层级 (高于地图的 100 和战斗的 200)
         ))
         .with_children(|parent| {
             parent.spawn((

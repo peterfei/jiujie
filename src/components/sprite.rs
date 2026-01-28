@@ -1,49 +1,39 @@
-//! Sprite 角色组件
+//! Sprite 角色渲染与物理系统
 //!
-//! 用于管理战斗中的角色精灵显示
+//! 实现 2.5D 纸片人渲染、物理冲击反馈、呼吸动画及残影特效
 
 use bevy::prelude::*;
+use serde::{Serialize, Deserialize};
 
 /// 角色精灵组件
 #[derive(Component)]
 pub struct CharacterSprite {
-    /// 精灵图句柄
     pub texture: Handle<Image>,
-    /// 当前动画帧
-    pub current_frame: usize,
-    /// 动画帧总数
-    pub total_frames: usize,
-    /// 每帧持续时间（秒）
-    pub frame_duration: f32,
-    /// 已播放时间
-    pub elapsed: f32,
-    /// 是否循环播放
-    pub looping: bool,
-    /// 当前动画状态
-    pub state: AnimationState,
-    /// 精灵尺寸
     pub size: Vec2,
-    /// Z轴层级
-    pub z_index: f32,
+    pub current_frame: usize,
+    pub total_frames: usize,
+    pub frame_duration: f32,
+    pub elapsed: f32,
+    pub state: AnimationState,
+    pub looping: bool,
 }
 
 impl CharacterSprite {
-    /// 创建一个新的角色精灵
     pub fn new(texture: Handle<Image>, size: Vec2) -> Self {
         Self {
-            texture,
-            current_frame: 0,
-            total_frames: 1,
-            frame_duration: 0.1,
-            elapsed: 0.0,
-            looping: true,
-            state: AnimationState::Idle,
-            size,
-            z_index: 10.0,
+            texture, size, current_frame: 0, total_frames: 1,
+            frame_duration: 0.1, elapsed: 0.0, state: AnimationState::Idle, looping: true,
         }
     }
 
-    /// 设置为攻击动画
+    pub fn set_idle(&mut self) {
+        self.state = AnimationState::Idle;
+        self.total_frames = 1;
+        self.current_frame = 0;
+        self.elapsed = 0.0;
+        self.looping = true;
+    }
+
     pub fn set_attack(&mut self, frames: usize, duration: f32) {
         self.state = AnimationState::Attack;
         self.total_frames = frames;
@@ -53,7 +43,6 @@ impl CharacterSprite {
         self.looping = false;
     }
 
-    /// 设置为受击动画
     pub fn set_hit(&mut self, frames: usize, duration: f32) {
         self.state = AnimationState::Hit;
         self.total_frames = frames;
@@ -63,7 +52,6 @@ impl CharacterSprite {
         self.looping = false;
     }
 
-    /// 设置为死亡动画
     pub fn set_death(&mut self, frames: usize, duration: f32) {
         self.state = AnimationState::Death;
         self.total_frames = frames;
@@ -73,10 +61,12 @@ impl CharacterSprite {
         self.looping = false;
     }
 
-    /// 重置为待机动画
-    pub fn set_idle(&mut self) {
-        self.state = AnimationState::Idle;
-        self.total_frames = 1;
+    /// 标记是否为待机状态
+    pub fn is_idle(&self) -> bool {
+        self.state == AnimationState::Idle
+    }
+
+    pub fn reset_animation(&mut self) {
         self.current_frame = 0;
         self.elapsed = 0.0;
         self.looping = true;
@@ -92,15 +82,23 @@ impl CharacterSprite {
 }
 
 /// 动画状态
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum AnimationState {
     /// 待机
     Idle,
-    /// 攻击
+    /// 受到攻击
+    Hit,
+    /// 死亡
+    Death,
+    /// 普通攻击 (向前冲刺)
     Attack,
-    /// 御剑术 (270度回旋斩)
+    /// 御剑术 (高速回旋并小幅位移)
     ImperialSword,
-    /// 妖物突袭 (沉重撞击)
+    /// 天象施法 (原地旋转特效)
+    HeavenCast,
+    /// 防御状态 (原地不动)
+    Defense,
+    /// 妖兽攻击
     DemonAttack,
     /// 嗜血妖狼专属：奔袭撕咬
     WolfAttack,
@@ -114,10 +112,6 @@ pub enum AnimationState {
     BossFrenzy,
     /// 施展妖术 (蓄力/护盾/强化)
     DemonCast,
-    /// 受击
-    Hit,
-    /// 死亡
-    Death,
 }
 
 /// 角色类型
@@ -173,126 +167,84 @@ pub struct CharacterAnimationEvent {
     pub animation: AnimationState,
 }
 
-/// 3D 战斗角色标记组件 (2.5D 纸片人模式)
+/// 标记战斗中的3D实体
 #[derive(Component)]
 pub struct Combatant3d {
-    /// 角色面向 (true 为面向右侧)
     pub facing_right: bool,
 }
 
-/// 呼吸动画组件（用于 3D 空间中的上下浮动感）
+/// 呼吸动画组件
 #[derive(Component)]
 pub struct BreathAnimation {
-    /// 动画计时
     pub timer: f32,
-    /// 浮动频率
     pub frequency: f32,
-    /// 浮动幅度
     pub amplitude: f32,
 }
 
 impl Default for BreathAnimation {
     fn default() -> Self {
-        Self {
-            timer: 0.0,
-            frequency: 1.0,
-            amplitude: 0.02,
-        }
+        Self { timer: 0.0, frequency: 3.5, amplitude: 0.05 }
     }
 }
 
-/// 动作类型（用于区分物理反馈行为）
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub enum ActionType {
-    #[default]
-    None,
-    WolfBite,
-    SpiderWeb,
-    DemonCast,
-}
-
-/// 物理冲击组件（用于立牌的倾斜和晃动效果）
+/// 物理冲击效果组件
 #[derive(Component)]
 pub struct PhysicalImpact {
-    /// 角色初始位置 (回弹目标点)
     pub home_position: Vec3,
-    /// 当前倾斜角度 (弧度)
-    pub tilt_velocity: f32,
-    /// 当前倾斜量
-    pub tilt_amount: f32,
-    /// 招式回旋角度 (用于特殊招式，如 270 度旋转)
-    pub special_rotation: f32,
-    /// 招式回旋速度
-    pub special_rotation_velocity: f32,
-    /// 动作计时 (用于多阶段招式)
-    pub action_timer: f32,
-    /// 动作阶段计数 (防止多段攻击重复触发)
-    pub action_stage: u32,
-    /// 当前执行的动作类型
-    pub action_type: ActionType,
-    /// 动作方向记录 (-1.0 代表向左，1.0 代表向右)
-    pub action_direction: f32,
-    /// 目标位移总距离 (动态计算，解决多敌人位置偏差)
-    pub target_offset_dist: f32,
-    /// 目标位置偏移
-    pub offset_velocity: Vec3,
-    /// 当前位置偏移
     pub current_offset: Vec3,
+    pub offset_velocity: Vec3,
+    pub tilt_amount: f32,
+    pub tilt_velocity: f32,
+    pub action_timer: f32,
+    pub action_type: ActionType,
+    pub action_direction: f32, // 1.0 向右, -1.0 向左
+    pub target_offset_dist: f32,
+    pub action_stage: u32,
+    pub special_rotation: f32,
+    pub special_rotation_velocity: f32,
 }
 
 impl Default for PhysicalImpact {
     fn default() -> Self {
         Self {
-            home_position: Vec3::ZERO,
-            tilt_velocity: 0.0,
-            tilt_amount: 0.0,
-            special_rotation: 0.0,
-            special_rotation_velocity: 0.0,
-            action_timer: 0.0,
-            action_stage: 0,
-            action_type: ActionType::None,
-            action_direction: 1.0,
-            target_offset_dist: 0.0,
-            offset_velocity: Vec3::ZERO,
-            current_offset: Vec3::ZERO,
+            home_position: Vec3::ZERO, current_offset: Vec3::ZERO, offset_velocity: Vec3::ZERO,
+            tilt_amount: 0.0, tilt_velocity: 0.0, action_timer: 0.0, action_type: ActionType::None,
+            action_direction: 1.0, target_offset_dist: 0.0, action_stage: 0,
+            special_rotation: 0.0, special_rotation_velocity: 0.0,
         }
     }
 }
 
-/// 3D 旋转组件
-#[derive(Component)]
-pub struct Rotating {
-    pub speed: f32,
-}
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ActionType { None, Dash, WolfBite, SpiderWeb, DemonCast, Ascend }
 
-/// 法阵标记组件 (用于亮度脉动)
+#[derive(Component)]
+pub struct Rotating { pub speed: f32 }
+
+#[derive(Component)]
+pub struct Ghost { pub ttl: f32 }
+
+/// 标记旋转法阵
 #[derive(Component)]
 pub struct MagicSealMarker;
 
-/// 精灵标记
-#[derive(Component)]
-pub struct SpriteMarker;
-
-/// 玩家精灵标记
-#[derive(Component)]
-pub struct PlayerSpriteMarker;
-
-/// 敌人精灵标记
-#[derive(Component)]
-pub struct EnemySpriteMarker {
-    pub id: u32,
-}
-
-/// 法宝 3D 视觉标记
+/// 标记法宝视觉
 #[derive(Component)]
 pub struct RelicVisualMarker {
     pub relic_id: crate::components::relic::RelicId,
     pub base_y: f32,
 }
 
-/// 残影组件 (Ghost Trail)
+/// 标记精灵实体
 #[derive(Component)]
-pub struct Ghost {
-    /// 存活时间
-    pub ttl: f32,
+pub struct SpriteMarker;
+
+/// 标记玩家精灵
+#[derive(Component)]
+pub struct PlayerSpriteMarker;
+
+/// 标记敌人精灵
+#[derive(Component)]
+pub struct EnemySpriteMarker {
+    pub id: u32,
 }

@@ -18,7 +18,6 @@ impl Plugin for SpritePlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<CharacterAnimationEvent>();
         
-        // 使用 .chain() 确保逻辑顺序，彻底解决动画冲突
         app.add_systems(
             Update,
             (
@@ -46,21 +45,20 @@ fn update_relic_floating(
     time: Res<Time>,
 ) {
     for (mut transform, marker) in query.iter_mut() {
-        // 浮动公式：base_y + sin(t * freq) * amp
         let float_offset = (time.elapsed_secs() * 2.0).sin() * 0.15;
         transform.translation.y = marker.base_y + float_offset;
     }
 }
 
-/// 更新物理冲击效果（让立牌产生倾斜和弹回感）
+/// 更新物理冲击效果
 pub fn update_physical_impacts(
     mut query: Query<(&mut Transform, &mut PhysicalImpact, &BreathAnimation)>,
     time: Res<Time>,
     mut effect_events: EventWriter<crate::components::particle::SpawnEffectEvent>,
 ) {
-    let dt = time.delta_secs().min(0.033); // 限制单帧最大时长，防止物理弹簧爆炸导致闪烁
+    let dt = time.delta_secs().min(0.033);
     for (mut transform, mut impact, breath) in query.iter_mut() {
-        // 1. 模拟旋转弹簧力 (Tilt)
+        // 1. 模拟旋转弹簧力
         let spring_k = 25.0; 
         let damping = 6.0;
         let force = -spring_k * impact.tilt_amount;
@@ -68,11 +66,11 @@ pub fn update_physical_impacts(
         impact.tilt_velocity *= 1.0 - (damping * dt);
         impact.tilt_amount += impact.tilt_velocity * dt;
 
-        // 2. 模拟位置弹簧力 (将位移拉回 0)
-        let mut pos_spring_k = 10.0; 
+        // 2. 模拟位置弹簧力
+        let pos_spring_k = 10.0; 
         let mut pos_damping = 5.0;
         
-        // 3. 处理动作计时器逻辑 (特化动作)
+        // 3. 处理动作计时器逻辑
         let mut action_tilt_offset = 0.0;
         let mut action_pos_offset = Vec3::ZERO;
         
@@ -80,30 +78,34 @@ pub fn update_physical_impacts(
             impact.action_timer -= dt;
             let dir = impact.action_direction; 
             
-            // 计算动作进度
             let action_duration = match impact.action_type {
                 ActionType::WolfBite => 1.0,
                 ActionType::SpiderWeb => 0.8,
                 ActionType::DemonCast => 0.6,
+                ActionType::Ascend => 1.2, // 升腾动作稍微拉长
                 _ => 1.0,
             };
             let progress = (1.0 - (impact.action_timer / action_duration)).clamp(0.0, 1.0);
 
             match impact.action_type {
+                // ... (其他动作逻辑保持)
+                ActionType::Ascend => {
+                    // 祈祷升腾：一个平滑的抛物线高度变化
+                    // 升起高度约 0.8 米
+                    action_pos_offset.y = (progress * std::f32::consts::PI).sin() * 0.8;
+                    // 身体轻微后仰
+                    action_tilt_offset = -0.1 * progress;
+                    impact.offset_velocity = Vec3::ZERO; // 水平绝对静止
+                },
                 ActionType::WolfBite => {
-                    // 贪狼：空中回旋扑杀 (720度) + 3次撕咬
                     let action_phase = impact.action_timer * 12.5;
                     action_tilt_offset = action_phase.sin() * 0.8;
-                    
-                    // 扑杀弧线
                     action_pos_offset.y = (progress * std::f32::consts::PI).sin() * 1.5;
                     
-                    // [大作级补丁] 同步三连击粒子：在进度 0.3, 0.6, 0.8 时触发
                     let stage_thresholds = [0.3, 0.6, 0.8];
                     let current_stage = impact.action_stage as usize;
                     if current_stage < stage_thresholds.len() && progress >= stage_thresholds[current_stage] {
                         use crate::components::particle::EffectType;
-                        // 触发一次斩击
                         let y_offset = (current_stage as f32 - 1.0) * 0.3;
                         effect_events.send(crate::components::particle::SpawnEffectEvent::new(
                             EffectType::Slash, 
@@ -112,7 +114,6 @@ pub fn update_physical_impacts(
                         impact.action_stage += 1;
                     }
 
-                    // 距离感知减速
                     let target_dist = impact.target_offset_dist;
                     let current_dist = impact.current_offset.x.abs();
                     let dist_left = (target_dist - current_dist).max(0.0);
@@ -137,10 +138,10 @@ pub fn update_physical_impacts(
         impact.offset_velocity += pos_force * dt;
         impact.offset_velocity *= 1.0 - (pos_damping * dt);
         
-        let delta_offset = impact.offset_velocity * dt;
-        impact.current_offset += delta_offset;
+        let move_delta = impact.offset_velocity * dt;
+        impact.current_offset += move_delta;
 
-        // 4. 模拟特殊回旋弹簧力 (御剑术自转)
+        // 4. 模拟特殊回旋弹簧力
         let rot_spring_k = 45.0;
         let rot_damping = 6.0;
         let rot_force = -rot_spring_k * impact.special_rotation;
@@ -148,18 +149,14 @@ pub fn update_physical_impacts(
         impact.special_rotation_velocity *= 1.0 - (rot_damping * dt);
         impact.special_rotation += impact.special_rotation_velocity * dt;
 
-        // 5. 限制倾斜角度
         impact.tilt_amount = impact.tilt_amount.clamp(-1.0, 1.0);
 
-        // 6. 整合呼吸动画 (动态抑制)
         let is_acting = impact.action_timer > 0.0 || impact.current_offset.length() > 0.05 || impact.offset_velocity.length() > 0.5;
         let breath_y = if is_acting { 0.0 } else { (breath.timer * breath.frequency).sin() * 0.02 };
 
-        // 7. 应用变换 (视角优化)
         let tilt_suppression = 1.0 / (1.0 + impact.special_rotation.abs() * 5.0);
         let effective_tilt = impact.tilt_amount * tilt_suppression;
 
-        // 狼的空中旋转补丁
         let wolf_spin = if impact.action_timer > 0.0 && impact.action_type == ActionType::WolfBite {
             let progress = (1.0 - (impact.action_timer / 1.0)).clamp(0.0, 1.0);
             progress * std::f32::consts::PI * 4.0
@@ -196,8 +193,6 @@ fn trigger_hit_feedback(
                     impact.action_type = ActionType::None;
                     impact.tilt_velocity = 45.0 * direction; 
                     impact.offset_velocity = Vec3::new(-5.0 * direction, 2.0, 0.0);
-                    
-                    // 关键修复：挂载死亡动画组件，触发 update_enemy_death_animation 系统进行销毁
                     commands.entity(event.target).insert(crate::components::particle::EnemyDeathAnimation::new(1.2));
                 }
                 AnimationState::Attack => {
@@ -210,10 +205,26 @@ fn trigger_hit_feedback(
                 AnimationState::ImperialSword => {
                     impact.action_type = ActionType::None;
                     let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
-                    impact.target_offset_dist = (target_x - impact.home_position.x).abs();
-                    impact.tilt_velocity = -10.0 * direction; 
-                    impact.offset_velocity = Vec3::new(28.0 * direction, 0.0, 0.0);
-                    impact.special_rotation_velocity = 80.0 * direction; 
+                    impact.target_offset_dist = (target_x - impact.home_position.x).abs() * 0.5;
+                    impact.tilt_velocity = -25.0 * direction; 
+                    impact.offset_velocity = Vec3::new(15.0 * direction, 0.0, 0.0);
+                    impact.special_rotation_velocity = 150.0 * direction; 
+                }
+                AnimationState::HeavenCast => {
+                    impact.action_type = ActionType::Ascend;
+                    impact.action_timer = 1.2; 
+                    impact.tilt_velocity = 0.0; 
+                    impact.special_rotation = 0.0;
+                    impact.special_rotation_velocity = 0.0; 
+                    impact.offset_velocity = Vec3::ZERO;
+                }
+                AnimationState::Defense => {
+                    impact.action_type = ActionType::None;
+                    // 防御功法：彻底静止，仅微调倾斜
+                    impact.tilt_velocity = -5.0 * direction; 
+                    impact.special_rotation = 0.0;
+                    impact.special_rotation_velocity = 0.0;
+                    impact.offset_velocity = Vec3::ZERO;
                 }
                 AnimationState::DemonAttack => {
                     impact.action_type = ActionType::None;
@@ -236,7 +247,7 @@ fn trigger_hit_feedback(
                     impact.tilt_velocity = -25.0 * direction;
                     impact.offset_velocity = Vec3::new(16.0 * direction, 0.0, 0.0);
                     impact.action_timer = 1.0; 
-                    impact.action_stage = 0; // 重置阶段计数
+                    impact.action_stage = 0;
                 }
                 AnimationState::SpiderAttack => {
                     let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
@@ -273,7 +284,65 @@ fn trigger_hit_feedback(
                     impact.special_rotation = 0.0;
                     impact.special_rotation_velocity = 0.0;
                 }
-                _ => {}
+            }
+        }
+    }
+}
+
+/// 更新精灵动画
+fn update_sprite_animations(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut CharacterSprite)>,
+    time: Res<Time>,
+) {
+    for (entity, mut sprite) in query.iter_mut() {
+        if sprite.total_frames <= 1 { continue; }
+        sprite.elapsed += time.delta_secs();
+        if sprite.elapsed >= sprite.frame_duration {
+            sprite.elapsed -= sprite.frame_duration;
+            sprite.current_frame += 1;
+            if sprite.current_frame >= sprite.total_frames {
+                if sprite.looping { sprite.current_frame = 0; }
+                else {
+                    sprite.current_frame = sprite.total_frames - 1;
+                    match sprite.state {
+                        AnimationState::Death => {
+                            commands.entity(entity).despawn_recursive();
+                        }
+                        AnimationState::Attack | AnimationState::Hit | AnimationState::ImperialSword | 
+                        AnimationState::HeavenCast | AnimationState::Defense | AnimationState::DemonAttack | 
+                        AnimationState::DemonCast | AnimationState::WolfAttack | AnimationState::SpiderAttack | 
+                        AnimationState::SpiritAttack | AnimationState::BossRoar | AnimationState::BossFrenzy => { sprite.set_idle(); }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// 处理动画事件
+fn handle_animation_events(
+    mut events: EventReader<CharacterAnimationEvent>,
+    mut query: Query<&mut CharacterSprite>,
+) {
+    for event in events.read() {
+        if let Ok(mut sprite) = query.get_mut(event.target) {
+            match event.animation {
+                AnimationState::Attack => { sprite.set_attack(4, 0.3); }
+                AnimationState::ImperialSword => { sprite.set_attack(8, 0.5); }
+                AnimationState::HeavenCast => { sprite.set_attack(6, 1.2); }
+                AnimationState::Defense => { sprite.set_attack(4, 0.3); }
+                AnimationState::DemonAttack => { sprite.set_attack(6, 0.4); }
+                AnimationState::DemonCast => { sprite.set_attack(4, 0.3); }
+                AnimationState::WolfAttack => { sprite.set_attack(10, 1.0); }
+                AnimationState::SpiderAttack => { sprite.set_attack(8, 0.8); }
+                AnimationState::SpiritAttack => { sprite.set_attack(6, 0.4); }
+                AnimationState::BossRoar => { sprite.set_attack(12, 1.2); }
+                AnimationState::BossFrenzy => { sprite.set_attack(10, 0.8); }
+                AnimationState::Hit => { sprite.set_hit(3, 0.2); }
+                AnimationState::Death => { sprite.set_death(6, 0.5); }
+                AnimationState::Idle => { sprite.set_idle(); }
             }
         }
     }
@@ -312,10 +381,8 @@ fn sync_2d_to_3d_render(
 ) {
     for (entity, char_sprite, transform, combatant_3d) in sprite_query.iter() {
         if combatant_3d.is_none() {
-            // 移除clamp限制，支持多敌人场景下的正确位置
             let x_3d = transform.translation.x / 100.0;
             let z_3d = transform.translation.y / 100.0;
-
             let is_boss = char_sprite.size.x > 150.0;
 
             let mesh = meshes.add(Rectangle::new(char_sprite.size.x / 50.0, char_sprite.size.y / 50.0));
@@ -356,138 +423,6 @@ fn sync_2d_to_3d_render(
             });
         }
     }
-}
-
-/// 更新精灵动画
-fn update_sprite_animations(
-    mut commands: Commands,
-    mut query: Query<(Entity, &mut CharacterSprite)>,
-    time: Res<Time>,
-) {
-    for (entity, mut sprite) in query.iter_mut() {
-        if sprite.total_frames <= 1 { continue; }
-        sprite.elapsed += time.delta_secs();
-        if sprite.elapsed >= sprite.frame_duration {
-            sprite.elapsed -= sprite.frame_duration;
-            sprite.current_frame += 1;
-            if sprite.current_frame >= sprite.total_frames {
-                if sprite.looping { sprite.current_frame = 0; }
-                else {
-                    sprite.current_frame = sprite.total_frames - 1;
-                    match sprite.state {
-                        AnimationState::Death => {
-                            info!("角色实体 {:?} 已彻底消散", entity);
-                            commands.entity(entity).despawn_recursive();
-                        }
-                        AnimationState::Attack | AnimationState::Hit | AnimationState::ImperialSword | 
-                        AnimationState::DemonAttack | AnimationState::DemonCast | AnimationState::WolfAttack | 
-                        AnimationState::SpiderAttack | AnimationState::SpiritAttack | AnimationState::BossRoar | 
-                        AnimationState::BossFrenzy => { sprite.set_idle(); }
-                        _ => {}
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// 处理动画事件
-fn handle_animation_events(
-    mut events: EventReader<CharacterAnimationEvent>,
-    mut query: Query<&mut CharacterSprite>,
-) {
-    for event in events.read() {
-        if let Ok(mut sprite) = query.get_mut(event.target) {
-            match event.animation {
-                AnimationState::Attack => {
-                    sprite.set_attack(4, 0.3);
-                    info!("角色 {:?} 开始攻击动画", event.target);
-                }
-                AnimationState::ImperialSword => {
-                    sprite.set_attack(8, 0.5);
-                    info!("角色 {:?} 开始御剑术回旋斩", event.target);
-                }
-                AnimationState::DemonAttack => {
-                    sprite.set_attack(6, 0.4);
-                    info!("角色 {:?} 开始妖术突袭", event.target);
-                }
-                AnimationState::DemonCast => {
-                    sprite.set_attack(4, 0.3);
-                    info!("角色 {:?} 开始施展妖术/脉冲", event.target);
-                }
-                AnimationState::WolfAttack => {
-                    sprite.set_attack(10, 1.0);
-                    info!("角色 {:?} 开始贪狼撕咬", event.target);
-                }
-                AnimationState::SpiderAttack => {
-                    sprite.set_attack(8, 0.8);
-                    info!("角色 {:?} 开始幽蛛吐丝", event.target);
-                }
-                AnimationState::SpiritAttack => {
-                    sprite.set_attack(6, 0.4);
-                    info!("角色 {:?} 开始怨灵突袭", event.target);
-                }
-                AnimationState::BossRoar => {
-                    sprite.set_attack(12, 1.2);
-                    info!("BOSS {:?} 发起：啸天", event.target);
-                }
-                AnimationState::BossFrenzy => {
-                    sprite.set_attack(10, 0.8);
-                    info!("BOSS {:?} 发起：瞬狱杀", event.target);
-                }
-                AnimationState::Hit => {
-                    sprite.set_hit(3, 0.2);
-                    info!("角色 {:?} 开始受击动画", event.target);
-                }
-                AnimationState::Death => {
-                    sprite.set_death(6, 0.5);
-                    info!("角色 {:?} 开始死亡动画", event.target);
-                }
-                AnimationState::Idle => {
-                    sprite.set_idle();
-                    info!("角色 {:?} 恢复待机动画", event.target);
-                }
-            }
-        }
-    }
-}
-
-/// 创建角色精灵实体
-pub fn spawn_character_sprite(
-    commands: &mut Commands,
-    character_assets: &CharacterAssets, 
-    character_type: CharacterType,
-    position: Vec3,
-    size: Vec2,
-    enemy_id: Option<u32>,
-) -> Entity {
-    let texture = match character_type {
-        CharacterType::Player => character_assets.player_idle.clone(),
-        CharacterType::DemonicWolf => character_assets.wolf.clone(),
-        CharacterType::PoisonSpider => character_assets.spider.clone(),
-        CharacterType::CursedSpirit => character_assets.spirit.clone(),
-        CharacterType::GreatDemon => character_assets.boss.clone(),
-    };
-
-    let sprite = Sprite { custom_size: Some(size), anchor: bevy::sprite::Anchor::BottomCenter, ..default() };
-
-    let mut entity_cmd = commands.spawn((
-        sprite,
-        Transform::from_translation(position),
-        CharacterSprite::new(texture, size), 
-        SpriteMarker,
-    ));
-
-    match character_type {
-        CharacterType::Player => { entity_cmd.insert(PlayerSpriteMarker); }
-        CharacterType::GreatDemon => { 
-            if let Some(id) = enemy_id { entity_cmd.insert(EnemySpriteMarker { id }); }
-            else { entity_cmd.insert(EnemySpriteMarker { id: 99 }); }
-        }
-        _ => { if let Some(id) = enemy_id { entity_cmd.insert(EnemySpriteMarker { id }); } }
-    };
-
-    entity_cmd.id()
 }
 
 /// 更新旋转系统
@@ -570,4 +505,34 @@ fn update_magic_seal_pulse(
             rotating.speed = spin_speed;
         }
     }
+}
+
+pub fn spawn_character_sprite(
+    commands: &mut Commands,
+    character_assets: &CharacterAssets, 
+    character_type: CharacterType,
+    position: Vec3,
+    size: Vec2,
+    enemy_id: Option<u32>,
+) -> Entity {
+    let texture = match character_type {
+        CharacterType::Player => character_assets.player_idle.clone(),
+        CharacterType::DemonicWolf => character_assets.wolf.clone(),
+        CharacterType::PoisonSpider => character_assets.spider.clone(),
+        CharacterType::CursedSpirit => character_assets.spirit.clone(),
+        CharacterType::GreatDemon => character_assets.boss.clone(),
+    };
+
+    let mut entity_cmd = commands.spawn((
+        Transform::from_translation(position),
+        CharacterSprite::new(texture, size), 
+        SpriteMarker,
+    ));
+
+    match character_type {
+        CharacterType::Player => { entity_cmd.insert(PlayerSpriteMarker); }
+        _ => { if let Some(id) = enemy_id { entity_cmd.insert(EnemySpriteMarker { id }); } }
+    };
+
+    entity_cmd.id()
 }
