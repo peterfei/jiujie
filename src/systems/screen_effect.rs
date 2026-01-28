@@ -4,28 +4,43 @@
 
 use bevy::prelude::*;
 use rand::Rng;
-use crate::components::screen_effect::{
-    CameraShake, ScreenFlash, ScreenEffectEvent, ScreenEffectMarker
-};
+use crate::components::screen_effect::{CameraShake, ScreenFlash, ScreenEffectEvent, ScreenEffectMarker, ScreenWarning};
+use crate::components::combat::{CombatUiRoot, Player};
 use crate::states::GameState;
 
-/// 屏幕特效插件
 pub struct ScreenEffectPlugin;
 
 impl Plugin for ScreenEffectPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<ScreenEffectEvent>();
-        app.add_systems(
-            Update,
-            (
-                handle_screen_effects,
-                update_camera_shake,
-                update_screen_flash,
-            ).run_if(in_state(GameState::Combat)
-                .or(in_state(GameState::Reward))
-                .or(in_state(GameState::Tribulation))
-            )
-        );
+        app.add_systems(Update, (
+            handle_screen_effects,
+            update_camera_shake,
+            update_screen_flash,
+            update_screen_warning,
+        ).run_if(in_state(GameState::Combat)));
+    }
+}
+
+fn update_screen_warning(
+    time: Res<Time>,
+    player_query: Query<&Player>,
+    mut warning_query: Query<(&mut Visibility, &mut BackgroundColor), With<ScreenWarning>>,
+) {
+    if let Ok(player) = player_query.get_single() {
+        let is_low_hp = (player.hp as f32 / player.max_hp as f32) < 0.35; // 稍微放宽一点阈值
+        let is_weakened = player.weakness > 0;
+        
+        if let Ok((mut vis, mut color)) = warning_query.get_single_mut() {
+            if is_low_hp || is_weakened {
+                *vis = Visibility::Visible;
+                // 正弦波呼吸效果
+                let alpha = 0.25 + (time.elapsed_secs() * 4.0).sin() * 0.15;
+                color.0 = Color::srgba(0.8, 0.0, 0.0, alpha);
+            } else {
+                *vis = Visibility::Hidden;
+            }
+        }
     }
 }
 

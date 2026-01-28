@@ -8,6 +8,10 @@ use crate::components::{
     CombatState, TurnPhase, NodeType, Realm, Cultivation, MapNode, MapProgress, PlayerDeck, DeckConfig, CardPool, 
     CharacterType, EnemyAttackEvent, 
     SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, 
+    ScreenWarning, 
+
+    PlayerHpBarMarker, 
+
     PlayerUiMarker, 
 
     ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation, 
@@ -1312,6 +1316,20 @@ fn setup_combat_ui(
     let player_entity = player_data.map(|(e, _, _)| e);
 
     commands.entity(root_entity).with_children(|root| {
+        // --- [大作级] 屏幕预警层 (最底层) ---
+        root.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.8, 0.0, 0.0, 0.0)), // 初始透明
+            Visibility::Hidden,
+            ScreenWarning,
+            ZIndex(-1), // 放在所有战斗 UI 之下
+        ));
+
         root.spawn((
             Node { position_type: PositionType::Absolute, top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Px(45.0), flex_direction: FlexDirection::Row, align_items: AlignItems::Center, padding: UiRect::horizontal(Val::Px(20.0)), column_gap: Val::Px(30.0), ..default() },
             BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.85)), TopBar,
@@ -1324,48 +1342,81 @@ fn setup_combat_ui(
             }
         });
         root.spawn((
-            Node { position_type: PositionType::Absolute, left: Val::Px(150.0), bottom: Val::Px(280.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() },
+            Node { 
+                position_type: PositionType::Absolute, 
+                left: Val::Px(150.0), 
+                bottom: Val::Px(280.0), 
+                flex_direction: FlexDirection::Column, 
+                align_items: AlignItems::Start, // 改为左对齐
+                ..default() 
+            },
             ZIndex(150),
         )).with_children(|p| {
             if let Some((_, player, _)) = player_data {
-                // HP 与护甲并排栏
+                // --- [大作级] 增强版血条容器 ---
                 p.spawn(Node {
                     flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
-                    column_gap: Val::Px(10.0),
+                    column_gap: Val::Px(5.0),
                     ..default()
                 }).with_children(|row| {
-                    // 玩家护甲图标 (放在左侧)
+                    // A. 护甲图标 (半悬浮于血条左侧)
                     if let Some(entity) = player_entity {
                         row.spawn((
                             Node {
                                 display: Display::None,
-                                width: Val::Px(32.0), height: Val::Px(32.0),
+                                width: Val::Px(36.0), height: Val::Px(36.0),
                                 justify_content: JustifyContent::Center, align_items: AlignItems::Center,
+                                margin: UiRect::right(Val::Px(-15.0)), // 向右偏移覆盖血条边缘
                                 ..default()
                             },
-                            ImageNode::new(asset_server.load("textures/cards/defense.png")).with_color(Color::srgb(1.0, 0.6, 0.0)), // 橙金色护盾图标
+                            ImageNode::new(asset_server.load("textures/cards/defense.png")).with_color(Color::srgb(1.0, 0.6, 0.0)),
                             BlockIconMarker { owner: entity },
+                            ZIndex(10), // 确保在血条之上
                         )).with_children(|shield| {
                             shield.spawn((
                                 Text::new("0"),
-                                TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() },
+                                TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() },
                                 TextColor(Color::WHITE),
                                 BlockText,
                             ));
                         });
                     }
 
-                    row.spawn((Text::new(format!("{}/{}", player.hp, player.max_hp)), TextFont { font: chinese_font.clone(), font_size: 22.0, ..default() }, TextColor(Color::WHITE), PlayerHpText));
+                    // B. 血条主体
+                    row.spawn((
+                        Node {
+                            width: Val::Px(200.0),
+                            height: Val::Px(20.0),
+                            border: UiRect::all(Val::Px(2.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.2, 0.0, 0.0)), // 暗红色背景
+                        BorderColor(Color::BLACK),
+                    )).with_children(|bar| {
+                        // 实际血量填充
+                        let hp_percent = (player.hp as f32 / player.max_hp as f32) * 100.0;
+                        bar.spawn((
+                            Node {
+                                width: Val::Percent(hp_percent),
+                                height: Val::Percent(100.0),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0.8, 0.1, 0.1)), // 鲜红色
+                            PlayerHpBarMarker, // 用于后续动态更新宽度
+                        ));
+                    });
+
+                    row.spawn((Text::new(format!("{}/{}", player.hp, player.max_hp)), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE), PlayerHpText));
                 });
 
-                // 玩家状态显示行 (总是生成，标记为 Player 主体)
+                // 玩家状态显示行
                 p.spawn((
                     Text::new(""),
                     TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() },
                     TextColor(Color::srgb(0.7, 0.4, 1.0)),
-                    StatusIndicator { owner: player_entity.unwrap_or(Entity::PLACEHOLDER) }, // 哪怕现在没有，也占位
-                )).insert(PlayerUiMarker); // 使用 Marker 辅助定位
+                    StatusIndicator { owner: player_entity.unwrap_or(Entity::PLACEHOLDER) },
+                )).insert(PlayerUiMarker);
             }
         });
         root.spawn((
@@ -1632,14 +1683,15 @@ fn process_enemy_turn_queue(
 fn update_combat_ui(
     player_query: Query<&Player, Changed<Player>>,
     enemy_query: Query<&Enemy, Changed<Enemy>>,
+    mut hp_bar_query: Query<&mut Node, With<PlayerHpBarMarker>>,
     mut text_queries: ParamSet<(
         Query<&mut Text, With<PlayerHpText>>,
         Query<&mut Text, With<PlayerEnergyText>>,
         Query<&mut Text, With<PlayerBlockText>>,
         Query<&mut Text, With<TopBarHpText>>,
         Query<&mut Text, With<TopBarGoldText>>,
-        Query<(&EnemyHpText, &mut Text)>,     // 索引 5: 敌人 HP
-        Query<(&EnemyIntentText, &mut Text)>, // 索引 6: 敌人意图
+        Query<(&EnemyHpText, &mut Text)>,     // 敌人 HP
+        Query<(&EnemyIntentText, &mut Text)>, // 敌人意图
     )>,
 ) {
     if let Ok(p) = player_query.get_single() {
@@ -1648,6 +1700,12 @@ fn update_combat_ui(
         if let Ok(mut t) = text_queries.p2().get_single_mut() { t.0 = format!("护甲: {}", p.block); }
         if let Ok(mut t) = text_queries.p3().get_single_mut() { t.0 = format!("道行: {}/{}", p.hp, p.max_hp); }
         if let Ok(mut t) = text_queries.p4().get_single_mut() { t.0 = format!("灵石: {}", p.gold); }
+
+        // 同步血条宽度
+        if let Ok(mut node) = hp_bar_query.get_single_mut() {
+            let hp_percent = (p.hp as f32 / p.max_hp as f32) * 100.0;
+            node.width = Val::Percent(hp_percent.clamp(0.0, 100.0));
+        }
     }
 
     // 1. 同步更新所有敌人的 HP

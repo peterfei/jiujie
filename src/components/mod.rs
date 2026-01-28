@@ -20,7 +20,7 @@ pub use combat::{
     DamageNumber, DamageEffectEvent, BlockIconMarker, BlockText, StatusIndicator,
     EnemyHpText, EnemyIntentText, EnemyStatusUi, PlayerHpText, PlayerEnergyText, PlayerBlockText,
     TopBar, TopBarHpText, TopBarGoldText, EnergyOrb, EndTurnButton, HandArea, CombatUiRoot,
-    StatusEffectEvent, CardDescriptionMarker,
+    StatusEffectEvent, CardDescriptionMarker, PlayerHpBarMarker, EnemyHpBarMarker,
 };
 pub use cards::{
     Card, CardType, CardEffect, CardRarity,
@@ -44,7 +44,7 @@ pub use particle::{
     EnemyDeathAnimation, VictoryEvent
 };
 pub use screen_effect::{
-    CameraShake, ScreenFlash, ScreenEffectEvent, ScreenEffectMarker
+    CameraShake, ScreenFlash, ScreenEffectEvent, ScreenEffectMarker, ScreenWarning
 };
 pub use relic::{
     Relic, RelicId, RelicRarity, RelicEffect,

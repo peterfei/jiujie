@@ -105,3 +105,7 @@ impl ScreenEffectEvent {
 /// 屏幕特效标记（用于 UI 根实体匹配等）
 #[derive(Component)]
 pub struct ScreenEffectMarker;
+
+/// 屏幕预警标记（低血量或虚弱）
+#[derive(Component)]
+pub struct ScreenWarning;

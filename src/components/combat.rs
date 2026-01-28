@@ -201,6 +201,14 @@ pub struct HandArea;
 pub struct CombatUiRoot;
 
 #[derive(Component)]
+pub struct PlayerHpBarMarker;
+
+#[derive(Component)]
+pub struct EnemyHpBarMarker {
+    pub owner: Entity,
+}
+
+#[derive(Component)]
 pub struct CardDescriptionMarker {
     pub card_id: u32,
 }
