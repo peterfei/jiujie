@@ -21,7 +21,7 @@ pub use combat::{
     EnemyHpText, EnemyIntentText, EnemyStatusUi, PlayerHpText, PlayerEnergyText, PlayerBlockText,
     TopBar, TopBarHpText, TopBarGoldText, EnergyOrb, EndTurnButton, HandArea, CombatUiRoot,
     StatusEffectEvent, CardDescriptionMarker, PlayerHpBarMarker, EnemyHpBarMarker, IntentIconMarker,
-    PlayerHpBufferMarker, EnemyHpBufferMarker,
+    PlayerHpBufferMarker, EnemyHpBufferMarker, Environment,
 };
 pub use cards::{
     Card, CardType, CardEffect, CardRarity,

@@ -4,6 +4,7 @@
 
 use bevy::prelude::*;
 use crate::components::*;
+use crate::components::combat::Environment;
 use crate::components::relic::{RelicUiMarker, RelicItemMarker};
 use crate::states::GameState;
 
@@ -80,6 +81,7 @@ pub fn trigger_relics_on_combat_start(
     mut hand_query: Query<&mut Hand>,
     mut draw_pile_query: Query<&mut DrawPile>,
     mut discard_pile_query: Query<&mut DiscardPile>,
+    env: Option<Res<Environment>>, // 新增环境资源
 ) {
     // 防止重复触发
     if combat_start_processed.processed {
@@ -89,6 +91,8 @@ pub fn trigger_relics_on_combat_start(
 
     info!("【遗物系统】战斗开始，触发遗物效果");
 
+    let env_ref = env.as_ref().map(|r| r.as_ref());
+
     for relic in &relic_collection.relic {
         for effect in &relic.effects {
             match effect {
@@ -96,7 +100,7 @@ pub fn trigger_relics_on_combat_start(
                     // 造成伤害
                     if *damage > 0 {
                         if let Ok(mut enemy) = enemy_query.get_single_mut() {
-                            enemy.take_damage(*damage);
+                            enemy.take_damage_with_env(*damage, env_ref);
                             info!("  遗物 [{}] 触发：对敌人造成 {} 点伤害", relic.name, damage);
                         }
                     }

@@ -42,6 +42,8 @@ pub enum CardType {
     Skill,
     /// 能力卡（持续效果）
     Power,
+    /// 诅咒卡（负面效果）
+    Curse,
 }
 
 /// 卡牌效果
@@ -65,6 +67,12 @@ pub enum CardEffect {
     MultiAttack { damage: i32, times: i32 },
     /// 施加状态
     ApplyStatus { status: StatusType, count: i32 },
+    /// 改变环境
+    ChangeEnvironment { name: String },
+    /// 诅咒：虚弱（抽到时生效）
+    CurseWeakness,
+    /// 诅咒：扣血（抽到时生效）
+    CurseDamage { amount: i32 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -130,6 +138,7 @@ impl Card {
             CardType::Defense => Color::srgb(0.3, 0.5, 0.9),   // 蓝色
             CardType::Skill => Color::srgb(0.4, 0.7, 0.4),     // 绿色
             CardType::Power => Color::srgb(0.7, 0.3, 0.7),     // 紫色
+            CardType::Curse => Color::srgb(0.3, 0.3, 0.3),     // 灰色
         }
     }
 
@@ -300,6 +309,8 @@ pub struct Hand {
     pub cards: Vec<Card>,
     /// 最大手牌数
     pub max_size: usize,
+    /// 被封印的槽位索引及其剩余回合 (index, duration)
+    pub sealed_slots: Vec<(usize, u32)>,
 }
 
 impl Hand {
@@ -308,17 +319,35 @@ impl Hand {
         Self {
             cards: Vec::new(),
             max_size,
+            sealed_slots: Vec::new(),
         }
     }
 
     /// 添加卡牌到手牌
     pub fn add_card(&mut self, card: Card) -> bool {
-        if self.cards.len() < self.max_size {
+        let effective_max = self.max_size.saturating_sub(self.sealed_slots.len());
+        if self.cards.len() < effective_max {
             self.cards.push(card);
             true
         } else {
             false
         }
+    }
+
+    /// 封印一个槽位
+    pub fn seal_slot(&mut self, _slot_index: usize, duration: u32) {
+        // 简化实现：封印任意槽位都会减少有效容量
+        self.sealed_slots.push((0, duration));
+    }
+
+    /// 回合结束时更新封印状态
+    pub fn update_seals(&mut self) {
+        self.sealed_slots.retain_mut(|(_, duration)| {
+            if *duration > 0 {
+                *duration -= 1;
+            }
+            *duration > 0
+        });
     }
 
     /// 移除卡牌（打出）

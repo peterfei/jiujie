@@ -57,15 +57,29 @@ impl Default for Player {
 impl Player {
     /// 计算实际造成的伤害 (考虑虚弱)
     pub fn calculate_outgoing_damage(&self, base_amount: i32) -> i32 {
-        if self.weakness > 0 {
+        self.calculate_outgoing_damage_with_env(base_amount, None)
+    }
+
+    pub fn calculate_outgoing_damage_with_env(&self, base_amount: i32, environment: Option<&Environment>) -> i32 {
+        let damage = if self.weakness > 0 {
             (base_amount as f32 * 0.75) as i32
         } else {
             base_amount
+        };
+
+        if let Some(env) = environment {
+            (damage as f32 * env.damage_modifier) as i32
+        } else {
+            damage
         }
     }
 
     /// 计算实际受到的伤害 (考虑易伤)
     pub fn calculate_incoming_damage(&self, base_amount: i32) -> i32 {
+        self.calculate_incoming_damage_with_env(base_amount, None)
+    }
+
+    pub fn calculate_incoming_damage_with_env(&self, base_amount: i32, _environment: Option<&Environment>) -> i32 {
         if self.vulnerable > 0 {
             (base_amount as f32 * 1.5) as i32
         } else {
@@ -75,7 +89,11 @@ impl Player {
 
     /// 受到伤害（护甲优先抵消）
     pub fn take_damage(&mut self, amount: i32) {
-        let mut remaining_damage = self.calculate_incoming_damage(amount);
+        self.take_damage_with_env(amount, None);
+    }
+
+    pub fn take_damage_with_env(&mut self, amount: i32, environment: Option<&Environment>) {
+        let mut remaining_damage = self.calculate_incoming_damage_with_env(amount, environment);
 
         // 护甲优先抵消伤害
         if self.block > 0 {
@@ -99,7 +117,13 @@ impl Player {
 
     /// 获得护甲
     pub fn gain_block(&mut self, amount: i32) {
-        self.block += amount;
+        self.gain_block_with_env(amount, None);
+    }
+
+    pub fn gain_block_with_env(&mut self, amount: i32, environment: Option<&Environment>) {
+        let modifier = environment.map(|e| e.block_modifier).unwrap_or(1.0);
+        let final_amount = (amount as f32 * modifier) as i32;
+        self.block += final_amount;
     }
 
     /// 清空护甲（回合结束时）
@@ -291,8 +315,58 @@ pub enum EnemyIntent {
     Buff { strength: i32 },
     /// 减益（给玩家施加负面效果）
     Debuff { poison: i32, weakness: i32 },
+    /// 诅咒（向玩家牌组加入负面卡牌）
+    Curse { card_id: u32 },
+    /// 封印（封印玩家的手牌槽位）
+    Seal { slot_index: usize, duration: u32 },
     /// 等待
     Wait,
+}
+
+// ============================================================================
+// 环境系统
+// ============================================================================
+
+/// 战斗环境效果
+#[derive(Resource, Debug, Clone, Serialize, Deserialize)]
+pub struct Environment {
+    pub name: String,
+    pub description: String,
+    /// 伤害加成系数 (例如 1.2 表示增加 20%)
+    pub damage_modifier: f32,
+    /// 护甲加成系数
+    pub block_modifier: f32,
+}
+
+impl Default for Environment {
+    fn default() -> Self {
+        Self {
+            name: "常态".to_string(),
+            description: "灵气平稳，无特殊效果。".to_string(),
+            damage_modifier: 1.0,
+            block_modifier: 1.0,
+        }
+    }
+}
+
+impl Environment {
+    pub fn thunder_storm() -> Self {
+        Self {
+            name: "雷暴".to_string(),
+            description: "雷元素充盈，伤害提升 20%".to_string(),
+            damage_modifier: 1.2,
+            block_modifier: 1.0,
+        }
+    }
+    
+    pub fn thick_fog() -> Self {
+        Self {
+            name: "浓雾".to_string(),
+            description: "视线受阻，防御效果提升 20%".to_string(),
+            damage_modifier: 1.0,
+            block_modifier: 1.2,
+        }
+    }
 }
 
 /// 敌人类型
@@ -315,6 +389,8 @@ pub struct AiPattern {
     pub defend_chance: f32,
     pub buff_chance: f32,
     pub debuff_chance: f32,
+    pub curse_chance: f32,
+    pub seal_chance: f32,
     pub damage_range: (i32, i32),
     pub block_range: (i32, i32),
     pub buff_range: (i32, i32),
@@ -324,27 +400,31 @@ impl AiPattern {
     pub fn demonic_wolf() -> Self {
         Self {
             attack_chance: 0.7, defend_chance: 0.1, buff_chance: 0.2, debuff_chance: 0.0,
+            curse_chance: 0.0, seal_chance: 0.0,
             damage_range: (8, 12), block_range: (3, 5), buff_range: (1, 3),
         }
     }
 
     pub fn poison_spider() -> Self {
         Self {
-            attack_chance: 0.4, defend_chance: 0.2, buff_chance: 0.0, debuff_chance: 0.4,
+            attack_chance: 0.3, defend_chance: 0.2, buff_chance: 0.0, debuff_chance: 0.3,
+            curse_chance: 0.0, seal_chance: 0.2, // 蜘蛛会封印气穴
             damage_range: (5, 8), block_range: (4, 6), buff_range: (0, 0),
         }
     }
 
     pub fn cursed_spirit() -> Self {
         Self {
-            attack_chance: 0.3, defend_chance: 0.3, buff_chance: 0.0, debuff_chance: 0.4,
+            attack_chance: 0.2, defend_chance: 0.2, buff_chance: 0.0, debuff_chance: 0.2,
+            curse_chance: 0.4, seal_chance: 0.0, // 怨灵擅长施加诅咒
             damage_range: (10, 15), block_range: (5, 10), buff_range: (0, 0),
         }
     }
 
     pub fn great_demon() -> Self {
         Self {
-            attack_chance: 0.6, defend_chance: 0.2, buff_chance: 0.2, debuff_chance: 0.0,
+            attack_chance: 0.5, defend_chance: 0.2, buff_chance: 0.1, debuff_chance: 0.1,
+            curse_chance: 0.05, seal_chance: 0.05,
             damage_range: (12, 18), block_range: (6, 10), buff_range: (3, 5),
         }
     }
@@ -402,15 +482,29 @@ impl Enemy {
 
     /// 计算实际造成的伤害 (考虑虚弱)
     pub fn calculate_outgoing_damage(&self, base_amount: i32) -> i32 {
-        if self.weakness > 0 {
+        self.calculate_outgoing_damage_with_env(base_amount, None)
+    }
+
+    pub fn calculate_outgoing_damage_with_env(&self, base_amount: i32, environment: Option<&Environment>) -> i32 {
+        let damage = if self.weakness > 0 {
             (base_amount as f32 * 0.75) as i32
         } else {
             base_amount
+        };
+
+        if let Some(env) = environment {
+            (damage as f32 * env.damage_modifier) as i32
+        } else {
+            damage
         }
     }
 
     /// 计算实际受到的伤害 (考虑易伤)
     pub fn calculate_incoming_damage(&self, base_amount: i32) -> i32 {
+        self.calculate_incoming_damage_with_env(base_amount, None)
+    }
+
+    pub fn calculate_incoming_damage_with_env(&self, base_amount: i32, _environment: Option<&Environment>) -> i32 {
         if self.vulnerable > 0 {
             (base_amount as f32 * 1.5) as i32
         } else {
@@ -419,7 +513,11 @@ impl Enemy {
     }
 
     pub fn take_damage(&mut self, amount: i32) {
-        let mut remaining_damage = self.calculate_incoming_damage(amount);
+        self.take_damage_with_env(amount, None);
+    }
+
+    pub fn take_damage_with_env(&mut self, amount: i32, environment: Option<&Environment>) {
+        let mut remaining_damage = self.calculate_incoming_damage_with_env(amount, environment);
         
         if self.block > 0 {
             if self.block >= remaining_damage {
@@ -480,10 +578,23 @@ impl Enemy {
             // 防御
             let block = rng.gen_range(self.ai_pattern.block_range.0..=self.ai_pattern.block_range.1);
             EnemyIntent::Defend { block }
-        } else {
-            // 强化（移除Wait，确保总是选择一种行动）
+        } else if roll < self.ai_pattern.attack_chance + self.ai_pattern.defend_chance + self.ai_pattern.buff_chance {
+            // 强化
             let strength = rng.gen_range(self.ai_pattern.buff_range.0..=self.ai_pattern.buff_range.1);
             EnemyIntent::Buff { strength }
+        } else if roll < self.ai_pattern.attack_chance + self.ai_pattern.defend_chance + self.ai_pattern.buff_chance + self.ai_pattern.debuff_chance {
+            // 减益
+            EnemyIntent::Debuff { poison: 2, weakness: 1 }
+        } else if roll < self.ai_pattern.attack_chance + self.ai_pattern.defend_chance + self.ai_pattern.buff_chance + self.ai_pattern.debuff_chance + self.ai_pattern.curse_chance {
+            // 诅咒 (card_id 500 可能是某种诅咒卡)
+            EnemyIntent::Curse { card_id: 500 }
+        } else if roll < self.ai_pattern.attack_chance + self.ai_pattern.defend_chance + self.ai_pattern.buff_chance + self.ai_pattern.debuff_chance + self.ai_pattern.curse_chance + self.ai_pattern.seal_chance {
+            // 封印
+            let slot = rng.gen_range(0..5);
+            EnemyIntent::Seal { slot_index: slot, duration: 2 }
+        } else {
+            // 默认回退到攻击
+            EnemyIntent::Attack { damage: self.ai_pattern.damage_range.0 + self.strength }
         };
 
         self.intent = intent;
@@ -509,8 +620,16 @@ impl Enemy {
                 EnemyIntent::Buff { strength }
             }
             EnemyIntent::Debuff { poison, weakness } => {
-                info!("{} 正在准备邪术...", self.name);
+                info!("{} 正在施加减益效果...", self.name);
                 EnemyIntent::Debuff { poison, weakness }
+            }
+            EnemyIntent::Curse { card_id } => {
+                info!("{} 正在向你的剑冢注入诅咒...", self.name);
+                EnemyIntent::Curse { card_id }
+            }
+            EnemyIntent::Seal { slot_index, duration } => {
+                info!("{} 封印了你的第 {} 个气穴！", self.name, slot_index + 1);
+                EnemyIntent::Seal { slot_index, duration }
             }
             EnemyIntent::Wait => {
                 info!("{} 等待中", self.name);
