@@ -1739,13 +1739,14 @@ pub fn process_heavenly_strike_cinematic(
         if elapsed >= strike_time && cinematic.flash_count == i as u32 {
             info!("【天象演出】闪击 {}！", i + 1);
             
+            // 每次闪击的视觉反馈 (透明度从 0.7 递增到 1.0)
             screen_events.send(ScreenEffectEvent::Flash { 
-                color: Color::srgba(0.9, 0.9, 1.0, 0.6 + (i as f32 * 0.1)), 
+                color: Color::srgba(0.9, 0.9, 1.0, 0.7 + (i as f32 * 0.15)), 
                 duration: 0.2 
             });
             screen_events.send(ScreenEffectEvent::Shake { 
-                trauma: 0.4 + (i as f32 * 0.2), 
-                decay: 3.0 
+                trauma: 0.5 + (i as f32 * 0.25), 
+                decay: 2.5 
             });
             sfx_events.send(PlaySfxEvent::with_volume(SfxType::LightningStrike, 1.0));
 

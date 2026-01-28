@@ -90,12 +90,24 @@ pub fn update_physical_impacts(
             match impact.action_type {
                 // ... (其他动作逻辑保持)
                 ActionType::Ascend => {
-                    // 祈祷升腾：一个平滑的抛物线高度变化
-                    // 升起高度约 0.8 米
-                    action_pos_offset.y = (progress * std::f32::consts::PI).sin() * 0.8;
-                    // 身体轻微后仰
-                    action_tilt_offset = -0.1 * progress;
-                    impact.offset_velocity = Vec3::ZERO; // 水平绝对静止
+                    // 祈祷升腾曲线优化：上升 -> 悬停 -> 降落
+                    let height = 0.8;
+                    if progress < 0.2 {
+                        // 阶段 1: 上升 (前 20% 时间)
+                        let p = progress / 0.2;
+                        action_pos_offset.y = p * height;
+                    } else if progress < 0.8 {
+                        // 阶段 2: 悬停暂停不动 (中间 60% 时间)
+                        action_pos_offset.y = height;
+                    } else {
+                        // 阶段 3: 降落 (最后 20% 时间)
+                        let p = (1.0 - progress) / 0.2;
+                        action_pos_offset.y = p * height;
+                    }
+                    
+                    // 身体倾斜：悬停时保持轻微后仰
+                    action_tilt_offset = if progress < 0.8 { -0.1 } else { -0.1 * (1.0 - progress) / 0.2 };
+                    impact.offset_velocity = Vec3::ZERO;
                 },
                 ActionType::WolfBite => {
                     let action_phase = impact.action_timer * 12.5;
