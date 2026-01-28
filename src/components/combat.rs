@@ -613,19 +613,42 @@ impl Default for CombatState {
     }
 }
 
-/// 玩家持久化牌组资源（跨战斗保存）
+/// 玩家持久化状态资源（跨场景保存）
 #[derive(Resource, Debug, Clone)]
 pub struct PlayerDeck {
     /// 牌组中的所有卡牌
     pub cards: Vec<Card>,
+    /// 当前生命值
+    pub hp: i32,
+    /// 最大生命值
+    pub max_hp: i32,
+    /// 灵石数量
+    pub gold: i32,
 }
 
 impl PlayerDeck {
-    /// 创建新牌组
+    /// 创建新牌组并初始化数值
     pub fn new() -> Self {
         Self {
             cards: create_starting_deck(),
+            hp: 100,
+            max_hp: 100,
+            gold: 0,
         }
+    }
+
+    /// 从 Player 实体更新数据
+    pub fn update_from_player(&mut self, player: &Player) {
+        self.hp = player.hp;
+        self.max_hp = player.max_hp;
+        self.gold = player.gold;
+    }
+
+    /// 将数据应用到 Player 实体
+    pub fn apply_to_player(&self, player: &mut Player) {
+        player.hp = self.hp;
+        player.max_hp = self.max_hp;
+        player.gold = self.gold;
     }
 
     /// 添加卡牌到牌组
@@ -645,7 +668,7 @@ impl PlayerDeck {
 
     /// 重置牌组为初始状态（用于重新开始游戏）
     pub fn reset(&mut self) {
-        self.cards = create_starting_deck();
+        *self = Self::new();
     }
 }
 
