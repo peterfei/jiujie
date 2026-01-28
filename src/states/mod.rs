@@ -11,10 +11,16 @@ pub enum GameState {
     Prologue,
     Map,
     Combat,
+    /// 结算奖励状态
     Reward,
+    /// 商店状态
     Shop,
+    /// 休息状态
     Rest,
-    GameOver,
-    /// 渡劫：面临天雷考验
+    /// 渡劫状态
     Tribulation,
+    /// 机缘事件状态
+    Event,
+    /// 游戏结束状态
+    GameOver,
 }

@@ -224,7 +224,11 @@ impl Plugin for GamePlugin {
         .add_systems(Update, update_prologue.run_if(in_state(GameState::Prologue)))
         .add_systems(OnExit(GameState::Prologue), cleanup_prologue)
         .add_systems(OnEnter(GameState::Tribulation), setup_tribulation)
-        .add_systems(Update, update_tribulation.run_if(in_state(GameState::Tribulation)))
+        .add_systems(OnEnter(GameState::Event), setup_event_ui)
+        .add_systems(Update, (
+            update_tribulation.run_if(in_state(GameState::Tribulation)),
+            handle_event_choices.run_if(in_state(GameState::Event)),
+        ))
         .add_systems(OnExit(GameState::Tribulation), teardown_tribulation);
     }
 }
@@ -715,6 +719,10 @@ fn handle_map_button_clicks(
                     info!("【地图】前往仙家坊市: {}", node_id);
                     next_state.set(GameState::Shop);
                 }
+                NodeType::Event => {
+                    info!("【地图】触发随机机缘: {}", node_id);
+                    next_state.set(GameState::Event);
+                }
                 NodeType::Treasure => {
                     info!("【地图】偶遇上古宝箱: {}", node_id);
                     next_state.set(GameState::Reward);
@@ -938,9 +946,10 @@ fn spawn_map_node(
         NodeType::Elite => Color::srgb(0.6, 0.3, 0.1),   // 橙色
         NodeType::Boss => Color::srgb(0.7, 0.1, 0.1),    // 红色
         NodeType::Rest => Color::srgb(0.3, 0.4, 0.6),    // 蓝色
-        NodeType::Shop => Color::srgb(0.5, 0.4, 0.2),    // 黄色
-        NodeType::Treasure => Color::srgb(0.5, 0.2, 0.5), // 紫色
-        NodeType::Unknown => Color::srgb(0.4, 0.4, 0.4), // 灰色
+        NodeType::Shop => Color::srgb(0.8, 0.8, 0.2),
+        NodeType::Event => Color::srgb(0.2, 0.6, 0.8), 
+        NodeType::Treasure => Color::srgb(1.0, 0.8, 0.2), // 金色
+        NodeType::Unknown => Color::srgb(0.4, 0.4, 0.4),
     };
 
     // 节点名称
@@ -949,8 +958,9 @@ fn spawn_map_node(
         NodeType::Elite => "精英",
         NodeType::Boss => "Boss",
         NodeType::Rest => "休息",
-        NodeType::Shop => "商店",
-        NodeType::Treasure => "宝箱",
+        NodeType::Shop => "坊市",
+        NodeType::Event => "机缘",
+        NodeType::Treasure => "遗宝",
         NodeType::Unknown => "未知",
     };
 
@@ -1011,6 +1021,7 @@ fn get_node_description(node_type: NodeType) -> &'static str {
         NodeType::Boss => "首领",
         NodeType::Rest => "恢复HP",
         NodeType::Shop => "购买",
+        NodeType::Event => "机缘",
         NodeType::Treasure => "奖励",
         NodeType::Unknown => "???",
     }
@@ -1024,6 +1035,7 @@ fn get_node_icon(node_type: NodeType) -> &'static str {
         NodeType::Boss => "王",
         NodeType::Rest => "休",
         NodeType::Shop => "店",
+        NodeType::Event => "缘",
         NodeType::Treasure => "宝",
         NodeType::Unknown => "?",
     }
@@ -1081,6 +1093,130 @@ struct BackToMenuButton;
 
 #[derive(Component)]
 struct BackToMapButton;
+
+#[derive(Component)]
+pub struct EventUiRoot; // 设为 pub
+
+pub fn setup_event_ui_wrapper(commands: Commands, asset_server: Res<AssetServer>) {
+    setup_event_ui(commands, asset_server);
+}
+
+#[derive(Component)]
+enum EventChoiceButton {
+    GainGold(i32),
+    Heal(i32),
+    Leave,
+}
+
+/// 设置机缘事件界面
+fn setup_event_ui(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+) {
+    info!("【机缘】进入奇遇事件");
+    let font = asset_server.load("fonts/Arial Unicode.ttf");
+
+    commands.spawn((
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            row_gap: Val::Px(30.0),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.05, 0.05, 0.1, 0.9)),
+        EventUiRoot,
+    )).with_children(|parent| {
+        // 标题
+        parent.spawn((
+            Text::new("古 修 遗 迹"),
+            TextFont { font: font.clone(), font_size: 48.0, ..default() },
+            TextColor(Color::srgb(0.4, 0.8, 1.0)),
+        ));
+
+        // 描述
+        parent.spawn((
+            Text::new("你在一处断崖下发现了一尊古老的石像，石像手中握着一颗微弱发光的灵石，而基座上似乎刻着某种愈合咒文。"),
+            Node { max_width: Val::Px(600.0), ..default() },
+            TextFont { font: font.clone(), font_size: 20.0, ..default() },
+            TextColor(Color::WHITE),
+            TextLayout::new_with_justify(JustifyText::Center),
+        ));
+
+        // 选项区
+        parent.spawn(Node {
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(15.0),
+            ..default()
+        }).with_children(|choices| {
+            // 选项 1: 拿走灵石
+            create_event_button(choices, "取走灵石 (+50 灵石)", EventChoiceButton::GainGold(50), font.clone());
+            // 选项 2: 虔诚祈祷
+            create_event_button(choices, "虔诚祈祷 (回复 20 HP)", EventChoiceButton::Heal(20), font.clone());
+            // 选项 3: 离去
+            create_event_button(choices, "因果莫测，径直离去", EventChoiceButton::Leave, font.clone());
+        });
+    });
+}
+
+fn create_event_button(parent: &mut ChildBuilder, label: &str, choice: EventChoiceButton, font: Handle<Font>) {
+    parent.spawn((
+        Button,
+        Node {
+            width: Val::Px(400.0),
+            height: Val::Px(50.0),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.2, 0.2, 0.3, 0.8)),
+        BorderRadius::all(Val::Px(8.0)),
+        choice,
+    )).with_children(|p| {
+        p.spawn((
+            Text::new(label),
+            TextFont { font, font_size: 18.0, ..default() },
+            TextColor(Color::WHITE),
+        ));
+    });
+}
+
+/// 处理机缘事件选择
+fn handle_event_choices(
+    mut commands: Commands,
+    mut next_state: ResMut<NextState<GameState>>,
+    mut player_query: Query<&mut Player>,
+    button_query: Query<(&Interaction, &EventChoiceButton), Changed<Interaction>>,
+    ui_query: Query<Entity, With<EventUiRoot>>,
+) {
+    for (interaction, choice) in button_query.iter() {
+        if *interaction == Interaction::Pressed {
+            if let Ok(mut player) = player_query.get_single_mut() {
+                match choice {
+                    EventChoiceButton::GainGold(amt) => {
+                        player.gold += *amt;
+                        info!("【机缘】获得灵石 {}", amt);
+                    }
+                    EventChoiceButton::Heal(amt) => {
+                        player.hp = (player.hp + *amt).min(player.max_hp);
+                        info!("【机缘】回复生命 {}", amt);
+                    }
+                    EventChoiceButton::Leave => {
+                        info!("【机缘】悄然离去");
+                    }
+                }
+                
+                // 清理并退出
+                for e in ui_query.iter() {
+                    commands.entity(e).despawn_recursive();
+                }
+                next_state.set(GameState::Map);
+            }
+        }
+    }
+}
 
 /// 设置战斗UI
 fn setup_combat_ui(

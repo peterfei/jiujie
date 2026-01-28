@@ -35,6 +35,8 @@ pub enum NodeType {
     Rest,
     /// 商店
     Shop,
+    /// 机缘事件
+    Event,
     /// 宝箱
     Treasure,
     /// 未知
@@ -199,17 +201,20 @@ pub fn generate_map_nodes(config: &MapConfig, _current_layer: u32) -> Vec<MapNod
             // 第一层总是可解锁的
             let unlocked = layer == 0;
 
-            // 随机节点类型（大作级关底唯一 BOSS 逻辑）
+            // 随机节点类型（大作级多样性逻辑）
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            let rand_val = rng.gen_range(0..100);
+
             let node_type = if layer == config.layers - 1 {
-                NodeType::Boss // 最后一层全员 BOSS，确保无论走哪条线都能通关
+                NodeType::Boss 
             } else if layer == config.layers - 2 {
-                // 倒数第二层增加精英怪作为守门人
                 NodeType::Elite
+            } else if rand_val < 15 {
+                NodeType::Event // 15% 几率触发机缘
             } else if node_idx % 7 == 0 {
-                // 每7个节点1个商店（避免与每3个休息重叠）
                 NodeType::Shop
             } else if node_idx % 3 == 0 {
-                // 每3个节点1个休息
                 NodeType::Rest
             } else {
                 NodeType::Normal
