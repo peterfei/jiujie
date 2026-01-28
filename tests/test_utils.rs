@@ -80,7 +80,8 @@ pub fn create_test_app() -> App {
     app.add_plugins(ParticlePlugin);
     app.add_plugins(ScreenEffectPlugin);
 
-    // 设置测试资源 (缩短延迟以加快测试运行并提高状态转换可靠性)
+    // 设置测试资源
+    app.insert_resource(bevy_card_battler::components::CombatState::default());
     app.insert_resource(VictoryDelay::new(0.1));
     app.insert_resource(CharacterAssets::default());
     app.insert_resource(bevy_card_battler::components::Environment::default());
