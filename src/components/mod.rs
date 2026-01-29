@@ -2,6 +2,7 @@
 
 pub mod animation;
 pub mod audio;
+pub mod background_music;
 pub mod cards;
 pub mod combat;
 pub mod cultivation;
@@ -16,6 +17,7 @@ pub mod sprite;
 // 批量重导出
 pub use animation::*;
 pub use audio::*;
+pub use background_music::*;
 pub use cards::*;
 pub use combat::*;
 pub use cultivation::*;

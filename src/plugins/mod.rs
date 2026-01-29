@@ -2,24 +2,25 @@
 pub mod hand_ui_v2;
 use bevy::prelude::*;
 use crate::states::GameState;
+use crate::components::background_music::{BgmType, PlayBgmEvent, StopBgmEvent};
 
 use crate::components::{
-    Player, Enemy, EnemyType, EnemyIntent, Card, CardType, CardEffect, CardRarity, Hand, DrawPile, DiscardPile, 
-    CombatState, TurnPhase, NodeType, Realm, Cultivation, MapNode, MapProgress, PlayerDeck, DeckConfig, CardPool, 
+    Player, Enemy, EnemyType, EnemyIntent, Card, CardType, CardEffect, CardRarity, Hand, DrawPile, DiscardPile,
+    CombatState, TurnPhase, NodeType, Realm, Cultivation, MapNode, MapProgress, PlayerDeck, DeckConfig, CardPool,
     MapUiRoot, MapNodeButton, RippleEffect, // 新增导入
-    CharacterType, EnemyAttackEvent, 
-    SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, 
-    PlayerHpBufferMarker, EnemyHpBarMarker, EnemyHpBufferMarker, 
+    CharacterType, EnemyAttackEvent,
+    SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent,
+    PlayerHpBufferMarker, EnemyHpBarMarker, EnemyHpBufferMarker,
 
-    IntentIconMarker, 
+    IntentIconMarker,
 
-    ScreenWarning, 
+    ScreenWarning,
 
-    PlayerHpBarMarker, 
+    PlayerHpBarMarker,
 
-    PlayerUiMarker, 
+    PlayerUiMarker,
 
-    ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation, 
+    ScreenEffectEvent, ScreenEffectMarker, VictoryEvent, EnemyDeathAnimation,
 
 
     EnemySpriteMarker, VictoryDelay, RelicCollection, Relic, RelicId,
@@ -195,7 +196,9 @@ impl Plugin for GamePlugin {
             crate::systems::sprite::SpritePlugin,
             crate::systems::particle::ParticlePlugin, // 补齐粒子插件
             crate::systems::ui::UiPlugin,
-            crate::systems::map::MapPlugin, 
+            crate::systems::map::MapPlugin,
+            crate::systems::background_music::BackgroundMusicPlugin, // 背景音乐插件
+            crate::systems::audio::SfxPlugin, // 音效插件
         ))
         .init_state::<GameState>()
         .init_resource::<Player>() // 初始化玩家全局资源
@@ -216,6 +219,18 @@ impl Plugin for GamePlugin {
         .add_event::<RelicObtainedEvent>()
         .add_event::<RelicTriggeredEvent>()
         // ... (其他系统注册)
+        // 背景音乐触发系统
+        .add_systems(OnEnter(GameState::MainMenu), trigger_bgm_main_menu)
+        .add_systems(OnEnter(GameState::Prologue), trigger_bgm_map_exploration)
+        .add_systems(OnEnter(GameState::Map), trigger_bgm_map_exploration)
+        .add_systems(OnEnter(GameState::Combat), trigger_bgm_combat)
+        .add_systems(OnEnter(GameState::Shop), trigger_bgm_shop)
+        .add_systems(OnEnter(GameState::Rest), trigger_bgm_rest)
+        .add_systems(OnEnter(GameState::Reward), trigger_bgm_victory)
+        .add_systems(OnEnter(GameState::Tribulation), trigger_bgm_tribulation)
+        .add_systems(OnEnter(GameState::Event), trigger_bgm_map_exploration)
+        .add_systems(OnEnter(GameState::GameOver), stop_bgm)
+        // 其他系统
         .add_systems(OnEnter(GameState::Prologue), setup_prologue)
         .add_systems(Update, update_prologue.run_if(in_state(GameState::Prologue)))
         .add_systems(OnExit(GameState::Prologue), cleanup_prologue)
@@ -227,6 +242,75 @@ impl Plugin for GamePlugin {
         ))
         .add_systems(OnExit(GameState::Tribulation), teardown_tribulation);
     }
+}
+
+// ============================================================================
+// 背景音乐触发系统
+// ============================================================================
+
+/// 背景音乐触发系统 - 主菜单
+fn trigger_bgm_main_menu(mut bgm_events: EventWriter<PlayBgmEvent>) {
+    bgm_events.send(PlayBgmEvent::new(BgmType::MainMenu));
+    info!("【背景音乐】触发播放: {}", BgmType::MainMenu.chinese_name());
+}
+
+/// 背景音乐触发系统 - 地图探索
+fn trigger_bgm_map_exploration(mut bgm_events: EventWriter<PlayBgmEvent>) {
+    bgm_events.send(PlayBgmEvent::new(BgmType::MapExploration));
+    info!("【背景音乐】触发播放: {}", BgmType::MapExploration.chinese_name());
+}
+
+/// 背景音乐触发系统 - 战斗（根据敌人类型选择）
+fn trigger_bgm_combat(
+    mut bgm_events: EventWriter<PlayBgmEvent>,
+    enemies: Query<&Enemy>,
+) {
+    // 检查是否有Boss（GreatDemon类型或高血量敌人）
+    let has_boss = enemies.iter().any(|e| {
+        matches!(e.enemy_type, EnemyType::GreatDemon) || e.max_hp >= 100
+    });
+
+    let bgm_type = if has_boss {
+        BgmType::BossBattle
+    } else {
+        BgmType::NormalBattle
+    };
+
+    bgm_events.send(PlayBgmEvent::new(bgm_type));
+    info!("【背景音乐】触发播放: {} ({})",
+        bgm_type.chinese_name(),
+        if has_boss { "Boss战" } else { "普通战斗" }
+    );
+}
+
+/// 背景音乐触发系统 - 商店
+fn trigger_bgm_shop(mut bgm_events: EventWriter<PlayBgmEvent>) {
+    bgm_events.send(PlayBgmEvent::new(BgmType::Shop));
+    info!("【背景音乐】触发播放: {}", BgmType::Shop.chinese_name());
+}
+
+/// 背景音乐触发系统 - 休息
+fn trigger_bgm_rest(mut bgm_events: EventWriter<PlayBgmEvent>) {
+    bgm_events.send(PlayBgmEvent::new(BgmType::Rest));
+    info!("【背景音乐】触发播放: {}", BgmType::Rest.chinese_name());
+}
+
+/// 背景音乐触发系统 - 胜利
+fn trigger_bgm_victory(mut bgm_events: EventWriter<PlayBgmEvent>) {
+    bgm_events.send(PlayBgmEvent::new(BgmType::Victory));
+    info!("【背景音乐】触发播放: {}", BgmType::Victory.chinese_name());
+}
+
+/// 背景音乐触发系统 - 渡劫
+fn trigger_bgm_tribulation(mut bgm_events: EventWriter<PlayBgmEvent>) {
+    bgm_events.send(PlayBgmEvent::new(BgmType::Tribulation));
+    info!("【背景音乐】触发播放: {}", BgmType::Tribulation.chinese_name());
+}
+
+/// 停止背景音乐
+fn stop_bgm(mut bgm_events: EventWriter<StopBgmEvent>) {
+    bgm_events.send(StopBgmEvent::new());
+    info!("【背景音乐】停止播放");
 }
 
 // ============================================================================

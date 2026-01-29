@@ -1,0 +1,251 @@
+//! 背景音乐系统组件与事件
+//!
+//! # 文件配置
+//! 所有音乐文件应放置在 `assets/music/` 目录下：
+//! ```text
+//! assets/music/
+//! ├── main_menu_theme.ogg          # 主菜单
+//! ├── map_exploration_theme.ogg    # 地图探索
+//! ├── normal_battle_theme.ogg      # 普通战斗
+//! ├── boss_battle_theme.ogg        # Boss战
+//! ├── tribulation_theme.ogg        # 渡劫
+//! ├── shop_theme.ogg               # 仙家坊市
+//! ├── rest_theme.ogg               # 休息场景
+//! └── victory_theme.ogg            # 胜利
+//! ```
+//!
+//! # Suno Prompts
+//! 详细的Suno AI生成提示词参见: `assets/music/SUNO_PROMPTS.md`
+
+use bevy::prelude::*;
+use serde::{Serialize, Deserialize};
+
+// ============================================================================
+// 背景音乐类型
+// ============================================================================
+
+/// 背景音乐场景类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum BgmType {
+    /// 主菜单 - 「修仙问道」
+    MainMenu,
+    /// 地图探索 - 「寻仙觅缘」
+    MapExploration,
+    /// 普通战斗 - 「降妖除魔」
+    NormalBattle,
+    /// Boss战 - 「生死对决」
+    BossBattle,
+    /// 渡劫场景 - 「雷劫降临」
+    Tribulation,
+    /// 仙家坊市 - 「坊市繁华」
+    Shop,
+    /// 休息场景 - 「修炼打坐」
+    Rest,
+    /// 胜利曲目 - 「众妖伏诛」
+    Victory,
+}
+
+impl BgmType {
+    /// 获取音乐文件路径（占位符，实际文件需通过Suno生成）
+    pub fn file_path(&self) -> &'static str {
+        match self {
+            BgmType::MainMenu => "music/__PLACEHOLDER__main_menu_theme.ogg",
+            BgmType::MapExploration => "music/__PLACEHOLDER__map_exploration_theme.ogg",
+            BgmType::NormalBattle => "music/__PLACEHOLDER__normal_battle_theme.ogg",
+            BgmType::BossBattle => "music/__PLACEHOLDER__boss_battle_theme.ogg",
+            BgmType::Tribulation => "music/__PLACEHOLDER__tribulation_theme.ogg",
+            BgmType::Shop => "music/__PLACEHOLDER__shop_theme.ogg",
+            BgmType::Rest => "music/__PLACEHOLDER__rest_theme.ogg",
+            BgmType::Victory => "music/__PLACEHOLDER__victory_theme.ogg",
+        }
+    }
+
+    /// 获取音乐文件名（不含扩展名）
+    pub fn file_name(&self) -> &'static str {
+        match self {
+            BgmType::MainMenu => "main_menu_theme",
+            BgmType::MapExploration => "map_exploration_theme",
+            BgmType::NormalBattle => "normal_battle_theme",
+            BgmType::BossBattle => "boss_battle_theme",
+            BgmType::Tribulation => "tribulation_theme",
+            BgmType::Shop => "shop_theme",
+            BgmType::Rest => "rest_theme",
+            BgmType::Victory => "victory_theme",
+        }
+    }
+
+    /// 获取音乐的中文名称
+    pub fn chinese_name(&self) -> &'static str {
+        match self {
+            BgmType::MainMenu => "修仙问道",
+            BgmType::MapExploration => "寻仙觅缘",
+            BgmType::NormalBattle => "降妖除魔",
+            BgmType::BossBattle => "生死对决",
+            BgmType::Tribulation => "雷劫降临",
+            BgmType::Shop => "坊市繁华",
+            BgmType::Rest => "修炼打坐",
+            BgmType::Victory => "众妖伏诛",
+        }
+    }
+
+    /// 获取音乐默认音量
+    pub fn default_volume(&self) -> f32 {
+        match self {
+            BgmType::MainMenu => 0.7,
+            BgmType::MapExploration => 0.6,
+            BgmType::NormalBattle => 0.8,
+            BgmType::BossBattle => 0.9,
+            BgmType::Tribulation => 0.85,
+            BgmType::Shop => 0.65,
+            BgmType::Rest => 0.5,
+            BgmType::Victory => 0.75,
+        }
+    }
+}
+
+// ============================================================================
+// 背景音乐事件
+// ============================================================================
+
+/// 播放背景音乐事件
+#[derive(Event, Debug, Clone)]
+pub struct PlayBgmEvent {
+    pub bgm_type: BgmType,
+    /// 是否淡入（秒）
+    pub fade_in: f32,
+    /// 音量 (0.0 - 1.0)，None则使用默认
+    pub volume: Option<f32>,
+    /// 是否循环
+    pub loop_: bool,
+}
+
+impl PlayBgmEvent {
+    /// 创建默认播放事件（循环、淡入1秒、默认音量）
+    pub fn new(bgm_type: BgmType) -> Self {
+        Self {
+            bgm_type,
+            fade_in: 1.0,
+            volume: None,
+            loop_: true,
+        }
+    }
+
+    /// 设置淡入时长
+    pub fn with_fade_in(mut self, seconds: f32) -> Self {
+        self.fade_in = seconds;
+        self
+    }
+
+    /// 设置音量
+    pub fn with_volume(mut self, volume: f32) -> Self {
+        self.volume = Some(volume);
+        self
+    }
+
+    /// 设置是否循环
+    pub fn with_loop(mut self, loop_: bool) -> Self {
+        self.loop_ = loop_;
+        self
+    }
+}
+
+/// 停止背景音乐事件
+#[derive(Event, Debug, Clone)]
+pub struct StopBgmEvent {
+    /// 是否淡出（秒）
+    pub fade_out: f32,
+}
+
+impl StopBgmEvent {
+    /// 创建默认停止事件（淡出1秒）
+    pub fn new() -> Self {
+        Self { fade_out: 1.0 }
+    }
+
+    /// 设置淡出时长
+    pub fn with_fade_out(mut self, seconds: f32) -> Self {
+        self.fade_out = seconds;
+        self
+    }
+
+    /// 立即停止（无淡出）
+    pub fn immediate() -> Self {
+        Self { fade_out: 0.0 }
+    }
+}
+
+/// 切换背景音乐事件
+#[derive(Event, Debug, Clone)]
+pub struct CrossfadeBgmEvent {
+    pub bgm_type: BgmType,
+    /// 交叉淡出时长（秒）
+    pub duration: f32,
+}
+
+impl CrossfadeBgmEvent {
+    /// 创建默认切换事件（2秒交叉淡出）
+    pub fn new(bgm_type: BgmType) -> Self {
+        Self { bgm_type, duration: 2.0 }
+    }
+
+    /// 设置淡出时长
+    pub fn with_duration(mut self, seconds: f32) -> Self {
+        self.duration = seconds;
+        self
+    }
+}
+
+// ============================================================================
+// 当前背景音乐状态
+// ============================================================================
+
+/// 当前正在播放的背景音乐
+#[derive(Resource, Debug, Clone, Default)]
+pub struct CurrentBgm {
+    pub bgm_type: Option<BgmType>,
+    pub volume: f32,
+    pub is_paused: bool,
+}
+
+impl CurrentBgm {
+    /// 创建新的背景音乐状态
+    pub fn new(bgm_type: BgmType, volume: f32) -> Self {
+        Self {
+            bgm_type: Some(bgm_type),
+            volume,
+            is_paused: false,
+        }
+    }
+
+    /// 检查是否正在播放指定音乐
+    pub fn is_playing(&self, bgm_type: BgmType) -> bool {
+        self.bgm_type == Some(bgm_type) && !self.is_paused
+    }
+
+    /// 检查是否有音乐在播放
+    pub fn has_music(&self) -> bool {
+        self.bgm_type.is_some() && !self.is_paused
+    }
+}
+
+// ============================================================================
+// 背景音乐设置
+// ============================================================================
+
+/// 背景音乐全局设置
+#[derive(Resource, Debug, Clone, Serialize, Deserialize)]
+pub struct BgmSettings {
+    /// 主音量开关
+    pub enabled: bool,
+    /// 主音量 (0.0 - 1.0)
+    pub master_volume: f32,
+}
+
+impl Default for BgmSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            master_volume: 0.7,
+        }
+    }
+}
