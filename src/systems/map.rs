@@ -589,49 +589,104 @@ fn setup_breakthrough_button(
                 }
                 
                 /// 在连接区域生成路径导向点
+                
                 fn spawn_path_indicator(
+                
                     parent: &mut ChildBuilder,
+                
                     from_node: &MapNode,
+                
                     to_node: &MapNode,
+                
                     _progress: &MapProgress,
+                
                 ) {
                 
-                    let is_path_unlocked = from_node.completed; // 只有走过起点的路径才显现“高亮”
+                    let is_path_unlocked = from_node.completed;
+                
                     
-                    // 计算横向位置百分比 (基于 index 和 nodes_per_layer)
-                    // 假设 nodes_per_layer 为 4，则 index 为 0,1,2,3 分别对应 12.5%, 37.5%, 62.5%, 87.5%
-                    let nodes_per_layer = 4.0; // 同 MapConfig 默认值
-                    let get_x = |idx: i32| -> f32 {
-                        ((idx as f32 + 0.5) / nodes_per_layer) * 100.0
+                
+                    // --- 大作级对齐算法：匹配 JustifyContent::SpaceEvenly ---
+                
+                    // 在 SpaceEvenly 布局中，N 个节点的中心位置百分比为：(i + 1) / (N + 1)
+                
+                    // 我们需要知道出发层和目标层的节点总数
+                
+                    let from_layer_node_count = 4.0; // 对应 MapConfig.nodes_per_layer
+                
+                    let to_layer_node_count = 4.0; 
+                
+                
+                
+                    let get_x_percent = |idx: i32, total: f32| -> f32 {
+                
+                        ((idx as f32 + 1.0) / (total + 1.0)) * 100.0
+                
                     };
                 
-                    let start_x = get_x(from_node.position.1);
-                    let end_x = get_x(to_node.position.1);
                 
-                    // 在区域中绘制 3-4 个流动的导向点
+                
+                    let start_x = get_x_percent(from_node.position.1, from_layer_node_count);
+                
+                    let end_x = get_x_percent(to_node.position.1, to_layer_node_count);
+                
+                
+                
+                    // 在区域中绘制 4 个流动的导向点
+                
                     for i in 1..=4 {
+                
                         let t = i as f32 / 5.0; // 垂直比例 0.2, 0.4, 0.6, 0.8
+                
                         let current_x = start_x + (end_x - start_x) * t;
+                
                         
+                
                         parent.spawn((
+                
                             Node {
+                
                                 position_type: PositionType::Absolute,
-                                left: Val::Percent(current_x - 1.0), // 微调居中
+                
+                                // 使用百分比定位，并微调 -4px 以补偿点自身的宽度(8px)，实现真正的中心对齐
+                
+                                left: Val::Percent(current_x),
+                
+                                margin: UiRect::left(Val::Px(-4.0)), 
+                
                                 top: Val::Percent(t * 100.0 - 5.0),
+                
                                 width: Val::Px(8.0),
+                
                                 height: Val::Px(8.0),
+                
                                 ..default()
+                
                             },
+                
                             BackgroundColor(if is_path_unlocked {
+                
                                 Color::srgba(0.9, 0.9, 1.0, 0.8) // 已走过的路径：亮蓝白色
+                
                             } else {
+                
                                 Color::srgba(0.4, 0.4, 0.5, 0.2) // 未探索：暗淡灰色
+                
                             }),
+                
                             BorderRadius::all(Val::Px(4.0)),
+                
                             ConnectorDot {
-                                offset: (from_node.id as f32 * 0.5) + (i as f32 * 0.3), // 差异化相位
+                
+                                offset: (from_node.id as f32 * 0.5) + (i as f32 * 0.3),
+                
                             },
+                
                         ));
+                
                     }
+                
                 }
+                
+                
                 
