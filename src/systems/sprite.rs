@@ -17,6 +17,7 @@ pub struct SpritePlugin;
 impl Plugin for SpritePlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<CharacterAnimationEvent>();
+        app.add_event::<crate::components::particle::SpawnEffectEvent>(); // 新增特效事件注册
         
         app.add_systems(
             Update,

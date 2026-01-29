@@ -193,8 +193,9 @@ impl Plugin for GamePlugin {
             crate::systems::animation::AnimationPlugin,
             crate::systems::screen_effect::ScreenEffectPlugin,
             crate::systems::sprite::SpritePlugin,
+            crate::systems::particle::ParticlePlugin, // 补齐粒子插件
             crate::systems::ui::UiPlugin,
-            crate::systems::map::MapPlugin, // 新增地图插件
+            crate::systems::map::MapPlugin, 
         ))
         .init_state::<GameState>()
         .init_resource::<Player>() // 初始化玩家全局资源
