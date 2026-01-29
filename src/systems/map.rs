@@ -214,34 +214,25 @@ fn setup_map_ui(
                                         }
                                     });
 
-                                // 在每一层之后添加连接区域（除了最后一层）
+                                // --- 拓扑连线生成 ---
                                 if layer < max_layer {
                                     layer_container.spawn((
                                         Node {
                                             width: Val::Percent(100.0),
-                                            height: Val::Px(50.0),  // 固定高度，确保占空间
-                                            justify_content: JustifyContent::Center,
-                                            align_items: AlignItems::Center,
+                                            height: Val::Px(60.0), // 连线区域高度
                                             ..default()
                                         },
-                                        // 创建虚线背景图案
-                                        BackgroundColor(Color::srgba(0.3, 0.3, 0.4, 0.2)),
                                     )).with_children(|connector| {
-                                        // 添加几个小点作为视觉引导，带有错落的脉冲效果
-                                        for i in 0..7 {
-                                            connector.spawn((
-                                                Node {
-                                                    width: Val::Px(60.0),
-                                                    height: Val::Px(6.0),
-                                                    margin: UiRect::horizontal(Val::Px(5.0)),
-                                                    ..default()
-                                                },
-                                                BackgroundColor(Color::srgba(0.7, 0.7, 0.8, 0.7)),
-                                                BorderRadius::all(Val::Px(3.0)),
-                                                ConnectorDot {
-                                                    offset: i as f32 * 0.3,  // 错落相位偏移
-                                                },
-                                            ));
+                                        // 遍历该层所有节点，绘制通往下一层的具体连线点
+                                        for node in &nodes {
+                                            if node.position.0 == layer {
+                                                for &next_id in &node.next_nodes {
+                                                    // 找到目标节点以确定横向偏移
+                                                    if let Some(next_node) = nodes.iter().find(|n| n.id == next_id) {
+                                                        spawn_path_indicator(connector, node, next_node, &progress);
+                                                    }
+                                                }
+                                            }
                                         }
                                     });
                                 }
@@ -589,10 +580,58 @@ fn setup_breakthrough_button(
                         TextColor(Color::srgb(1.0, 0.9, 0.5)),
                     ));
                 })
-                .observe(|_entity: Trigger<Pointer<Click>>, mut next_state: ResMut<NextState<GameState>>| {
-                    info!("【点击测试】点击了引动雷劫按钮！尝试进入 Tribulation 状态");
-                    next_state.set(GameState::Tribulation);
-                });
-        }
-    }
-}
+                                .observe(|_entity: Trigger<Pointer<Click>>, mut next_state: ResMut<NextState<GameState>>| {
+                                    info!("【点击测试】点击了引动雷劫按钮！尝试进入 Tribulation 状态");
+                                    next_state.set(GameState::Tribulation);
+                                });
+                        }
+                    }
+                }
+                
+                /// 在连接区域生成路径导向点
+                fn spawn_path_indicator(
+                    parent: &mut ChildBuilder,
+                    from_node: &MapNode,
+                    to_node: &MapNode,
+                    _progress: &MapProgress,
+                ) {
+                
+                    let is_path_unlocked = from_node.completed; // 只有走过起点的路径才显现“高亮”
+                    
+                    // 计算横向位置百分比 (基于 index 和 nodes_per_layer)
+                    // 假设 nodes_per_layer 为 4，则 index 为 0,1,2,3 分别对应 12.5%, 37.5%, 62.5%, 87.5%
+                    let nodes_per_layer = 4.0; // 同 MapConfig 默认值
+                    let get_x = |idx: i32| -> f32 {
+                        ((idx as f32 + 0.5) / nodes_per_layer) * 100.0
+                    };
+                
+                    let start_x = get_x(from_node.position.1);
+                    let end_x = get_x(to_node.position.1);
+                
+                    // 在区域中绘制 3-4 个流动的导向点
+                    for i in 1..=4 {
+                        let t = i as f32 / 5.0; // 垂直比例 0.2, 0.4, 0.6, 0.8
+                        let current_x = start_x + (end_x - start_x) * t;
+                        
+                        parent.spawn((
+                            Node {
+                                position_type: PositionType::Absolute,
+                                left: Val::Percent(current_x - 1.0), // 微调居中
+                                top: Val::Percent(t * 100.0 - 5.0),
+                                width: Val::Px(8.0),
+                                height: Val::Px(8.0),
+                                ..default()
+                            },
+                            BackgroundColor(if is_path_unlocked {
+                                Color::srgba(0.9, 0.9, 1.0, 0.8) // 已走过的路径：亮蓝白色
+                            } else {
+                                Color::srgba(0.4, 0.4, 0.5, 0.2) // 未探索：暗淡灰色
+                            }),
+                            BorderRadius::all(Val::Px(4.0)),
+                            ConnectorDot {
+                                offset: (from_node.id as f32 * 0.5) + (i as f32 * 0.3), // 差异化相位
+                            },
+                        ));
+                    }
+                }
+                

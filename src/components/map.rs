@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 use serde::{Serialize, Deserialize};
 use rand::Rng;
+use rand::prelude::SliceRandom;
 
 // ============================================================================
 // 地图组件
@@ -233,32 +234,68 @@ pub fn generate_map_nodes(config: &MapConfig, _current_layer: u32) -> Vec<MapNod
         }
     }
 
-    // 生成路径连接 (拓扑连线)
+    // --- 步骤 2: 生成路径连接 (拓扑连线) ---
     let nodes_per_layer = config.nodes_per_layer as i32;
+    
+    // 正向连接：为每一层（除最后一层）的每个节点分配 1-2 个随机后继节点
     for layer in 0..(config.layers - 1) as i32 {
         for idx in 0..nodes_per_layer {
             let current_id = (layer * nodes_per_layer + idx) as u32;
             let next_layer = layer + 1;
             
-            // 找到当前节点
-            if let Some(node_pos) = nodes.iter().position(|n| n.id == current_id) {
-                let mut next_ids = Vec::new();
-                
-                // 连向下一层位置相近的节点 (左、中、右)
+            let mut possible_next_indices = Vec::new();
+            // 连向下一层位置相近的节点 (左、中、右)
+            for offset in -1..=1 {
+                let next_idx = idx + offset;
+                if next_idx >= 0 && next_idx < nodes_per_layer {
+                    possible_next_indices.push(next_idx);
+                }
+            }
+            
+            // 随机选择 1-2 个作为后继
+            use rand::seq::SliceRandom;
+            let mut rng = rand::thread_rng();
+            possible_next_indices.shuffle(&mut rng);
+            
+            let count = if rng.gen_bool(0.8) { 1 } else { 2 }; // 80% 概率 1 条路，20% 分叉
+            let selected_indices = &possible_next_indices[0..count.min(possible_next_indices.len())];
+            
+            let mut next_ids = Vec::new();
+            for n_idx in selected_indices {
+                next_ids.push((next_layer * nodes_per_layer + n_idx) as u32);
+            }
+
+            if let Some(node) = nodes.iter_mut().find(|n| n.id == current_id) {
+                node.next_nodes = next_ids;
+            }
+        }
+    }
+
+    // 反向补偿：确保下一层的每个节点至少有一个前驱节点（防止出现死点）
+    for layer in 1..config.layers as i32 {
+        for idx in 0..nodes_per_layer {
+            let current_id = (layer * nodes_per_layer + idx) as u32;
+            
+            // 检查是否有任何前序节点指向我
+            let has_predecessor = nodes.iter().any(|n| n.next_nodes.contains(&current_id));
+            
+            if !has_predecessor {
+                // 随机找一个上一层的邻居节点连过来
+                let prev_layer = layer - 1;
+                let mut prev_candidates = Vec::new();
                 for offset in -1..=1 {
-                    let next_idx = idx + offset;
-                    if next_idx >= 0 && next_idx < nodes_per_layer {
-                        let next_id = (next_layer * nodes_per_layer + next_idx) as u32;
-                        next_ids.push(next_id);
+                    let prev_idx = idx + offset;
+                    if prev_idx >= 0 && prev_idx < nodes_per_layer {
+                        prev_candidates.push((prev_layer * nodes_per_layer + prev_idx) as u32);
                     }
                 }
                 
-                // 随机保留 1-3 条路径
-                use rand::seq::SliceRandom;
                 let mut rng = rand::thread_rng();
-                next_ids.shuffle(&mut rng);
-                let count = rng.gen_range(1..=next_ids.len());
-                nodes[node_pos].next_nodes = next_ids[0..count].to_vec();
+                if let Some(&prev_id) = prev_candidates.choose(&mut rng) {
+                    if let Some(prev_node) = nodes.iter_mut().find(|n| n.id == prev_id) {
+                        prev_node.next_nodes.push(current_id);
+                    }
+                }
             }
         }
     }
