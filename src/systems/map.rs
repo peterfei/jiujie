@@ -61,10 +61,17 @@ fn setup_map_ui(
     };
 
     let nodes = progress.nodes.clone();
-    let current_layer = progress.current_node_id
-        .and_then(|id| nodes.iter().find(|n| n.id == id))
-        .map(|n| n.position.0)
-        .unwrap_or(0);
+    
+    // 自动推断当前活跃层级：优先取当前节点，若无则取已完成节点的最高层
+    let current_layer = if let Some(id) = progress.current_node_id {
+        nodes.iter().find(|n| n.id == id).map(|n| n.position.0).unwrap_or(0)
+    } else {
+        nodes.iter()
+            .filter(|n| n.completed)
+            .map(|n| n.position.0)
+            .max()
+            .unwrap_or(0)
+    };
 
     // 2. 健壮性处理玩家数据
     let player_info = player_query.get_single().ok();
@@ -99,7 +106,6 @@ fn setup_map_ui(
             ZIndex(100),
         ))
         .with_children(|parent| {
-            // UI 内容生成逻辑保持不变...
             // 地图标题与境界显示
             parent.spawn(Node {
                 flex_direction: FlexDirection::Column,
@@ -121,7 +127,7 @@ fn setup_map_ui(
                         Realm::NascentSoul => "元婴期 - 神识纵览全程",
                     }
                 } else {
-                    "凡人 - 只能看到脚下"
+                    "神识扫描中..."
                 };
                 
                 header.spawn((
@@ -150,8 +156,17 @@ fn setup_map_ui(
                     let max_layer = nodes.iter().map(|n| n.position.0).max().unwrap_or(0);
 
                     for layer in 0..=max_layer {
-                        // 视野检查：如果层级超过视野范围，则显示模糊或不显示
-                        let is_visible = (layer as i32) <= (current_layer as i32 + vision_range as i32) || layer == max_layer as i32; // Boss层总是可见 (远方威压)
+                        // 视野增强逻辑：
+                        // 1. 在神识视野范围内的层级可见
+                        // 2. Boss层总是可见
+                        // 3. 具有已解锁节点或已完成节点的层级必须可见（确保玩家知道下一步去哪，或者看到来时的路）
+                        let has_relevant_nodes = nodes.iter()
+                            .filter(|n| n.position.0 == layer)
+                            .any(|n| n.unlocked || n.completed);
+
+                        let is_visible = (layer as i32) <= (current_layer as i32 + vision_range as i32) 
+                                        || layer == max_layer as i32
+                                        || has_relevant_nodes;
                         
                         if !is_visible {
                             continue;

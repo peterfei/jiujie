@@ -353,6 +353,10 @@ fn setup_combat_environment(
 // ============================================================================
 
 /// 设置主菜单UI
+/// 主菜单根节点标记
+#[derive(Component)]
+struct MainMenuRoot;
+
 fn setup_main_menu(mut commands: Commands, asset_server: Res<AssetServer>) {
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
     let logo_handle: Handle<Image> = asset_server.load("textures/logo.png");
@@ -369,6 +373,7 @@ fn setup_main_menu(mut commands: Commands, asset_server: Res<AssetServer>) {
                 ..default()
             },
             BackgroundColor(Color::srgb(0.05, 0.05, 0.05)),
+            MainMenuRoot, // 添加标记
         ))
         .with_children(|parent| {
             // 背景 Logo
@@ -429,7 +434,7 @@ fn setup_main_menu(mut commands: Commands, asset_server: Res<AssetServer>) {
 }
 
 /// 清理主菜单UI
-fn cleanup_main_menu(mut commands: Commands, query: Query<Entity, (With<Node>, Without<MapUiRoot>)>) {
+fn cleanup_main_menu(mut commands: Commands, query: Query<Entity, With<MainMenuRoot>>) {
     for entity in query.iter() {
         commands.entity(entity).despawn_recursive();
     }
