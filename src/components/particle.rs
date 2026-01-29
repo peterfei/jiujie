@@ -279,6 +279,21 @@ impl EmitterConfig {
         }
     }
 
+    /// 灵山云雾 - 极其缓慢的、大范围的遮罩效果
+    pub fn cloud_mist() -> Self {
+        Self {
+            lifetime: (10.0, 15.0),
+            size: (300.0, 600.0), // 进一步扩大尺寸以增强厚度感
+            start_color: Color::srgba(0.8, 0.9, 1.0, 0.0), // 初始全透明淡入
+            end_color: Color::srgba(0.9, 0.95, 1.0, 0.0),  // 最终淡出
+            speed: (5.0, 15.0),
+            angle: (0.0, std::f32::consts::PI * 2.0),
+            gravity: Vec2::new(3.0, 1.0), // 极其微弱的空气流动
+            rotation_speed: (-0.1, 0.1),
+            shape: ParticleShape::Circle,
+        }
+    }
+
     pub fn spawn_particle(&self, position: Vec3, effect_type: EffectType) -> Particle {
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -296,11 +311,11 @@ impl EmitterConfig {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParticleShape { Circle, Square, Line, Triangle, Star }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum EffectType { Fire, Ice, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit, SwordEnergy, DemonAura, WebShot, WanJian, ImpactSpark, Slash, Shield }
+pub enum EffectType { Fire, Ice, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit, SwordEnergy, DemonAura, WebShot, WanJian, ImpactSpark, Slash, Shield, CloudMist }
 
 impl EffectType {
     pub fn config(&self) -> EmitterConfig {
@@ -321,6 +336,7 @@ impl EffectType {
             EffectType::ImpactSpark => EmitterConfig::impact_spark(),
             EffectType::Slash => EmitterConfig::slash(),
             EffectType::Shield => EmitterConfig::shield(),
+            EffectType::CloudMist => EmitterConfig::cloud_mist(),
         }
     }
 }
