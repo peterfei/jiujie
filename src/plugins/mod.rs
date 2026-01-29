@@ -3271,20 +3271,8 @@ fn create_relic_reward_option(parent: &mut ChildBuilder, relic: Relic, asset_ser
             // 标记当前节点为完成
             map_progress.complete_current_node();
             
-            // --- 关键修复：即时存档 ---
-            if let Ok((player, cultivation)) = player_query.get_single() {
-                let save = crate::resources::save::GameStateSave {
-                    player: player.clone(),
-                    cultivation: cultivation.clone(),
-                    deck: player_deck.cards.clone(),
-                    relics: relic_collection.relic.clone(),
-                    map_nodes: map_progress.nodes.clone(),
-                    current_map_node_id: map_progress.current_node_id,
-                    current_map_layer: map_progress.current_layer,
-                };
-                let _ = save.save_to_disk();
-                info!("【存档系统】领取法宝后自动保存");
-            }
+            // --- [优化] 移除同步阻塞存档，防止 UI 销毁时的竞态卡死 ---
+            // 存档将由状态机在进入 Map 状态时自动处理
 
             next_state.set(GameState::Map);
         });
