@@ -494,22 +494,24 @@ fn handle_button_clicks(
             info!("【主菜单】继续修行，尝试加载存档");
             match crate::resources::save::GameStateSave::load_from_disk() {
                 Ok(save) => {
-                    // 恢复状态
-                    commands.insert_resource(save.player.clone()); // 插入 Player 资源
-                    commands.insert_resource(save.cultivation);
-                    // 关键修复：从 save.deck 初始化 PlayerDeck (不再包含 HP/金币)
-                    commands.insert_resource(PlayerDeck { 
-                        cards: save.deck,
+                    // 使用 commands.queue 确保资源立即插入，防止 setup_map_ui 读取不到
+                    commands.queue(move |world: &mut World| {
+                        world.insert_resource(save.player.clone());
+                        world.insert_resource(save.cultivation.clone());
+                        world.insert_resource(PlayerDeck { cards: save.deck.clone() });
+                        world.insert_resource(RelicCollection { relic: save.relics.clone() });
+                        world.insert_resource(MapProgress::from_save(
+                            save.map_nodes.clone(),
+                            save.current_map_node_id,
+                            save.current_map_layer,
+                        ));
+                        
+                        // 在同一个 queue 中设置状态，确保顺序
+                        if let Some(mut next_state) = world.get_resource_mut::<NextState<GameState>>() {
+                            next_state.set(GameState::Map);
+                        }
                     });
-                    commands.insert_resource(RelicCollection { relic: save.relics });
-                    commands.insert_resource(MapProgress::from_save(
-                        save.map_nodes,
-                        save.current_map_node_id,
-                        save.current_map_layer,
-                    ));
-                    
-                    next_state.set(GameState::Map);
-                    info!("【存档系统】读档成功，进入大地图");
+                    info!("【存档系统】读档操作已排队，即将进入大地图");
                 }
                 Err(e) => {
                     error!("【存档系统】加载失败: {}", e);
@@ -863,12 +865,16 @@ fn setup_combat_ui(
         use rand::Rng;
         let mut rng = rand::thread_rng();
         
+        let current_layer = map_progress.current_layer;
+        let hp_scaling = 1.0 + (current_layer as f32 * 0.15);
+        let extra_strength = (current_layer / 3) as i32;
+
         // 如果是 Boss 节点，固定生成 1 个 BOSS；否则随机生成 1~3 个小怪
         let num_enemies = if is_boss_node { 1 } else { rng.gen_range(1..=3) };
 
         for i in 0..num_enemies {
             let enemy_id = i as u32;
-            let (name, hp, e_type) = if is_boss_node {
+            let (name, base_hp, e_type) = if is_boss_node {
                 ("幽冥白虎", 150, EnemyType::GreatDemon)
             } else {
                 match rng.gen_range(0..3) {
@@ -877,8 +883,29 @@ fn setup_combat_ui(
                     _ => ("怨灵", 40, EnemyType::CursedSpirit),
                 }
             };
+
+            let scaled_hp = (base_hp as f32 * hp_scaling) as i32;
+            let mut enemy = Enemy::with_type(enemy_id, name, scaled_hp, e_type);
+            
+            // 随着层级提升增加初始力量和护甲
+            enemy.strength = extra_strength;
+            enemy.block = (current_layer / 2) as i32 * 2; // 每2层增加2点初始护甲
+            
+            // 动态调整 AI 动作强度范围
+            enemy.ai_pattern.damage_range.0 += extra_strength;
+            enemy.ai_pattern.damage_range.1 += extra_strength;
+            enemy.ai_pattern.block_range.0 += (current_layer / 2) as i32;
+            enemy.ai_pattern.block_range.1 += (current_layer / 2) as i32;
+
+            if is_boss_node {
+                enemy.strength += 2; // Boss 额外强度
+                enemy.block += 5;    // Boss 额外护甲
+                enemy.ai_pattern.damage_range.0 += 5;
+                enemy.ai_pattern.damage_range.1 += 5;
+            }
+
             let x_world = 250.0 + (i as f32 - (num_enemies as f32 - 1.0) / 2.0) * 220.0;
-            let enemy_entity = commands.spawn(Enemy::with_type(enemy_id, name, hp, e_type)).id();
+            let enemy_entity = commands.spawn(enemy).id();
 
             // 根据妖兽类型选择渲染类型与尺寸 (大作级体型压制)
             let (char_type, size) = match e_type {
@@ -906,7 +933,7 @@ fn setup_combat_ui(
                         ..default()
                     }).with_children(|row| {
                         row.spawn((
-                            Text::new(format!("{}/{}", hp, hp)),
+                            Text::new(format!("{}/{}", scaled_hp, scaled_hp)),
                             TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() },
                             TextColor(Color::WHITE),
                             EnemyHpText { owner: enemy_entity },
@@ -3375,6 +3402,7 @@ fn teardown_tribulation(
     ui_query: Query<Entity, With<TribulationUiMarker>>,
     mut player_query: Query<(&mut Player, &mut crate::components::Cultivation)>,
     mut deck: ResMut<PlayerDeck>,
+    mut map_progress: ResMut<MapProgress>,
     mut effect_events: EventWriter<SpawnEffectEvent>,
     mut sfx_events: EventWriter<PlaySfxEvent>,
 ) {
@@ -3398,8 +3426,16 @@ fn teardown_tribulation(
                 player.gold += stone_bonus; // 天道赏赐灵石
                 
                 info!("✨【破境成功】成功晋升至 {:?}！道行大进，上限增加 {} 点，获灵石 {} 块", cultivation.realm, hp_bonus, stone_bonus);
+
+                // --- 2. 开启新征程：重新生成地图 ---
+                let map_config = crate::components::map::MapConfig::default();
+                map_progress.nodes = crate::components::map::generate_map_nodes(&map_config, 0);
+                map_progress.current_node_id = None;
+                map_progress.current_layer = 0;
+                map_progress.refresh_unlocks();
+                info!("🗺️【天道演化】新的地图已生成，开启下一境界的修行！");
                 
-                // 2. 功法质变：发放本命功法
+                // 3. 功法质变：发放本命功法
                 if cultivation.realm == crate::components::cultivation::Realm::FoundationEstablishment {
                     let innate_spell = crate::components::cards::CardPool::get_innate_spell();
                     deck.add_card(innate_spell.clone());
