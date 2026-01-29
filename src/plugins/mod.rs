@@ -274,79 +274,40 @@ fn init_character_assets(mut commands: Commands, asset_server: Res<AssetServer>)
     info!("CharacterAssets 已加载");
 }
 
-/// 设置战斗环境（3D 地板和灯光）
 fn setup_combat_environment(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>,
+    character_assets: Res<CharacterAssets>,
+    map_progress: Option<Res<MapProgress>>, // 注入层级信息
 ) {
-    let floor_texture = asset_server.load("textures/magic_circle.png");
-
-    // 1. 聚灵法阵地板 (3D 平面) - 强化发光
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(20.0, 20.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgba(1.0, 1.0, 1.0, 0.95),
-            base_color_texture: Some(floor_texture.clone()),
-            emissive: LinearRgba::new(0.0, 1.2, 0.5, 1.0), // 初始更亮
-            perceptual_roughness: 0.8,
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        })),
-        Transform::from_xyz(0.0, -1.5, 0.0), 
-        CombatUiRoot, 
-        Rotating { speed: 0.05 },
-        MagicSealMarker, // 标记用于脉动效果
-    ));
-
-    // 2. 主光源 (模拟太阳/大阵光芒)
-    commands.spawn((
-        DirectionalLight {
-            shadows_enabled: true,
-            illuminance: 4000.0,
-            ..default()
-        },
-        Transform::from_xyz(5.0, 10.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
-        CombatUiRoot,
-    ));
-
-    // 3. 局部氛围光源 - 增加电影感
-    // 玩家位光
-    commands.spawn((
-        PointLight {
-            intensity: 150000.0,
-            range: 15.0,
-            color: Color::srgb(0.3, 0.5, 1.0),
-            ..default()
-        },
-        Transform::from_xyz(-4.5, 3.0, 2.0),
-        CombatUiRoot,
-    ));
-
-    // 敌人位光
-    commands.spawn((
-        PointLight {
-            intensity: 120000.0,
-            range: 12.0,
-            color: Color::srgb(1.0, 0.2, 0.3),
-            ..default()
-        },
-        Transform::from_xyz(4.5, 3.0, 2.0),
-        CombatUiRoot,
-    ));
+    let current_layer = map_progress.as_ref().map(|m| m.current_layer).unwrap_or(0);
     
-    commands.insert_resource(AmbientLight {
-        color: Color::srgb(0.1, 0.1, 0.1), 
-        brightness: 20.0, // 降低到极低，主要靠点光源和自发光
-    });
+    // 1. 玩家立牌位置
+    spawn_character_sprite(&mut commands, &character_assets, CharacterType::Player, Vec3::new(-350.0, -100.0, 0.0), Vec2::new(128.0, 128.0), None);
+    
+    // 2. 根据层级生成不同强度的敌人
+    let (enemy_type, enemy_name) = match current_layer {
+        0..=2 => (EnemyType::DemonicWolf, "幼年妖狼"),
+        3..=5 => (EnemyType::PoisonSpider, "剧毒魔蛛"),
+        6..=8 => (EnemyType::CursedSpirit, "幽冥怨灵"),
+        _ => (EnemyType::GreatDemon, "镇域大魔"), // 最终关卡或更高层
+    };
 
-    // 4. 环境灵气粒子
-    commands.spawn((
-        ParticleEmitter::new(5.0, EffectType::AmbientSpirit.config()).with_type(EffectType::AmbientSpirit),
-        Transform::from_xyz(0.0, 0.0, 0.0),
-        CombatUiRoot,
-    ));
+    // 关键修复：类型映射
+    let char_type = match enemy_type {
+        EnemyType::DemonicWolf => CharacterType::DemonicWolf,
+        EnemyType::PoisonSpider => CharacterType::PoisonSpider,
+        EnemyType::CursedSpirit => CharacterType::CursedSpirit,
+        EnemyType::GreatDemon => CharacterType::GreatDemon,
+    };
+
+    spawn_character_sprite(
+        &mut commands, 
+        &character_assets, 
+        char_type, 
+        Vec3::new(350.0, -100.0, 0.0), 
+        Vec2::new(if enemy_type == EnemyType::GreatDemon { 256.0 } else { 128.0 }, if enemy_type == EnemyType::GreatDemon { 256.0 } else { 128.0 }), 
+        Some(1)
+    );
 }
 
 // ============================================================================
@@ -865,20 +826,23 @@ fn setup_combat_ui(
         
         // 如果是 Boss 节点，固定生成 1 个 BOSS；否则随机生成 1~3 个小怪
         let num_enemies = if is_boss_node { 1 } else { rng.gen_range(1..=3) };
+        let current_layer = map_progress.current_layer;
 
         for i in 0..num_enemies {
             let enemy_id = i as u32;
-            let (name, hp, e_type) = if is_boss_node {
-                ("幽冥白虎", 150, EnemyType::GreatDemon)
+            let (name, e_type) = if is_boss_node {
+                ("镇域大魔", EnemyType::GreatDemon)
             } else {
                 match rng.gen_range(0..3) {
-                    0 => ("嗜血妖狼", 30, EnemyType::DemonicWolf),
-                    1 => ("剧毒蛛", 20, EnemyType::PoisonSpider),
-                    _ => ("怨灵", 40, EnemyType::CursedSpirit),
+                    0 => ("嗜血妖狼", EnemyType::DemonicWolf),
+                    1 => ("剧毒蛛", EnemyType::PoisonSpider),
+                    _ => ("幽冥怨灵", EnemyType::CursedSpirit),
                 }
             };
             let x_world = 250.0 + (i as f32 - (num_enemies as f32 - 1.0) / 2.0) * 220.0;
-            let enemy_entity = commands.spawn(Enemy::with_type(enemy_id, name, hp, e_type)).id();
+            let enemy = Enemy::with_type(enemy_id, name, current_layer, e_type);
+            let initial_hp = enemy.max_hp;
+            let enemy_entity = commands.spawn(enemy).id();
 
             // 根据妖兽类型选择渲染类型与尺寸 (大作级体型压制)
             let (char_type, size) = match e_type {
@@ -906,7 +870,7 @@ fn setup_combat_ui(
                         ..default()
                     }).with_children(|row| {
                         row.spawn((
-                            Text::new(format!("{}/{}", hp, hp)),
+                            Text::new(format!("{}/{}", initial_hp, initial_hp)),
                             TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() },
                             TextColor(Color::WHITE),
                             EnemyHpText { owner: enemy_entity },

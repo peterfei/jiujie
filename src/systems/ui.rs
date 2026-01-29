@@ -79,8 +79,10 @@ fn update_status_indicators(
         } else {
             // 敌人逻辑保持不变
             if let Ok(enemy) = enemy_query.get(indicator.owner) {
-                if enemy.weakness > 0 { status_parts.push(format!("虚弱:{}", enemy.weakness)); }
-                if enemy.vulnerable > 0 { status_parts.push(format!("易伤:{}", enemy.vulnerable)); }
+                        if enemy.poison > 0 { status_parts.push(format!("中毒:{}", enemy.poison)); }
+                        if enemy.weakness > 0 { status_parts.push(format!("虚弱:{}", enemy.weakness)); }
+                        if enemy.vulnerable > 0 { status_parts.push(format!("易伤:{}", enemy.vulnerable)); }
+                
                 if enemy.poison > 0 { status_parts.push(format!("中毒:{}", enemy.poison)); }
             }
         }

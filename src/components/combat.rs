@@ -300,8 +300,9 @@ pub struct Enemy {
     pub weakness: i32,
     /// 易伤层数
     pub vulnerable: i32,
-    /// 中毒层数
     pub poison: i32,
+    pub current_intent: Option<EnemyIntent>,
+    pub layer: u32,
 }
 
 /// 敌人意图
@@ -440,45 +441,43 @@ impl AiPattern {
 }
 
 impl Enemy {
-    /// 创建新敌人（默认嗜血妖狼类型）
-    pub fn new(id: u32, name: impl Into<String>, hp: i32) -> Self {
-        let enemy_type = EnemyType::DemonicWolf;
-        let ai_pattern = AiPattern::from_enemy_type(enemy_type);
+    /// 创建新敌人，并根据层级应用数值缩放
+    pub fn new(id: u32, name: &str, base_hp: i32, layer: u32) -> Self {
+        // --- 大作级数值梯度算法 ---
+        let scaling_factor = 1.0 + (layer as f32 * 0.15);
+        let scaled_hp = (base_hp as f32 * scaling_factor) as i32;
+        
         Self {
             id,
-            name: name.into(),
-            enemy_type,
-            hp,
-            max_hp: hp,
+            name: name.to_string(),
+            enemy_type: EnemyType::DemonicWolf,
+            hp: scaled_hp,
+            max_hp: scaled_hp,
             intent: EnemyIntent::Wait,
-            ai_pattern,
+            ai_pattern: AiPattern::demonic_wolf(),
             strength: 0,
             block: 0,
             turn_count: 0,
             weakness: 0,
             vulnerable: 0,
             poison: 0,
+            current_intent: None,
+            layer,
         }
     }
 
-    /// 创建指定类型的敌人
-    pub fn with_type(id: u32, name: impl Into<String>, hp: i32, enemy_type: EnemyType) -> Self {
-        let ai_pattern = AiPattern::from_enemy_type(enemy_type);
-        Self {
-            id,
-            name: name.into(),
-            enemy_type,
-            hp,
-            max_hp: hp,
-            intent: EnemyIntent::Wait,
-            ai_pattern,
-            strength: 0,
-            block: 0,
-            turn_count: 0,
-            weakness: 0,
-            vulnerable: 0,
-            poison: 0,
-        }
+    /// 设置敌人类型并根据层级自动缩放基础属性
+    pub fn with_type(id: u32, name: &str, layer: u32, enemy_type: EnemyType) -> Self {
+        let base_hp = match enemy_type {
+            EnemyType::DemonicWolf => 35,
+            EnemyType::PoisonSpider => 25,
+            EnemyType::CursedSpirit => 45,
+            EnemyType::GreatDemon => 160, // BOSS 基础血量
+        };
+        
+        let mut enemy = Self::new(id, name, base_hp, layer);
+        enemy.enemy_type = enemy_type;
+        enemy
     }
 
     /// 计算实际造成的伤害 (考虑虚弱)
