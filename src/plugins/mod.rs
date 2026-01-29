@@ -902,20 +902,8 @@ fn handle_event_choices(
             map_progress.complete_current_node();
             info!("【机缘】事件节点已完成，下一层已解锁");
 
-            // --- [关键修复] 执行自动存档，确保状态一致性 ---
-            if let Ok((player, cultivation)) = player_query.get_single() {
-                let save = crate::resources::save::GameStateSave {
-                    player: player.clone(),
-                    cultivation: cultivation.clone(),
-                    deck: deck.cards.clone(),
-                    relics: relics.relic.clone(),
-                    map_nodes: map_progress.nodes.clone(),
-                    current_map_node_id: map_progress.current_node_id,
-                    current_map_layer: map_progress.current_layer,
-                };
-                let _ = save.save_to_disk();
-                info!("【存档系统】机缘事件后进度已同步");
-            }
+            // --- [优化] 移除同步阻塞存档，依赖内存状态传递和状态机自动处理 ---
+            // 避免在此处进行 IO 操作，防止与状态切换产生竞争
 
             // 清理并退出
             for e in ui_query.iter() {
