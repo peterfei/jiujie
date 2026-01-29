@@ -216,20 +216,22 @@ fn setup_map_ui(
 
                                 // --- 拓扑连线生成 ---
                                 if layer < max_layer {
+                                    // 统计当前层和下一层的节点数，用于精确对位
+                                    let from_count = nodes.iter().filter(|n| n.position.0 == layer).count() as f32;
+                                    let to_count = nodes.iter().filter(|n| n.position.0 == layer + 1).count() as f32;
+
                                     layer_container.spawn((
                                         Node {
                                             width: Val::Percent(100.0),
-                                            height: Val::Px(60.0), // 连线区域高度
+                                            height: Val::Px(60.0),
                                             ..default()
                                         },
                                     )).with_children(|connector| {
-                                        // 遍历该层所有节点，绘制通往下一层的具体连线点
                                         for node in &nodes {
                                             if node.position.0 == layer {
                                                 for &next_id in &node.next_nodes {
-                                                    // 找到目标节点以确定横向偏移
                                                     if let Some(next_node) = nodes.iter().find(|n| n.id == next_id) {
-                                                        spawn_path_indicator(connector, node, next_node, &progress);
+                                                        spawn_path_indicator(connector, node, next_node, from_count, to_count, &progress);
                                                     }
                                                 }
                                             }
@@ -588,105 +590,54 @@ fn setup_breakthrough_button(
                     }
                 }
                 
-                /// 在连接区域生成路径导向点
-                
-                fn spawn_path_indicator(
-                
-                    parent: &mut ChildBuilder,
-                
-                    from_node: &MapNode,
-                
-                    to_node: &MapNode,
-                
-                    _progress: &MapProgress,
-                
-                ) {
-                
-                    let is_path_unlocked = from_node.completed;
-                
-                    
-                
-                    // --- 大作级对齐算法：匹配 JustifyContent::SpaceEvenly ---
-                
-                    // 在 SpaceEvenly 布局中，N 个节点的中心位置百分比为：(i + 1) / (N + 1)
-                
-                    // 我们需要知道出发层和目标层的节点总数
-                
-                    let from_layer_node_count = 4.0; // 对应 MapConfig.nodes_per_layer
-                
-                    let to_layer_node_count = 4.0; 
-                
-                
-                
-                    let get_x_percent = |idx: i32, total: f32| -> f32 {
-                
-                        ((idx as f32 + 1.0) / (total + 1.0)) * 100.0
-                
-                    };
-                
-                
-                
-                    let start_x = get_x_percent(from_node.position.1, from_layer_node_count);
-                
-                    let end_x = get_x_percent(to_node.position.1, to_layer_node_count);
-                
-                
-                
-                    // 在区域中绘制 4 个流动的导向点
-                
-                    for i in 1..=4 {
-                
-                        let t = i as f32 / 5.0; // 垂直比例 0.2, 0.4, 0.6, 0.8
-                
-                        let current_x = start_x + (end_x - start_x) * t;
-                
-                        
-                
-                        parent.spawn((
-                
-                            Node {
-                
-                                position_type: PositionType::Absolute,
-                
-                                // 使用百分比定位，并微调 -4px 以补偿点自身的宽度(8px)，实现真正的中心对齐
-                
-                                left: Val::Percent(current_x),
-                
-                                margin: UiRect::left(Val::Px(-4.0)), 
-                
-                                top: Val::Percent(t * 100.0 - 5.0),
-                
-                                width: Val::Px(8.0),
-                
-                                height: Val::Px(8.0),
-                
-                                ..default()
-                
-                            },
-                
-                            BackgroundColor(if is_path_unlocked {
-                
-                                Color::srgba(0.9, 0.9, 1.0, 0.8) // 已走过的路径：亮蓝白色
-                
-                            } else {
-                
-                                Color::srgba(0.4, 0.4, 0.5, 0.2) // 未探索：暗淡灰色
-                
-                            }),
-                
-                            BorderRadius::all(Val::Px(4.0)),
-                
-                            ConnectorDot {
-                
-                                offset: (from_node.id as f32 * 0.5) + (i as f32 * 0.3),
-                
-                            },
-                
-                        ));
-                
-                    }
-                
-                }
+/// 在连接区域生成路径导向点
+fn spawn_path_indicator(
+    parent: &mut ChildBuilder,
+    from_node: &MapNode,
+    to_node: &MapNode,
+    from_count: f32,
+    to_count: f32,
+    _progress: &MapProgress,
+) {
+    let is_path_unlocked = from_node.completed;
+    
+    // --- 极致对位算法：匹配 SpaceEvenly ---
+    // 公式: (index + 1) / (total + 1)
+    let get_x_percent = |idx: i32, total: f32| -> f32 {
+        ((idx as f32 + 1.0) / (total + 1.0)) * 100.0
+    };
+
+    let start_x = get_x_percent(from_node.position.1, from_count);
+    let end_x = get_x_percent(to_node.position.1, to_count);
+
+    // 提升密度：使用 12 个点形成紧密的虚线感
+    let point_count = 12;
+    for i in 1..=point_count {
+        let t = i as f32 / (point_count as f32 + 1.0); 
+        let current_x = start_x + (end_x - start_x) * t;
+        
+        parent.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Percent(current_x),
+                margin: UiRect::left(Val::Px(-3.0)), // 补偿点自身宽度 (6px) 以对准圆心
+                top: Val::Percent(t * 100.0),
+                width: Val::Px(6.0), // 稍微缩小点的大小，使其更精致
+                height: Val::Px(6.0),
+                ..default()
+            },
+            BackgroundColor(if is_path_unlocked {
+                Color::srgba(0.8, 0.9, 1.0, 0.9) // 已解锁：高亮蓝白
+            } else {
+                Color::srgba(0.3, 0.3, 0.4, 0.15) // 未解锁：极淡阴影
+            }),
+            BorderRadius::all(Val::Px(3.0)),
+            ConnectorDot {
+                offset: (from_node.id as f32 * 0.7) + (i as f32 * 0.2), // 错落有致的流动感
+            },
+        ));
+    }
+}
                 
                 
                 
