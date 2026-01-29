@@ -67,6 +67,7 @@ pub fn create_test_app() -> App {
     app.add_event::<bevy_card_battler::components::PlaySfxEvent>();
     app.add_event::<bevy_card_battler::components::DamageEffectEvent>();
     app.add_event::<bevy_card_battler::components::StatusEffectEvent>();
+    app.add_event::<bevy::input::mouse::MouseWheel>(); // 新增滚轮事件
 
     // 注册核心插件
     app.add_plugins(CorePlugin);

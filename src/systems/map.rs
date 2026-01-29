@@ -30,7 +30,10 @@ impl Plugin for MapPlugin {
         // 在退出Map状态时清理地图UI
         app.add_systems(OnExit(GameState::Map), cleanup_map_ui);
         // 处理地图界面按钮点击
-        app.add_systems(Update, handle_map_button_clicks.run_if(in_state(GameState::Map)));
+        app.add_systems(Update, (
+            handle_map_button_clicks,
+            handle_map_scrolling, // 新增滚动支持
+        ).run_if(in_state(GameState::Map)));
     }
 }
 
@@ -148,7 +151,7 @@ fn setup_map_ui(
                 ));
             });
 
-            // 地图节点容器 - 添加滚动支持
+            // 地图节点容器 - 添加滚动支持与自动聚焦
             parent
                 .spawn((
                     Node {
@@ -162,6 +165,12 @@ fn setup_map_ui(
                         ..default()
                     },
                     MapNodeContainer,
+                    // 自动聚焦：根据当前层级计算初始滚动偏移
+                    // 每一层（含连接层）估算高度为 150px
+                    ScrollPosition {
+                        offset_y: (current_layer as f32 * 150.0).max(0.0),
+                        ..default()
+                    },
                 ))
                 .with_children(|map_parent| {
                     let max_layer = nodes.iter().map(|n| n.position.0).max().unwrap_or(0);
@@ -470,6 +479,24 @@ fn handle_map_button_clicks(
                 _ => {
                     warn!("【地图】节点 {} 类型 {:?} 尚未实现逻辑", node_id, node_type);
                 }
+            }
+        }
+    }
+}
+
+/// 处理地图滚轮滚动
+fn handle_map_scrolling(
+    mut mouse_wheel_events: EventReader<bevy::input::mouse::MouseWheel>,
+    mut query: Query<&mut ScrollPosition, With<MapNodeContainer>>,
+) {
+    for event in mouse_wheel_events.read() {
+        for mut scroll in query.iter_mut() {
+            // offset_y 越大，内容向上移动（即看到下方内容）
+            // 我们需要反向映射：向下滚轮（y为负）应增加 offset_y
+            scroll.offset_y -= event.y * 20.0; 
+            
+            if scroll.offset_y < 0.0 {
+                scroll.offset_y = 0.0;
             }
         }
     }
