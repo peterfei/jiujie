@@ -1241,7 +1241,7 @@ fn setup_combat_ui(
             SpriteMarker,
             CombatUiRoot,
             Rotating { speed: 1.5 }, // 旋转快一点更灵动
-            CharacterSprite::new(asset_server.load("textures/relics/default.png"), Vec2::new(45.0, 45.0)),
+            CharacterSprite::new(asset_server.load("textures/relics/default.png"), Vec2::new(30.0, 30.0)),
             Transform::from_translation(base_pos),
         ));
     }
@@ -2517,29 +2517,34 @@ fn check_combat_end(
         victory_delay.active = true;
         victory_delay.elapsed = 0.0;
 
-        // --- [新增] 胜利横幅演出 ---
+        // --- [新增] 胜利横幅演出 (大作级视觉包装) ---
         commands.spawn((
             Node {
                 position_type: PositionType::Absolute,
                 width: Val::Percent(100.0),
-                height: Val::Px(120.0),
-                top: Val::Percent(40.0),
+                height: Val::Px(150.0), // 稍高一点，更有压迫感
+                top: Val::Percent(38.0),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 ..default()
             },
+            // 增加背景绶带：半透明暗色
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7)),
             ZIndex(300), 
             CombatUiRoot, 
+            crate::components::map::EntranceAnimation::new(0.4), // 整体淡入
         )).with_children(|banner| {
+            // 文字主体
             banner.spawn((
                 Text::new("众 妖 伏 诛"),
                 TextFont {
                     font: chinese_font,
-                    font_size: 80.0,
+                    font_size: 88.0, // 放大字体
                     ..default()
                 },
-                TextColor(Color::srgb(1.0, 0.9, 0.3)), // 亮金色
-                crate::components::map::EntranceAnimation::new(0.5),
+                TextColor(Color::srgb(1.0, 0.85, 0.2)), // 纯正金
+                // 内部文字微缩放
+                crate::components::map::EntranceAnimation::new(0.6),
             ));
         });
     }

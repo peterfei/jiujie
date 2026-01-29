@@ -408,7 +408,7 @@ fn handle_animation_events(
 
 /// 更新呼吸动画
 fn update_breath_animations(
-    mut query: Query<(&mut Transform, &mut BreathAnimation, &PhysicalImpact)>,
+    mut query: Query<(&mut Transform, &mut BreathAnimation, &PhysicalImpact), Without<RelicVisualMarker>>,
     time: Res<Time>,
 ) {
     for (mut transform, mut breath, impact) in query.iter_mut() {
@@ -433,11 +433,11 @@ fn update_breath_animations(
 /// 同步系统：将 2D 贴图同步到 3D 立牌材质
 fn sync_2d_to_3d_render(
     mut commands: Commands,
-    sprite_query: Query<(Entity, &CharacterSprite, &Transform, Option<&Combatant3d>, Option<&MeshMaterial3d<StandardMaterial>>), (With<SpriteMarker>, Changed<CharacterSprite>)>,
+    sprite_query: Query<(Entity, &CharacterSprite, &Transform, Option<&Combatant3d>, Option<&MeshMaterial3d<StandardMaterial>>, Has<RelicVisualMarker>), (With<SpriteMarker>, Changed<CharacterSprite>)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for (entity, char_sprite, transform, combatant_3d, mat_handle_opt) in sprite_query.iter() {
+    for (entity, char_sprite, transform, combatant_3d, mat_handle_opt, is_relic) in sprite_query.iter() {
         if combatant_3d.is_none() {
             // --- 初始化流程 (仅首次) ---
             let x_3d = transform.translation.x / 100.0;
@@ -445,20 +445,36 @@ fn sync_2d_to_3d_render(
             let is_boss = char_sprite.size.x > 150.0;
 
             let mesh = meshes.add(Rectangle::new(char_sprite.size.x / 50.0, char_sprite.size.y / 50.0));
-            let material = materials.add(StandardMaterial {
-                base_color: Color::WHITE,
-                base_color_texture: Some(char_sprite.texture.clone()),
-                emissive: LinearRgba::WHITE, 
-                emissive_texture: Some(char_sprite.texture.clone()),
-                reflectance: 0.0,
-                alpha_mode: AlphaMode::Mask(0.5), 
-                cull_mode: None,
-                double_sided: true,
-                ..default()
-            });
+            
+            // 法宝使用更轻盈的青蓝色自发光材质
+            let material = if is_relic {
+                materials.add(StandardMaterial {
+                    base_color: Color::srgba(0.8, 0.9, 1.0, 0.8),
+                    base_color_texture: Some(char_sprite.texture.clone()),
+                    emissive: LinearRgba::new(0.0, 0.5, 1.0, 1.0), 
+                    emissive_texture: Some(char_sprite.texture.clone()),
+                    alpha_mode: AlphaMode::Blend,
+                    cull_mode: None,
+                    double_sided: true,
+                    ..default()
+                })
+            } else {
+                materials.add(StandardMaterial {
+                    base_color: Color::WHITE,
+                    base_color_texture: Some(char_sprite.texture.clone()),
+                    emissive: LinearRgba::WHITE, 
+                    emissive_texture: Some(char_sprite.texture.clone()),
+                    reflectance: 0.0,
+                    alpha_mode: AlphaMode::Mask(0.5), 
+                    cull_mode: None,
+                    double_sided: true,
+                    ..default()
+                })
+            };
 
             let home_pos = Vec3::new(x_3d, 0.05, z_3d + 0.1);
-            commands.entity(entity).insert((
+            let mut entity_cmd = commands.entity(entity);
+            entity_cmd.insert((
                 Combatant3d { facing_right: true },
                 BreathAnimation::default(),
                 PhysicalImpact { home_position: home_pos, ..default() }, 
@@ -466,20 +482,24 @@ fn sync_2d_to_3d_render(
                 MeshMaterial3d(material),
                 bevy::pbr::NotShadowCaster,
                 Transform::from_translation(home_pos).with_rotation(Quat::from_rotation_x(-0.2)), 
-            )).remove::<Sprite>()
-            .with_children(|parent| {
-                let base_radius = if is_boss { 1.2 } else { 0.8 };
-                parent.spawn((
-                    Mesh3d(meshes.add(Cylinder::new(base_radius, 0.02))), 
-                    MeshMaterial3d(materials.add(StandardMaterial {
-                        base_color: Color::srgba(0.0, 0.05, 0.0, 0.4),
-                        emissive: LinearRgba::new(0.0, 0.2, 0.1, 1.0),
-                        alpha_mode: AlphaMode::Blend,
-                        ..default()
-                    })),
-                    Transform::from_xyz(0.0, -0.02, 0.0),
-                ));
-            });
+            )).remove::<Sprite>();
+
+            // 非法宝（人物/怪）生成底座，法宝悬空
+            if !is_relic {
+                entity_cmd.with_children(|parent| {
+                    let base_radius = if is_boss { 1.2 } else { 0.8 };
+                    parent.spawn((
+                        Mesh3d(meshes.add(Cylinder::new(base_radius, 0.02))), 
+                        MeshMaterial3d(materials.add(StandardMaterial {
+                            base_color: Color::srgba(0.0, 0.05, 0.0, 0.4),
+                            emissive: LinearRgba::new(0.0, 0.2, 0.1, 1.0),
+                            alpha_mode: AlphaMode::Blend,
+                            ..default()
+                        })),
+                        Transform::from_xyz(0.0, -0.02, 0.0),
+                    ));
+                });
+            }
         } else {
             // --- 更新流程 (贴图切换时触发) ---
             if let Some(mat_handle) = mat_handle_opt {
