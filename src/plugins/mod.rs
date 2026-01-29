@@ -440,7 +440,7 @@ fn setup_combat_environment(
 /// 设置主菜单UI
 /// 主菜单根节点标记
 #[derive(Component)]
-struct MainMenuRoot;
+pub struct MainMenuRoot;
 
 fn setup_main_menu(mut commands: Commands, asset_server: Res<AssetServer>) {
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
@@ -470,7 +470,7 @@ fn setup_main_menu(mut commands: Commands, asset_server: Res<AssetServer>) {
                     position_type: PositionType::Absolute,
                     ..default()
                 },
-                ZIndex(-1),
+                ZIndex(-2), // 降至最底层
             ));
 
             // 按钮容器
@@ -516,6 +516,15 @@ fn setup_main_menu(mut commands: Commands, asset_server: Res<AssetServer>) {
                 });
             });
         });
+
+    // --- [修复] 独立的主菜单云雾发射器 ---
+    commands.spawn((
+        ParticleEmitter::new(1.2, EffectType::CloudMist.config()).with_type(EffectType::CloudMist),
+        Transform::from_xyz(0.0, 0.0, 0.0), // 屏幕中心
+        GlobalTransform::default(),
+        crate::components::particle::EmitterMarker,
+        MainMenuRoot, // 关联到主菜单根，随之销毁
+    ));
 }
 
 /// 清理主菜单UI

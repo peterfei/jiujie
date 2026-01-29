@@ -31,6 +31,7 @@ impl Plugin for ParticlePlugin {
             ).run_if(in_state(GameState::Combat)
                 .or(in_state(GameState::Reward))
                 .or(in_state(GameState::Tribulation))
+                .or(in_state(GameState::MainMenu)) // 增加主菜单支持
             )
         );
     }
@@ -41,6 +42,36 @@ fn setup_particle_texture(mut commands: Commands, asset_server: Res<AssetServer>
     textures.insert(EffectType::WanJian, asset_server.load("textures/cards/sword.png"));
     textures.insert(EffectType::WebShot, asset_server.load("textures/web_effect.png"));
     textures.insert(EffectType::SwordEnergy, asset_server.load("textures/cards/sword.png"));
+    
+    // --- [核心优化] 程序化生成“仙山云雾”软边缘贴图 ---
+    let width = 64;
+    let height = 64;
+    let mut data = vec![255; width * height * 4];
+    for y in 0..height {
+        for x in 0..width {
+            let dx = x as f32 - 31.5;
+            let dy = y as f32 - 31.5;
+            let dist = (dx*dx + dy*dy).sqrt() / 32.0;
+            // 使用平方衰减曲线，确保边缘极其柔和且中心通透
+            let alpha = (1.0 - dist).clamp(0.0, 1.0).powi(2);
+            let idx = (y * width + x) * 4;
+            data[idx + 0] = 255; // R
+            data[idx + 1] = 255; // G
+            data[idx + 2] = 255; // B
+            data[idx + 3] = (alpha * 255.0) as u8; // A
+        }
+    }
+    use bevy::render::render_asset::RenderAssetUsages;
+    use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+    let cloud_image = Image::new(
+        Extent3d { width: width as u32, height: height as u32, depth_or_array_layers: 1 },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::default(),
+    );
+    textures.insert(EffectType::CloudMist, images.add(cloud_image));
+
     let default_texture = images.add(Image::default());
     commands.insert_resource(ParticleAssets { textures, default_texture });
 }
@@ -79,7 +110,7 @@ pub fn handle_effect_events(
     }
 }
 
-fn spawn_particle_entity(commands: &mut Commands, assets: &ParticleAssets, particle: Particle) {
+fn spawn_particle_entity(commands: &mut Commands, assets: &ParticleAssets, particle: Particle) -> Entity {
     let size = particle.start_size;
     let ui_x = 640.0 + particle.position.x;
     let ui_y = 360.0 - particle.position.y;
@@ -98,34 +129,96 @@ fn spawn_particle_entity(commands: &mut Commands, assets: &ParticleAssets, parti
             width: Val::Px(w), height: Val::Px(h), ..default()
         },
         ImageNode::new(handle).with_color(particle.start_color),
+        PickingBehavior::IGNORE, // [关键修复] 粒子不应拦截 UI 鼠标事件
         ZIndex(5),
         particle,
         ParticleMarker,
         Transform::from_translation(Vec3::new(0.0, 0.0, rand::random::<f32>() * 0.01)).with_rotation(Quat::from_rotation_z(initial_rotation)),
         GlobalTransform::default(),
-    ));
+    )).id()
 }
 
 pub fn update_emitters(
 
-mut commands: Commands, assets: Res<ParticleAssets>, mut emitters: Query<(Entity, &mut ParticleEmitter, &GlobalTransform)>, time: Res<Time>) {
-    for (entity, mut emitter, transform) in emitters.iter_mut() {
+    mut commands: Commands, 
+
+    assets: Res<ParticleAssets>, 
+
+    mut emitters: Query<(Entity, &mut ParticleEmitter, &GlobalTransform, Option<&crate::plugins::MainMenuRoot>)>, 
+
+    time: Res<Time>
+
+) {
+
+    for (entity, mut emitter, transform, in_main_menu) in emitters.iter_mut() {
+
         emitter.elapsed += time.delta_secs();
+
         if emitter.duration > 0.0 && emitter.elapsed >= emitter.duration { commands.entity(entity).despawn_recursive(); continue; }
+
+        
+
         emitter.timer += time.delta_secs();
+
         let interval = 1.0 / emitter.rate;
+
         while emitter.timer >= interval {
+
             emitter.timer -= interval;
+
             if emitter.emitted_count >= emitter.max_particles {
+
                 if !emitter.looping { commands.entity(entity).despawn_recursive(); }
+
                 break;
+
             }
-            let particle = emitter.config.spawn_particle(transform.translation(), emitter.effect_type);
-            spawn_particle_entity(&mut commands, &assets, particle);
+
+            
+
+            let mut pos = transform.translation();
+
+            // [核心优化] 全屏云雾随机化
+
+            if emitter.effect_type == EffectType::CloudMist {
+
+                use rand::Rng;
+
+                let mut rng = rand::thread_rng();
+
+                pos.x += rng.gen_range(-700.0..700.0);
+
+                pos.y += rng.gen_range(-400.0..400.0);
+
+            }
+
+            
+
+            let particle = emitter.config.spawn_particle(pos, emitter.effect_type);
+
+            let p_entity = spawn_particle_entity(&mut commands, &assets, particle);
+
+            
+
+            // 如果是在主菜单中，给粒子也打上标记以便销毁
+
+            if in_main_menu.is_some() {
+
+                commands.entity(p_entity).insert(crate::plugins::MainMenuRoot);
+
+            }
+
+            
+
             emitter.emitted_count += 1;
+
         }
+
     }
+
 }
+
+
 
 use crate::components::screen_effect::ScreenEffectEvent;
 use crate::components::sprite::EnemySpriteMarker;
@@ -174,7 +267,20 @@ pub fn update_particles(
         let ui_y = 360.0 - p.position.y;
         node.left = Val::Px(ui_x - w/2.0); node.top = Val::Px(ui_y - h/2.0);
         node.width = Val::Px(w); node.height = Val::Px(h);
-        image.color = p.current_color();
+        
+        // 针对 CloudMist 优化平滑淡入淡出
+        if p.effect_type == EffectType::CloudMist {
+            let mut color = p.current_color();
+            let fade = (global_prog * (1.0 - global_prog) * 4.0).clamp(0.0, 1.0);
+            color.set_alpha(0.12 * fade); // 极低的基础透明度乘以淡入淡出曲线
+            image.color = color;
+            
+            // 增加微小旋转扰动 (模拟气流卷动)
+            p.rotation += delta * (p.seed - 0.5) * 0.15;
+        } else {
+            image.color = p.current_color();
+        }
+        
         transform.rotation = Quat::from_rotation_z(p.rotation);
 
         if p.is_dead() { commands.entity(entity).despawn_recursive(); continue; }
