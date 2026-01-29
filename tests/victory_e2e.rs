@@ -154,6 +154,10 @@ fn e2e_301_completing_node_unlocks_next_layer() {
         .filter(|n| n.completed && n.position.0 == 0)
         .count();
 
+    // 验证：特定后续节点解锁
+    let current_node = progress.get_current_node().unwrap();
+    let next_ids = current_node.next_nodes.clone();
+    
     progress.complete_current_node();
 
     // 验证：第0层节点标记为完成
@@ -163,27 +167,31 @@ fn e2e_301_completing_node_unlocks_next_layer() {
 
     assert!(completed_count_after > completed_count_before, "节点应该被标记为完成");
 
-    // 验证：第1层节点解锁
-    let layer_1_unlocked = progress.nodes.iter()
-        .filter(|n| n.position.0 == 1)
+    // 验证：后续路径上的节点解锁
+    let path_unlocked = progress.nodes.iter()
+        .filter(|n| next_ids.contains(&n.id))
         .all(|n| n.unlocked);
 
-    assert!(layer_1_unlocked, "完成节点后下一层应该解锁");
+    assert!(path_unlocked, "完成节点后其后续节点应该解锁");
 }
 
 #[test]
 fn e2e_302_completion_only_unlocks_adjacent_layer() {
     let mut progress = MapProgress::new(&MapConfig::default());
 
+    // 获取路径信息
+    let current_node = progress.nodes.iter().find(|n| n.id == 0).unwrap();
+    let next_ids = current_node.next_nodes.clone();
+
     // 完成第0层
     progress.set_current_node(0);
     progress.complete_current_node();
 
-    // 验证：第1层解锁
-    let layer_1_unlocked = progress.nodes.iter()
-        .filter(|n| n.position.0 == 1)
+    // 验证：后续节点解锁
+    let path_unlocked = progress.nodes.iter()
+        .filter(|n| next_ids.contains(&n.id))
         .all(|n| n.unlocked);
-    assert!(layer_1_unlocked, "第1层应该解锁");
+    assert!(path_unlocked, "路径上的节点应该解锁");
 
     // 验证：第2层仍然锁定
     let layer_2_locked = progress.nodes.iter()
@@ -436,11 +444,20 @@ fn e2e_803_can_reach_max_layer() {
         .max()
         .unwrap_or(0) as u32;
 
-    // 完成所有层（通过设置不同节点）
-    for layer in 0..=max_layer {
-        if let Some(node) = progress.nodes.iter().find(|n| n.position.0 == layer as i32) {
-            progress.set_current_node(node.id);
-            progress.complete_current_node();
+    // 顺着连线走到底
+    let mut current_node_id = 0; // 从第一个节点开始
+    
+    for _ in 0..=max_layer {
+        progress.set_current_node(current_node_id);
+        progress.complete_current_node();
+        
+        // 寻找下一个可前往的节点
+        if let Some(node) = progress.nodes.iter().find(|n| n.id == current_node_id) {
+            if let Some(&next_id) = node.next_nodes.first() {
+                current_node_id = next_id;
+            } else {
+                break; // 到达终点（Boss）
+            }
         }
     }
 
