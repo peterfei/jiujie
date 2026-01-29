@@ -706,12 +706,6 @@ fn spawn_path_indicator(
     }
 }
 
-/// 路径导向点组件
-#[derive(Component)]
-pub struct ConnectorDot {
-    pub offset: f32,
-}
-
 /// 动画系统：让路径点产生灵动的流动感
 pub fn animate_connector_dots(
     time: Res<Time>,
