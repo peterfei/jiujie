@@ -211,7 +211,6 @@ fn setup_map_ui(
                                         justify_content: JustifyContent::SpaceEvenly,
                                         align_items: AlignItems::Center,
                                         flex_direction: FlexDirection::Row,
-                                        column_gap: Val::Px(20.0),
                                         ..default()
                                     })
                                     .with_children(|layer_parent| {
@@ -617,7 +616,7 @@ fn setup_breakthrough_button(
                     }
                 }
                 
-/// 在连接区域生成路径导向点
+/// 在连接区域生成路径导向点（大作级视觉增强版）
 fn spawn_path_indicator(
     parent: &mut ChildBuilder,
     from_node: &MapNode,
@@ -628,8 +627,7 @@ fn spawn_path_indicator(
 ) {
     let is_path_unlocked = from_node.completed;
     
-    // --- 极致对位算法：匹配 SpaceEvenly ---
-    // 公式: (index + 1) / (total + 1)
+    // --- 极致对位算法 ---
     let get_x_percent = |idx: i32, total: f32| -> f32 {
         ((idx as f32 + 1.0) / (total + 1.0)) * 100.0
     };
@@ -637,30 +635,52 @@ fn spawn_path_indicator(
     let start_x = get_x_percent(from_node.position.1, from_count);
     let end_x = get_x_percent(to_node.position.1, to_count);
 
-    // 提升密度：使用 12 个点形成紧密的虚线感
-    let point_count = 12;
-    for i in 1..=point_count {
-        let t = i as f32 / (point_count as f32 + 1.0); 
-        let current_x = start_x + (end_x - start_x) * t;
+    // --- 贝塞尔曲线参数 ---
+    // 如果是斜向连线，通过中点偏移产生弧度
+    let has_horizontal_shift = from_node.position.1 != to_node.position.1;
+    let mid_x = if has_horizontal_shift {
+        start_x + (end_x - start_x) * 0.5 + if end_x > start_x { 2.0 } else { -2.0 }
+    } else {
+        start_x
+    };
+
+    // 极致密度：15 个点形成连贯路径
+    let point_count = 15;
+    for i in 0..=point_count {
+        let t = i as f32 / point_count as f32; 
+        
+        // 二次贝塞尔曲线公式: (1-t)^2 * P0 + 2t(1-t) * P1 + t^2 * P2
+        let current_x = (1.0 - t).powi(2) * start_x + 2.0 * t * (1.0 - t) * mid_x + t.powi(2) * end_x;
         
         parent.spawn((
             Node {
                 position_type: PositionType::Absolute,
                 left: Val::Percent(current_x),
-                margin: UiRect::left(Val::Px(-3.0)), // 补偿点自身宽度 (6px) 以对准圆心
+                margin: UiRect::left(Val::Px(-3.5)), // 精确居中 (点宽 7px)
                 top: Val::Percent(t * 100.0),
-                width: Val::Px(6.0), // 稍微缩小点的大小，使其更精致
-                height: Val::Px(6.0),
+                width: Val::Px(7.0),
+                height: Val::Px(7.0),
                 ..default()
             },
             BackgroundColor(if is_path_unlocked {
-                Color::srgba(0.8, 0.9, 1.0, 0.9) // 已解锁：高亮蓝白
+                Color::srgba(0.85, 0.95, 1.0, 0.95) // 亮蓝色灵力
             } else {
-                Color::srgba(0.3, 0.3, 0.4, 0.15) // 未解锁：极淡阴影
+                Color::srgba(0.4, 0.4, 0.5, 0.15) // 暗淡灰色
             }),
-            BorderRadius::all(Val::Px(3.0)),
+            // --- 大作级视觉细节：外发光 ---
+            BoxShadow {
+                color: if is_path_unlocked {
+                    Color::srgba(0.4, 0.7, 1.0, 0.5) // 幽蓝光晕
+                } else {
+                    Color::srgba(0.0, 0.0, 0.0, 0.0)
+                },
+                blur_radius: Val::Px(8.0),
+                spread_radius: Val::Px(2.0),
+                ..default()
+            },
+            BorderRadius::all(Val::Px(3.5)),
             ConnectorDot {
-                offset: (from_node.id as f32 * 0.7) + (i as f32 * 0.2), // 错落有致的流动感
+                offset: (from_node.id as f32 * 1.3) + (i as f32 * 0.25), // 灵动的相位偏移
             },
         ));
     }
