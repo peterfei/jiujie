@@ -520,7 +520,7 @@ fn setup_main_menu(mut commands: Commands, asset_server: Res<AssetServer>) {
     // --- [修复] 独立的主菜单云雾发射器 ---
     commands.spawn((
         {
-            let mut emitter = ParticleEmitter::new(3.5, EffectType::CloudMist.config()).with_type(EffectType::CloudMist);
+            let mut emitter = ParticleEmitter::new(4.5, EffectType::CloudMist.config()).with_type(EffectType::CloudMist);
             emitter.max_particles = 99999; // 确保永久循环，不会因为达到上限而停止
             emitter
         },

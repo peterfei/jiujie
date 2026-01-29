@@ -43,12 +43,10 @@ fn setup_particle_texture(mut commands: Commands, asset_server: Res<AssetServer>
     textures.insert(EffectType::WebShot, asset_server.load("textures/web_effect.png"));
     textures.insert(EffectType::SwordEnergy, asset_server.load("textures/cards/sword.png"));
     
-    // --- [核心优化] 程序化生成“水墨写意”晕染贴图 (高精度版) ---
+    // --- [终极优化] 程序化生成“水墨写意”晕染贴图 (消除硬心，增加蓬松感) ---
     let width = 128;
     let height = 128;
     let mut data = vec![255; width * height * 4];
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
     
     for y in 0..height {
         for x in 0..width {
@@ -56,23 +54,20 @@ fn setup_particle_texture(mut commands: Commands, asset_server: Res<AssetServer>
             let dy = y as f32 - 63.5;
             let dist = (dx*dx + dy*dy).sqrt() / 64.0;
             
-            // 引入更精细的边缘扰动
+            // 引入更自然的边缘扰动
             let angle = dy.atan2(dx);
-            let noise = (angle * 5.0).sin() * 0.12 + (angle * 11.0).cos() * 0.08;
-            let threshold = 0.92 + noise;
+            let noise = (angle * 4.0).sin() * 0.12 + (angle * 7.0).cos() * 0.08;
+            let threshold = 0.95 + noise;
             
-            let alpha = if dist < threshold {
-                // [优化] 使用更平缓的衰减，增加“墨肉”的饱满感
-                (1.0 - dist / threshold).clamp(0.0, 1.0).powf(1.5)
-            } else {
-                0.0
-            };
+            // [核心修正] 恢复平缓衰减曲线，确保单体墨迹够大、够显眼
+            let normalized_dist = (dist / threshold).clamp(0.0, 1.0);
+            let alpha = (1.0 - normalized_dist * normalized_dist).powi(2); 
             
             let idx = (y * width + x) * 4;
-            let gray = (rng.gen_range(180..240) as f32 / 255.0) as f32;
-            data[idx + 0] = (gray * 255.0) as u8;
-            data[idx + 1] = (gray * 255.0) as u8;
-            data[idx + 2] = (gray * 255.0) as u8;
+            // 保持冷墨色调
+            data[idx + 0] = 15; // 更深一点
+            data[idx + 1] = 20; 
+            data[idx + 2] = 25; 
             data[idx + 3] = (alpha * 255.0) as u8;
         }
     }
@@ -313,8 +308,8 @@ pub fn update_particles(
         if p.effect_type == EffectType::CloudMist {
             let mut color = p.current_color();
             let fade = (global_prog * (1.0 - global_prog) * 4.0).clamp(0.0, 1.0);
-            // [再次强化] 让水墨感更加厚重，模拟浓墨
-            color.set_alpha(0.6 * fade); 
+            // [黄金平衡] 提升透明度，找回水墨厚度
+            color.set_alpha(0.28 * fade); 
             image.color = color;
             
             // 增加更显著的旋转扰动 (水墨流变感)
