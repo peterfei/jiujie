@@ -2411,12 +2411,37 @@ fn apply_card_effect(
             if let Ok((player, _)) = player_query.get_single() {
                 let final_damage = player.calculate_outgoing_damage_with_env(*damage, environment);
                 if let Some(mut enemy) = enemy_query.iter_mut().find(|e| e.hp > 0) {
+                    let target_id = enemy.id;
+                    let mut total_damage = 0;
+                    
                     for _ in 0..*times {
                         enemy.take_damage_with_env(final_damage, environment);
-                        // 触发多次斩击特效，位置稍微随机偏移
+                        total_damage += final_damage;
+                        // 触发多次斩击特效
                         effect_events.send(SpawnEffectEvent::new(EffectType::Slash, Vec3::new(0.0, 0.0, 5.0))); 
                     }
-                    info!("【卡牌】施展连环攻击，重创敌人 {} 次", times);
+                    
+                    let is_dead = enemy.hp <= 0;
+                    info!("【卡牌】{} 次攻击，每次 {} 点伤害，共 {} 点，敌人剩余HP: {}", times, damage, total_damage, enemy.hp);
+
+                    // [关键修复] 补充动画和飘字反馈
+                    for (entity, marker, _) in enemy_sprite_query.iter() {
+                        if marker.id == target_id {
+                            // 飘字 (显示总伤害)
+                            if let Some((_, _, impact)) = enemy_impact_query.iter().find(|(_, m, _)| m.id == target_id) {
+                                let x_world = impact.home_position.x * 100.0;
+                                let y_world = (impact.home_position.z - 0.1) * 100.0;
+                                damage_events.send(DamageEffectEvent { position: Vec2::new(x_world, y_world), amount: total_damage });
+                            }
+                            
+                            // 死亡/受击动画
+                            if is_dead {
+                                anim_events.send(CharacterAnimationEvent { target: entity, animation: crate::components::sprite::AnimationState::Death });
+                            } else {
+                                anim_events.send(CharacterAnimationEvent { target: entity, animation: crate::components::sprite::AnimationState::Hit });
+                            }
+                        }
+                    }
                 }
             }
         }
