@@ -32,7 +32,8 @@ impl Plugin for MapPlugin {
         // 处理地图界面按钮点击
         app.add_systems(Update, (
             handle_map_button_clicks,
-            handle_map_scrolling, // 新增滚动支持
+            handle_map_scrolling,
+            animate_connector_dots, // 激活灵力流动
         ).run_if(in_state(GameState::Map)));
     }
 }
@@ -179,7 +180,7 @@ fn setup_map_ui(
                         justify_content: JustifyContent::FlexStart,  // 从顶部开始
                         flex_direction: FlexDirection::Column,
                         overflow: Overflow::scroll(),  // 启用滚动
-                        row_gap: Val::Px(10.0),  // 使用 row_gap 控制层间距
+                        // 移除显式的 row_gap，依靠子项自身高度(60px)和连线容器高度(60px)形成间距
                         ..default()
                     },
                     MapNodeContainer,
@@ -657,7 +658,8 @@ fn spawn_path_indicator(
     // 如果是斜向连线，通过中点偏移产生弧度
     let has_horizontal_shift = from_node.position.1 != to_node.position.1;
     let mid_x = if has_horizontal_shift {
-        start_x + (end_x - start_x) * 0.5 + if end_x > start_x { 2.0 } else { -2.0 }
+        // 弧度提升：从 2.0% 提升至 5.0%，让曲线更优雅
+        start_x + (end_x - start_x) * 0.5 + if end_x > start_x { 5.0 } else { -5.0 }
     } else {
         start_x
     };
@@ -701,6 +703,34 @@ fn spawn_path_indicator(
                 offset: (from_node.id as f32 * 1.3) + (i as f32 * 0.25), // 灵动的相位偏移
             },
         ));
+    }
+}
+
+/// 路径导向点组件
+#[derive(Component)]
+pub struct ConnectorDot {
+    pub offset: f32,
+}
+
+/// 动画系统：让路径点产生灵动的流动感
+pub fn animate_connector_dots(
+    time: Res<Time>,
+    mut query: Query<(&mut BackgroundColor, &mut Node, &ConnectorDot)>,
+) {
+    let t = time.elapsed_secs();
+    for (mut color, mut node, dot) in query.iter_mut() {
+        // 基于时间、位置偏移和 Sine 波计算呼吸相位
+        let alpha_pulse = ((t * 2.5 + dot.offset).sin() * 0.4 + 0.6).clamp(0.0, 1.0);
+        let scale_pulse = (t * 3.0 + dot.offset).cos() * 0.1 + 1.0;
+        
+        // 更新颜色透明度
+        let current_srgba = color.0.to_srgba();
+        color.0 = Color::srgba(current_srgba.red, current_srgba.green, current_srgba.blue, current_srgba.alpha * alpha_pulse);
+        
+        // 微调点的大小产生呼吸感
+        let base_size = 7.0;
+        node.width = Val::Px(base_size * scale_pulse);
+        node.height = Val::Px(base_size * scale_pulse);
     }
 }
                 
