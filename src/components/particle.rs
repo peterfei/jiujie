@@ -287,11 +287,11 @@ impl EmitterConfig {
             start_color: Color::srgba(0.06, 0.06, 0.06, 0.0), 
             end_color: Color::srgba(0.02, 0.02, 0.02, 0.0),
             // [史诗级改进] 初始向上初速度
-            speed: (15.0, 35.0),
-            angle: (std::f32::consts::PI * 0.4, std::f32::consts::PI * 0.6), // 集中向上方发射
+            speed: (25.0, 55.0),
+            angle: (std::f32::consts::PI * 0.45, std::f32::consts::PI * 0.55), // 集中向上方发射
             // [史诗级改进] 向上升腾的浮力感
-            gravity: Vec2::new(0.0, 12.0), 
-            rotation_speed: (-0.04, 0.04),
+            gravity: Vec2::new(0.0, 15.0), 
+            rotation_speed: (-0.05, 0.05),
             shape: ParticleShape::Circle,
         }
     }
