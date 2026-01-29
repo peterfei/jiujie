@@ -100,8 +100,29 @@ pub fn setup_shop_ui(
                             ShopItem::ForgetTechnique => "了断",
                         };
 
-                        item_parent.spawn((Button, ShopCardButton { item_index: index }, Node { width: Val::Px(90.0), height: Val::Px(35.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, BackgroundColor(Color::srgb(0.2, 0.4, 0.2)), BorderRadius::all(Val::Px(6.0)),))
-                        .with_children(|btn| { btn.spawn((Text::new(action_text), TextFont { font_size: 16.0, font: chinese_font.clone(), ..default() }, TextColor(Color::WHITE))); });
+                        let mut btn_cmd = item_parent.spawn((
+                            Button,
+                            Node { width: Val::Px(90.0), height: Val::Px(35.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
+                            BackgroundColor(Color::srgb(0.2, 0.4, 0.2)),
+                            BorderRadius::all(Val::Px(6.0)),
+                        ));
+
+                        // 根据类型挂载正确的标记组件
+                        match item {
+                            ShopItem::Card(_) | ShopItem::Elixir { .. } => {
+                                btn_cmd.insert(ShopCardButton { item_index: index });
+                            }
+                            ShopItem::Relic(_) => {
+                                btn_cmd.insert(ShopRelicButton { item_index: index });
+                            }
+                            ShopItem::ForgetTechnique => {
+                                btn_cmd.insert(ShopRemoveCardButton);
+                            }
+                        }
+
+                        btn_cmd.with_children(|btn| {
+                            btn.spawn((Text::new(action_text), TextFont { font_size: 16.0, font: chinese_font.clone(), ..default() }, TextColor(Color::WHITE)));
+                        });
                     });
                 }
             });
@@ -151,23 +172,30 @@ pub fn handle_shop_interactions(
     mut map_progress: ResMut<MapProgress>,
     card_buttons: Query<(&Interaction, &ShopCardButton), Changed<Interaction>>,
     relic_buttons: Query<(&Interaction, &ShopRelicButton), Changed<Interaction>>,
-    remove_buttons: Query<(&Interaction, &ShopRemoveCardButton), Changed<Interaction>>,
+    remove_buttons: Query<&Interaction, (With<ShopRemoveCardButton>, Changed<Interaction>)>,
     exit_buttons: Query<(&Interaction, &ShopExitButton), Changed<Interaction>>,
 ) {
     let mut should_save = false;
 
-    // 处理离开
+    // 1. 处理离开 (优先级最高)
     for (interaction, _) in exit_buttons.iter() {
         if matches!(interaction, Interaction::Pressed) {
+            info!("【仙家坊市】告辞离开");
             map_progress.complete_current_node();
             next_state.set(GameState::Map);
-            return;
+            return; // 立即返回，防止在同一帧处理购买逻辑
         }
     }
 
-    // 处理卡牌/灵丹
+    // 2. 处理卡牌/灵丹
     for (interaction, shop_btn) in card_buttons.iter() {
         if matches!(interaction, Interaction::Pressed) {
+            // 安全检查：索引必须有效
+            if shop_btn.item_index >= current_items.items.len() {
+                warn!("【商店逻辑】非法物品索引: {}", shop_btn.item_index);
+                continue;
+            }
+
             let item = &current_items.items[shop_btn.item_index];
             let price = item.get_price();
             if let Ok((mut player, _)) = player_query.get_single_mut() {
@@ -192,19 +220,30 @@ pub fn handle_shop_interactions(
         }
     }
 
-    // 处理遗物
+    // 3. 处理遗物
     for (interaction, shop_btn) in relic_buttons.iter() {
         if matches!(interaction, Interaction::Pressed) {
+            if shop_btn.item_index >= current_items.items.len() { continue; }
+
             let item = &current_items.items[shop_btn.item_index];
             if let Ok((mut player, _)) = player_query.get_single_mut() {
-                if player.gold >= item.get_price() {
+                let price = item.get_price();
+                if player.gold >= price {
                     if let ShopItem::Relic(relic) = item {
-                        player.gold -= item.get_price();
+                        player.gold -= price;
                         relic_collection.add_relic(relic.clone());
+                        info!("【仙家坊市】购得法宝: {}", relic.name);
                         should_save = true;
                     }
                 }
             }
+        }
+    }
+
+    // 4. 处理移除卡牌 (功能占位，后续可弹出卡组选择界面)
+    for interaction in remove_buttons.iter() {
+        if matches!(interaction, Interaction::Pressed) {
+            info!("【仙家坊市】准备遗忘功法 (暂未实现选择界面)");
         }
     }
 
@@ -233,7 +272,7 @@ pub fn update_gold_display(
 ) {
     if let Ok(player) = player_query.get_single() {
         for mut text in gold_text_query.iter_mut() {
-            text.0 = format!("金石: {}", player.gold);
+            text.0 = format!("灵石: {}", player.gold);
         }
     }
 }

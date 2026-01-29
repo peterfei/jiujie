@@ -786,22 +786,27 @@ fn create_event_button(parent: &mut ChildBuilder, label: &str, choice: EventChoi
 fn handle_event_choices(
     mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
-    mut player_query: Query<&mut Player>,
+    mut player_query: Query<(&mut Player, &crate::components::Cultivation)>,
     mut map_progress: ResMut<MapProgress>,
+    deck: Res<PlayerDeck>,
+    relics: Res<RelicCollection>,
     button_query: Query<(&Interaction, &EventChoiceButton), Changed<Interaction>>,
     ui_query: Query<Entity, With<EventUiRoot>>,
 ) {
     for (interaction, choice) in button_query.iter() {
         if *interaction == Interaction::Pressed {
-            if let Ok(mut player) = player_query.get_single_mut() {
+            let mut player_modified = false;
+            if let Ok((mut player, _)) = player_query.get_single_mut() {
                 match choice {
                     EventChoiceButton::GainGold(amt) => {
                         player.gold += *amt;
                         info!("【机缘】获得灵石 {}", amt);
+                        player_modified = true;
                     }
                     EventChoiceButton::Heal(amt) => {
                         player.hp = (player.hp + *amt).min(player.max_hp);
                         info!("【机缘】回复生命 {}", amt);
+                        player_modified = true;
                     }
                     EventChoiceButton::Leave => {
                         info!("【机缘】悄然离去");
@@ -812,6 +817,21 @@ fn handle_event_choices(
             // 完成当前节点，防止重复进入
             map_progress.complete_current_node();
             info!("【机缘】事件节点已完成，下一层已解锁");
+
+            // --- [关键修复] 执行自动存档，确保状态一致性 ---
+            if let Ok((player, cultivation)) = player_query.get_single() {
+                let save = crate::resources::save::GameStateSave {
+                    player: player.clone(),
+                    cultivation: cultivation.clone(),
+                    deck: deck.cards.clone(),
+                    relics: relics.relic.clone(),
+                    map_nodes: map_progress.nodes.clone(),
+                    current_map_node_id: map_progress.current_node_id,
+                    current_map_layer: map_progress.current_layer,
+                };
+                let _ = save.save_to_disk();
+                info!("【存档系统】机缘事件后进度已同步");
+            }
 
             // 清理并退出
             for e in ui_query.iter() {
@@ -1993,6 +2013,7 @@ fn handle_card_play(
     ),
     env: Option<Res<Environment>>,
     mut heavenly_cinematic: ResMut<HeavenlyStrikeCinematic>, 
+    victory_delay: Res<VictoryDelay>, // 引入资源
     queries: (
         Query<Entity, With<PlayerSpriteMarker>>,
         Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
@@ -2000,6 +2021,9 @@ fn handle_card_play(
         Query<(&Camera, &GlobalTransform), With<Camera3d>>,
     ),
 ) {
+    // [安全门禁] 如果已经处于胜利结算阶段，禁止打牌
+    if victory_delay.active { return; }
+
     let (mut effect_events, mut screen_events, mut sfx_events, mut anim_events, mut damage_events, mut status_events) = events;
     let (player_sprite_query, enemy_sprite_query, enemy_impact_query, camera_query) = queries;
     for (interaction, hand_card) in card_query.iter() {
@@ -2684,10 +2708,16 @@ fn cleanup_reward_ui(
     screen_effect_query: Query<Entity, With<ScreenEffectMarker>>,
     card_hover_query: Query<Entity, With<CardHoverPanelMarker>>,
     relic_hover_query: Query<Entity, With<RelicHoverPanelMarker>>,
+    mut hovered_card: ResMut<HoveredCard>, // 增加资源清理
+    mut hovered_relic: ResMut<HoveredRelic>,
 ) {
     info!("【清理奖励界面】清理所有奖励相关UI");
 
-    // 清理奖励UI
+    // 1. 首先清理逻辑状态，防止竞争
+    hovered_card.card_id = None;
+    hovered_relic.relic_id = None;
+
+    // 2. 然后清理实体
     for entity in ui_query.iter() {
         commands.entity(entity).despawn_recursive();
     }
@@ -2745,23 +2775,12 @@ fn handle_reward_clicks(
             map_progress.complete_current_node();
             info!("节点已完成，已解锁下一层");
 
-            // --- 执行自动存档 (确保法宝不丢失) ---
-            if let Ok((player, cultivation)) = player_query.get_single() {
-                let save = crate::resources::save::GameStateSave {
-                    player: player.clone(),
-                    cultivation: cultivation.clone(),
-                    deck: player_deck.cards.clone(),
-                    relics: relics.relic.clone(),
-                    map_nodes: map_progress.nodes.clone(),
-                    current_map_node_id: map_progress.current_node_id,
-                    current_map_layer: map_progress.current_layer,
-                };
-                let _ = save.save_to_disk();
-                info!("【存档系统】领取奖励后自动保存");
-            }
+            // --- [优化] 移除同步阻塞存档，交给状态机自然同步或异步处理 ---
+            // 之前的同步 save_to_disk 是导致卡死的嫌疑点，因为下一帧会立即执行大规模 UI 销毁
 
             // 返回地图
             next_state.set(GameState::Map);
+            return; // 立即返回，防止处理同一帧的其他点击
         }
     }
 }
@@ -3322,15 +3341,15 @@ fn setup_tribulation(
 
     let chinese_font = asset_server.load("fonts/Arial Unicode.ttf");
 
-    // 创建渡劫背景（深紫色）
+    // 创建渡劫背景（半透明深紫色遮罩，允许 3D 特效透出）
     commands.spawn((
         Node {
             width: Val::Percent(100.0),
             height: Val::Percent(100.0),
             ..default()
         },
-        BackgroundColor(Color::srgba(0.02, 0.01, 0.05, 0.95)),
-        ZIndex(-10), // 置于底层，确保粒子和闪光在上面
+        BackgroundColor(Color::srgba(0.01, 0.0, 0.02, 0.65)),
+        ZIndex(-10), 
         TribulationUiMarker,
     ));
 
@@ -3385,6 +3404,12 @@ fn update_tribulation(
     mut effect_events: EventWriter<SpawnEffectEvent>,
     mut sfx_events: EventWriter<PlaySfxEvent>,
 ) {
+    // 持续环境氛围演出：轻微震动与灵气扰动
+    screen_events.send(ScreenEffectEvent::Shake { trauma: 0.05, decay: 10.0 });
+    if time.elapsed_secs() as u32 % 2 == 0 {
+        effect_events.send(SpawnEffectEvent::new(EffectType::AmbientSpirit, Vec3::new(0.0, 0.0, 5.0)).burst(2));
+    }
+
     // 推进总进度
     timer.total_timer.tick(time.delta());
     if timer.total_timer.finished() {
@@ -3421,12 +3446,20 @@ fn update_tribulation(
                 decay: 0.5 
             });
             
-            // 在随机位置生成天雷粒子（大幅提高Z轴）
-            for i in 0..3 {
-                let x = rng.gen_range(-450.0..450.0);
-                let y = rng.gen_range(-350.0..350.0);
-                effect_events.send(SpawnEffectEvent::new(EffectType::Lightning, Vec3::new(x, y, 950.0 + (i as f32))).burst(60));
+            // [关键修复] 使用真实的 3D 世界坐标 (而非 2D 像素坐标)
+            // 确保雷霆劈在 3D 摄像机的视野范围内 (X: -10..10, Z: -5..5)
+            for _ in 0..3 {
+                let x = rng.gen_range(-12.0..12.0);
+                let z = rng.gen_range(-8.0..8.0);
+                // 3D 空间的落点 Y 轴应为 0 附近
+                effect_events.send(SpawnEffectEvent::new(EffectType::Lightning, Vec3::new(x, 0.0, z)));
             }
+
+            // 增强瞬间白闪强度，覆盖 2D 背景，产生致盲感
+            screen_events.send(ScreenEffectEvent::Flash { 
+                color: Color::srgba(1.5, 1.5, 2.0, 0.95), 
+                duration: 0.12 
+            });
 
             // 检查陨落
             if player.hp <= 0 {
@@ -3540,7 +3573,12 @@ fn handle_card_hover(
     asset_server: Res<AssetServer>,
     mouse_position: Res<MousePosition>,
     existing_panels: Query<Entity, With<CardHoverPanelMarker>>,
+    next_state: Res<NextState<GameState>>, // 增加状态检查
 ) {
+    // 如果状态即将切换，不要再处理悬停逻辑
+    // 如果状态即将切换，不要再处理悬停逻辑
+    if !matches!(next_state.as_ref(), NextState::Unchanged) { return; }
+
     for (interaction, card_button) in interactions.iter() {
         match interaction {
             Interaction::Hovered => {
@@ -3591,7 +3629,11 @@ fn handle_relic_hover(
     asset_server: Res<AssetServer>,
     mouse_position: Res<MousePosition>,
     existing_panels: Query<Entity, With<RelicHoverPanelMarker>>,
+    next_state: Res<NextState<GameState>>,
 ) {
+    // 如果状态即将切换，不要再处理悬停逻辑
+    if !matches!(next_state.as_ref(), NextState::Unchanged) { return; }
+
     for (interaction, relic_button) in interactions.iter() {
         match interaction {
             Interaction::Hovered => {

@@ -17,7 +17,7 @@ use crate::components::animation::{
     FloatingDamageText,
     EnemyUiMarker, PlayerUiMarker, EasingFunction, EnemyAttackEvent
 };
-use crate::components::map::{BreathingAnimation, PulseAnimation, HoverEffect, MapNodeButton, OriginalSize, RippleEffect, EntranceAnimation, ConnectorDot};
+use crate::components::map::{BreathingAnimation, PulseAnimation, HoverEffect, MapNodeButton, OriginalSize, RippleEffect, EntranceAnimation, ConnectorDot, BreakthroughButtonMarker};
 use crate::states::GameState;
 
 /// 动画插件
@@ -302,7 +302,7 @@ fn handle_enemy_attack_events(
 ///
 /// 为未完成的节点添加平滑的缩放呼吸效果
 fn update_breathing_animations(
-    mut query: Query<(&mut BreathingAnimation, &OriginalSize, &mut Node)>,
+    mut query: Query<(&mut BreathingAnimation, &OriginalSize, &mut Node), Without<BreakthroughButtonMarker>>,
     time: Res<Time>,
 ) {
     for (mut anim, original, mut node) in query.iter_mut() {
@@ -352,7 +352,7 @@ fn update_pulse_animations(
 ///
 /// 检测鼠标悬停状态并应用缩放效果
 fn update_hover_effects(
-    mut query: Query<(&HoverEffect, &Interaction, &OriginalSize, &mut Node)>,
+    mut query: Query<(&HoverEffect, &Interaction, &OriginalSize, &mut Node), Without<BreakthroughButtonMarker>>,
 ) {
     for (effect, interaction, original, mut node) in query.iter_mut() {
         let target_scale = match interaction {
@@ -360,12 +360,19 @@ fn update_hover_effects(
             _ => effect.base_scale,
         };
 
+        // 安全检查：target_scale 不能为 0
+        if target_scale <= 0.0 { continue; }
+
         // 应用缩放到 Node 的 width/height
         if let Val::Px(base_w) = original.width {
-            node.width = Val::Px(base_w * target_scale);
+            if base_w > 0.0 {
+                node.width = Val::Px(base_w * target_scale);
+            }
         }
         if let Val::Px(base_h) = original.height {
-            node.height = Val::Px(base_h * target_scale);
+            if base_h > 0.0 {
+                node.height = Val::Px(base_h * target_scale);
+            }
         }
     }
 }
@@ -413,7 +420,7 @@ fn update_ripple_effects(
 /// 节点首次出现时的淡入和缩放动画
 fn update_entrance_animations(
     mut commands: Commands,
-    mut query: Query<(Entity, &mut EntranceAnimation, &mut Node, &mut BackgroundColor, &OriginalSize)>,
+    mut query: Query<(Entity, &mut EntranceAnimation, &mut Node, &mut BackgroundColor, &OriginalSize), Without<BreakthroughButtonMarker>>,
     time: Res<Time>,
 ) {
     for (entity, mut anim, mut node, mut bg_color, original) in query.iter_mut() {

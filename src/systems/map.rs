@@ -610,11 +610,12 @@ fn setup_breakthrough_button(
                         border: UiRect::all(Val::Px(5.0)),
                         ..default()
                     },
-                    ZIndex(100), // 确保在最顶层，防止被地图节点遮挡
                     BorderColor(Color::srgb(1.0, 0.8, 0.2)),
                     BackgroundColor(Color::srgba(0.1, 0.05, 0.2, 0.95)),
                     BreakthroughButtonMarker,
+                    // [彻底修复] 配合动画系统的 Without 过滤，现在可以安全使用 MapUiRoot 保证自动清理
                     MapUiRoot,
+                    ZIndex(999), 
                 ))
                 .with_children(|parent| {
                     parent.spawn((
@@ -627,10 +628,20 @@ fn setup_breakthrough_button(
                         TextColor(Color::srgb(1.0, 0.9, 0.5)),
                     ));
                 })
-                                .observe(|_entity: Trigger<Pointer<Click>>, mut next_state: ResMut<NextState<GameState>>| {
-                                    info!("【点击测试】点击了引动雷劫按钮！尝试进入 Tribulation 状态");
-                                    next_state.set(GameState::Tribulation);
-                                });
+                .observe(|_trigger: Trigger<Pointer<Over>>, mut query: Query<&mut BackgroundColor, With<BreakthroughButtonMarker>>| {
+                    for mut bg in query.iter_mut() {
+                        bg.0 = Color::srgba(0.2, 0.1, 0.4, 1.0); // 悬停加亮
+                    }
+                })
+                .observe(|_trigger: Trigger<Pointer<Out>>, mut query: Query<&mut BackgroundColor, With<BreakthroughButtonMarker>>| {
+                    for mut bg in query.iter_mut() {
+                        bg.0 = Color::srgba(0.1, 0.05, 0.2, 0.95); // 恢复原色
+                    }
+                })
+                .observe(|_entity: Trigger<Pointer<Click>>, mut next_state: ResMut<NextState<GameState>>| {
+                    info!("【点击测试】点击了引动雷劫按钮！尝试进入 Tribulation 状态");
+                    next_state.set(GameState::Tribulation);
+                });
                         }
                     }
                 }
