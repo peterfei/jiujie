@@ -669,25 +669,8 @@ fn handle_map_button_clicks(
             // 更新当前位置
             map_progress.set_current_node(node_id);
 
-            // [同步清理加固] 在切换状态前手动清理地图UI，防止遮挡
-            // 注意：虽然 OnExit 也有，但这里手动触发可以消除一帧的延迟
-            // 我们通过查询 MapUiRoot 实体进行清理
-            // 由于系统无法在这里直接 Query，我们依赖 OnExit 逻辑，但确保状态切换是最高优先级
+            // [优化] 移除此处同步存档，统一在进入新状态后处理
             
-            // --- 执行自动存档 ---
-            if let Ok((player, cultivation)) = player_query.get_single() {
-                let save = crate::resources::save::GameStateSave {
-                    player: player.clone(),
-                    cultivation: cultivation.clone(),
-                    deck: deck.cards.clone(),
-                    relics: relics.relic.clone(),
-                    map_nodes: map_progress.nodes.clone(),
-                    current_map_node_id: map_progress.current_node_id,
-                    current_map_layer: map_progress.current_layer,
-                };
-                let _ = save.save_to_disk();
-            }
-
             // 根据节点类型切换状态
             match node_type {
                 NodeType::Normal | NodeType::Elite | NodeType::Boss => {

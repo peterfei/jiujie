@@ -302,20 +302,7 @@ pub fn handle_leave_interaction(
             // 标记当前节点为完成
             map_progress.complete_current_node();
 
-            // --- [关键修复] 离开洞府时强制执行一次存档，防止无限刷级 ---
-            if let Ok((player, cultivation)) = player_query.get_single() {
-                let save = crate::resources::save::GameStateSave {
-                    player: player.clone(),
-                    cultivation: cultivation.clone(),
-                    deck: player_deck.cards.clone(),
-                    relics: relic_collection.relic.clone(),
-                    map_nodes: map_progress.nodes.clone(),
-                    current_map_node_id: map_progress.current_node_id,
-                    current_map_layer: map_progress.current_layer,
-                };
-                let _ = save.save_to_disk();
-                info!("【存档系统】闭关结束，状态已持久化");
-            }
+            // --- [优化] 移除此处同步存档，统一在进入 Map 状态时自动处理 ---
             
             // 切换状态
             next_state.set(GameState::Map);

@@ -51,8 +51,27 @@ fn setup_map_ui(
     asset_server: Res<AssetServer>, 
     map_progress: Option<Res<MapProgress>>,
     player_query: Query<(&Player, &Cultivation)>,
+    player_deck: Res<PlayerDeck>,
+    relic_collection: Res<RelicCollection>,
 ) {
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
+
+    // --- [统一自动存档点] 进入地图即保存，安全稳健 ---
+    if let Some(progress) = &map_progress {
+        if let Ok((player, cultivation)) = player_query.get_single() {
+            let save = GameStateSave {
+                player: player.clone(),
+                cultivation: cultivation.clone(),
+                deck: player_deck.cards.clone(),
+                relics: relic_collection.relic.clone(),
+                map_nodes: progress.nodes.clone(),
+                current_map_node_id: progress.current_node_id,
+                current_map_layer: progress.current_layer,
+            };
+            let _ = save.save_to_disk();
+            info!("【自动存档】进入寻仙觅缘，进度已同步至识海");
+        }
+    }
 
     // 1. 健壮性处理地图进度
     let mut progress = if let Some(p) = map_progress {
