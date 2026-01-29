@@ -51,7 +51,7 @@ fn setup_map_ui(
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
 
     // 1. 健壮性处理地图进度
-    let progress = if let Some(p) = map_progress {
+    let mut progress = if let Some(p) = map_progress {
         p.clone()
     } else {
         info!("【地图系统】未找到地图进度，创建新机缘地图");
@@ -60,9 +60,19 @@ fn setup_map_ui(
         new_progress
     };
 
+    // 关键修复：如果进度中节点为空（可能由于坏档或旧版本存档），强制重新生成
+    if progress.nodes.is_empty() {
+        warn!("【地图系统】检测到空地图节点，正在强制重新生成...");
+        use crate::components::map::{MapConfig, generate_map_nodes};
+        progress.nodes = generate_map_nodes(&MapConfig::default(), 0);
+        progress.refresh_unlocks();
+        // 立即更新资源，防止其它系统也读到空数据
+        commands.insert_resource(progress.clone());
+    }
+
     let nodes = progress.nodes.clone();
     
-    // 自动推断当前活跃层级：优先取当前节点，若无则取已完成节点的最高层
+    // 自动推断当前活跃层级：优先取当前所在节点，若无则取已完成节点的最高层
     let current_layer = if let Some(id) = progress.current_node_id {
         nodes.iter().find(|n| n.id == id).map(|n| n.position.0).unwrap_or(0)
     } else {
@@ -75,6 +85,7 @@ fn setup_map_ui(
 
     // 2. 健壮性处理玩家数据
     let player_info = player_query.get_single().ok();
+
     
     use crate::components::cultivation::Realm;
     let vision_range = if let Some((_, cultivation)) = player_info {
