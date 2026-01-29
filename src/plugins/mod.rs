@@ -191,13 +191,13 @@ impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
             crate::systems::animation::AnimationPlugin,
-            crate::systems::particle::ParticlePlugin,
             crate::systems::screen_effect::ScreenEffectPlugin,
             crate::systems::sprite::SpritePlugin,
             crate::systems::ui::UiPlugin,
             crate::systems::map::MapPlugin, // 新增地图插件
         ))
         .init_state::<GameState>()
+        .init_resource::<Player>() // 初始化玩家全局资源
         .insert_resource(VictoryDelay::new(4.0))
         .init_resource::<PlayerDeck>() // 初始化玩家持久化牌组
         .init_resource::<RelicCollection>() // 初始化遗物背包
@@ -1425,7 +1425,7 @@ pub fn cleanup_combat_ui(
     mut commands: Commands,
     query: Query<Entity, With<CombatUiRoot>>,
     player_query: Query<&Player>,
-    mut player_resource: ResMut<Player>,
+    player_resource: Option<ResMut<Player>>,
     // 增加对残留实体的查询
     enemy_query: Query<Entity, With<Enemy>>,
     sprite_query: Query<Entity, With<SpriteMarker>>,
@@ -1435,8 +1435,12 @@ pub fn cleanup_combat_ui(
 ) {
     // 1. 持久化同步
     if let Ok(player) = player_query.get_single() {
-        *player_resource = player.clone();
-        info!("【持久化】修士状态已同步：HP={}, 灵石={}", player_resource.hp, player_resource.gold);
+        if let Some(mut player_res) = player_resource {
+            *player_res = player.clone();
+            info!("【持久化】修士状态已同步：HP={}, 灵石={}", player_res.hp, player_res.gold);
+        } else {
+            warn!("【持久化】同步失败：未找到 Player 资源");
+        }
     }
 
     // 2. 彻底肃清战斗实体

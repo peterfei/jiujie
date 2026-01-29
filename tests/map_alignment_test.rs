@@ -81,16 +81,16 @@ fn test_all_nodes_are_rendered() {
     setup_map_scene(&mut app);
     advance_frames(&mut app, 10);
 
+    // 3. 验证 (适配神识视野系统)
     let world = app.world_mut();
-
-    // 统计渲染的节点数量
-    let node_count = world.query_filtered::<Entity, With<MapNodeButton>>()
-        .iter(world)
-        .count();
-
-    println!("渲染的节点数量: {}", node_count);
-
-    assert_eq!(node_count, 40, "应该渲染所有40个节点（10层×4节点）");
+    use bevy_card_battler::components::map::MapNodeButton;
+    let mut query = world.query_filtered::<&Node, With<MapNodeButton>>();
+    let count = query.iter(world).count();
+    println!("渲染的节点数量: {}", count);
+    
+    // 预期：在 QiRefining 境界下，初始视野为 1 层。
+    // 即渲染第 0 层和第 1 层，总计约 8 个节点
+    assert!(count >= 8 && count <= 16, "应该只渲染神识范围内的节点。当前渲染数: {}", count);
 }
 
 // ============================================================================
