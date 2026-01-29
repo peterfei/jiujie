@@ -214,7 +214,7 @@ pub fn setup_rest_ui(
 
 /// 处理休息交互
 pub fn handle_rest_interactions(
-    player_query: Query<&Player>,
+    mut player_query: Query<&mut Player>,
     mut player_deck: ResMut<crate::components::PlayerDeck>,
     breath_buttons: Query<&Interaction, (Changed<Interaction>, With<BreathButton>)>,
     upgrade_buttons: Query<&Interaction, (Changed<Interaction>, With<UpgradeButton>)>,
@@ -249,6 +249,10 @@ pub fn handle_rest_interactions(
     for interaction in breath_buttons.iter() {
         if matches!(interaction, Interaction::Pressed) {
             let heal_amount = (player.max_hp as f32 * 0.3) as i32;
+            // [关键修复] 立即执行治疗
+            if let Ok(mut player_mut) = player_query.get_single_mut() {
+                player_mut.heal(heal_amount);
+            }
             trigger_result(format!("运转周天，恢复了 {} 点道行！", heal_amount));
             return;
         }
@@ -286,19 +290,18 @@ pub fn handle_leave_interaction(
     mut next_state: ResMut<NextState<GameState>>,
     mut map_progress: ResMut<crate::components::map::MapProgress>,
     leave_buttons: Query<&Interaction, (Changed<Interaction>, With<LeaveButton>)>,
-    mut player_query: Query<&mut Player>,
 ) {
     for interaction in leave_buttons.iter() {
         if matches!(interaction, Interaction::Pressed) {
-            // 在此处正式结算数值变更（调息）
-            if let Ok(mut player) = player_query.get_single_mut() {
-                let heal_amount = (player.max_hp as f32 * 0.3) as i32;
-                player.heal(heal_amount);
-            }
-
-            info!("【洞府闭关】玩家离去");
+            // 只有在没切换状态时才执行
+            info!("【洞府闭关】玩家点击离开，正在结算...");
+            
+            // 标记当前节点为完成
             map_progress.complete_current_node();
+            
+            // 切换状态
             next_state.set(GameState::Map);
+            return; // 立即返回，防止在同一帧处理其他点击
         }
     }
 }
