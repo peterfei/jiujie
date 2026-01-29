@@ -247,22 +247,7 @@ pub fn handle_shop_interactions(
         }
     }
 
-    // 执行存档
-    if should_save {
-        if let Ok((player, cultivation)) = player_query.get_single() {
-            let save = crate::resources::save::GameStateSave {
-                player: player.clone(),
-                cultivation: cultivation.clone(),
-                deck: deck.cards.clone(),
-                relics: relic_collection.relic.clone(),
-                map_nodes: map_progress.nodes.clone(),
-                current_map_node_id: map_progress.current_node_id,
-                current_map_layer: map_progress.current_layer,
-            };
-            let _ = save.save_to_disk();
-            info!("【存档系统】进度已同步");
-        }
-    }
+    // [优化] 移除此处同步存档，依赖状态机在 Map 状态下的自动处理，消除 IO 卡死风险
 }
 
 /// 更新金币显示

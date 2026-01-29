@@ -458,19 +458,7 @@ fn handle_map_button_clicks(
             // 更新当前位置
             map_progress.set_current_node(node_id);
             
-            // --- 执行自动存档 ---
-            if let Ok((player, cultivation)) = player_query.get_single() {
-                let save = GameStateSave {
-                    player: player.clone(),
-                    cultivation: cultivation.clone(),
-                    deck: deck.cards.clone(),
-                    relics: relics.relic.clone(),
-                    map_nodes: map_progress.nodes.clone(),
-                    current_map_node_id: map_progress.current_node_id,
-                    current_map_layer: map_progress.current_layer,
-                };
-                let _ = save.save_to_disk();
-            }
+            // --- [优化] 移除此处同步存档，防止跳转时的 IO 阻塞 ---
 
             // 根据节点类型切换状态
             match node_type {
