@@ -279,17 +279,19 @@ impl EmitterConfig {
         }
     }
 
-    /// 灵山云雾 - 极其缓慢的、大范围的遮罩效果
+    /// 灵山云雾 - 水墨写意风格 (类三国志11)
     pub fn cloud_mist() -> Self {
         Self {
-            lifetime: (10.0, 15.0),
-            size: (300.0, 600.0), // 进一步扩大尺寸以增强厚度感
-            start_color: Color::srgba(0.8, 0.9, 1.0, 0.0), // 初始全透明淡入
-            end_color: Color::srgba(0.9, 0.95, 1.0, 0.0),  // 最终淡出
-            speed: (5.0, 15.0),
-            angle: (0.0, std::f32::consts::PI * 2.0),
-            gravity: Vec2::new(3.0, 1.0), // 极其微弱的空气流动
-            rotation_speed: (-0.1, 0.1),
+            lifetime: (12.0, 18.0),
+            size: (800.0, 1500.0), 
+            start_color: Color::srgba(0.06, 0.06, 0.06, 0.0), 
+            end_color: Color::srgba(0.02, 0.02, 0.02, 0.0),
+            // [史诗级改进] 初始向上初速度
+            speed: (15.0, 35.0),
+            angle: (std::f32::consts::PI * 0.4, std::f32::consts::PI * 0.6), // 集中向上方发射
+            // [史诗级改进] 向上升腾的浮力感
+            gravity: Vec2::new(0.0, 12.0), 
+            rotation_speed: (-0.04, 0.04),
             shape: ParticleShape::Circle,
         }
     }

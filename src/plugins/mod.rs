@@ -457,7 +457,7 @@ fn setup_main_menu(mut commands: Commands, asset_server: Res<AssetServer>) {
                 flex_direction: FlexDirection::Column,
                 ..default()
             },
-            BackgroundColor(Color::srgb(0.05, 0.05, 0.05)),
+            BackgroundColor(Color::srgb(0.9, 0.85, 0.75)), // 宣纸/绢帛色背景
             MainMenuRoot, // 添加标记
         ))
         .with_children(|parent| {
@@ -519,8 +519,12 @@ fn setup_main_menu(mut commands: Commands, asset_server: Res<AssetServer>) {
 
     // --- [修复] 独立的主菜单云雾发射器 ---
     commands.spawn((
-        ParticleEmitter::new(1.2, EffectType::CloudMist.config()).with_type(EffectType::CloudMist),
-        Transform::from_xyz(0.0, 0.0, 0.0), // 屏幕中心
+        {
+            let mut emitter = ParticleEmitter::new(3.5, EffectType::CloudMist.config()).with_type(EffectType::CloudMist);
+            emitter.max_particles = 99999; // 确保永久循环，不会因为达到上限而停止
+            emitter
+        },
+        Transform::from_xyz(0.0, -450.0, 0.0), // [史诗级改进] 从屏幕底部升起
         GlobalTransform::default(),
         crate::components::particle::EmitterMarker,
         MainMenuRoot, // 关联到主菜单根，随之销毁

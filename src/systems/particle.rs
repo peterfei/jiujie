@@ -43,22 +43,37 @@ fn setup_particle_texture(mut commands: Commands, asset_server: Res<AssetServer>
     textures.insert(EffectType::WebShot, asset_server.load("textures/web_effect.png"));
     textures.insert(EffectType::SwordEnergy, asset_server.load("textures/cards/sword.png"));
     
-    // --- [核心优化] 程序化生成“仙山云雾”软边缘贴图 ---
-    let width = 64;
-    let height = 64;
+    // --- [核心优化] 程序化生成“水墨写意”晕染贴图 (高精度版) ---
+    let width = 128;
+    let height = 128;
     let mut data = vec![255; width * height * 4];
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    
     for y in 0..height {
         for x in 0..width {
-            let dx = x as f32 - 31.5;
-            let dy = y as f32 - 31.5;
-            let dist = (dx*dx + dy*dy).sqrt() / 32.0;
-            // 使用平方衰减曲线，确保边缘极其柔和且中心通透
-            let alpha = (1.0 - dist).clamp(0.0, 1.0).powi(2);
+            let dx = x as f32 - 63.5;
+            let dy = y as f32 - 63.5;
+            let dist = (dx*dx + dy*dy).sqrt() / 64.0;
+            
+            // 引入更精细的边缘扰动
+            let angle = dy.atan2(dx);
+            let noise = (angle * 5.0).sin() * 0.12 + (angle * 11.0).cos() * 0.08;
+            let threshold = 0.92 + noise;
+            
+            let alpha = if dist < threshold {
+                // [优化] 使用更平缓的衰减，增加“墨肉”的饱满感
+                (1.0 - dist / threshold).clamp(0.0, 1.0).powf(1.5)
+            } else {
+                0.0
+            };
+            
             let idx = (y * width + x) * 4;
-            data[idx + 0] = 255; // R
-            data[idx + 1] = 255; // G
-            data[idx + 2] = 255; // B
-            data[idx + 3] = (alpha * 255.0) as u8; // A
+            let gray = (rng.gen_range(180..240) as f32 / 255.0) as f32;
+            data[idx + 0] = (gray * 255.0) as u8;
+            data[idx + 1] = (gray * 255.0) as u8;
+            data[idx + 2] = (gray * 255.0) as u8;
+            data[idx + 3] = (alpha * 255.0) as u8;
         }
     }
     use bevy::render::render_asset::RenderAssetUsages;
@@ -176,25 +191,51 @@ pub fn update_emitters(
 
             
 
-            let mut pos = transform.translation();
-
-            // [核心优化] 全屏云雾随机化
-
-            if emitter.effect_type == EffectType::CloudMist {
-
-                use rand::Rng;
-
-                let mut rng = rand::thread_rng();
-
-                pos.x += rng.gen_range(-700.0..700.0);
-
-                pos.y += rng.gen_range(-400.0..400.0);
-
-            }
+                        let mut pos = transform.translation();
 
             
 
-            let particle = emitter.config.spawn_particle(pos, emitter.effect_type);
+                        // [史诗级改进] 主界面云雾全屏横向播种
+
+            
+
+                        if emitter.effect_type == EffectType::CloudMist {
+
+            
+
+                            use rand::Rng;
+
+            
+
+                            let mut rng = rand::thread_rng();
+
+            
+
+                            // 横向铺满，纵向给予一定的初始抖动，使升腾更有层次感
+
+            
+
+                            pos.x += rng.gen_range(-800.0..800.0);
+
+            
+
+                            pos.y += rng.gen_range(-50.0..150.0);
+
+            
+
+                        }
+
+            
+
+                        
+
+            
+
+                        let particle = emitter.config.spawn_particle(pos, emitter.effect_type);
+
+            
+
+            
 
             let p_entity = spawn_particle_entity(&mut commands, &assets, particle);
 
@@ -272,11 +313,12 @@ pub fn update_particles(
         if p.effect_type == EffectType::CloudMist {
             let mut color = p.current_color();
             let fade = (global_prog * (1.0 - global_prog) * 4.0).clamp(0.0, 1.0);
-            color.set_alpha(0.12 * fade); // 极低的基础透明度乘以淡入淡出曲线
+            // [再次强化] 让水墨感更加厚重，模拟浓墨
+            color.set_alpha(0.6 * fade); 
             image.color = color;
             
-            // 增加微小旋转扰动 (模拟气流卷动)
-            p.rotation += delta * (p.seed - 0.5) * 0.15;
+            // 增加更显著的旋转扰动 (水墨流变感)
+            p.rotation += delta * (p.seed - 0.5) * 0.25;
         } else {
             image.color = p.current_color();
         }
