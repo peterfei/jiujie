@@ -18,7 +18,7 @@ struct SimState {
 
 impl SimState {
     fn new(enemy_hp: i32, enemy_damage: i32) -> Self {
-        let mut enemy = Enemy::new(1, "模拟怪", enemy_hp);
+        let mut enemy = Enemy::new(1, "模拟怪", enemy_hp, 0);
         enemy.intent = EnemyIntent::Attack { damage: enemy_damage };
         Self {
             player: Player { hp: 100, max_hp: 100, energy: 3, max_energy: 3, ..Default::default() },

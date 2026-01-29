@@ -43,7 +43,7 @@ fn test_relic_effects_first_combat() {
 
     info!("=== 第一场战斗 ===");
     let enemy_hp_before = 30;
-    app.world_mut().spawn(Enemy::new(0, "敌人1", enemy_hp_before));
+    app.world_mut().spawn(Enemy::new(0, "敌人1", enemy_hp_before, 0));
 
     app.insert_state(GameState::Combat);
     app.update();
@@ -63,7 +63,7 @@ fn test_combat_to_map_and_back_to_combat() {
     // === 第一场战斗 ===
     info!("=== 第一场战斗 ===");
     let enemy1_hp_before = 30;
-    app.world_mut().spawn(Enemy::new(0, "敌人1", enemy1_hp_before));
+    app.world_mut().spawn(Enemy::new(0, "敌人1", enemy1_hp_before, 0));
 
     app.insert_state(GameState::Combat);
     app.update();
@@ -110,7 +110,7 @@ fn test_combat_to_map_and_back_to_combat() {
     info!("第二场战斗前，CombatStartProcessed = {}", processed_before_second_combat);
 
     let enemy2_hp_before = 30;
-    app.world_mut().spawn(Enemy::new(0, "敌人2", enemy2_hp_before));
+    app.world_mut().spawn(Enemy::new(0, "敌人2", enemy2_hp_before, 0));
 
     app.insert_state(GameState::Combat);
     app.update();
@@ -131,7 +131,7 @@ fn test_manual_reset_processed_flag() {
 
     // === 第一场战斗 ===
     info!("=== 第一场战斗 ===");
-    app.world_mut().spawn(Enemy::new(0, "敌人1", 30));
+    app.world_mut().spawn(Enemy::new(0, "敌人1", 30, 0));
     app.insert_state(GameState::Combat);
     app.update();
     app.update();
@@ -149,7 +149,7 @@ fn test_manual_reset_processed_flag() {
 
     // === 第二场战斗 ===
     info!("=== 第二场战斗 ===");
-    app.world_mut().spawn(Enemy::new(0, "敌人2", 30));
+    app.world_mut().spawn(Enemy::new(0, "敌人2", 30, 0));
     app.insert_state(GameState::Combat);
     app.update();
     app.update();

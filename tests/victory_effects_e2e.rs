@@ -15,7 +15,7 @@ use bevy_card_battler::components::{
 fn e2e_victory_001_enemy_death_has_marker() {
     // 验证：敌人精灵有正确的标记组件
     // 这个测试检查组件定义是否正确存在
-    let _enemy = Enemy::new(1, "测试敌人", 50);
+    let _enemy = Enemy::new(1, "测试敌人", 50, 0);
 
     // 如果编译通过，说明Enemy组件可用
     assert!(true, "Enemy组件应该可用");

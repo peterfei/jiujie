@@ -18,9 +18,9 @@ fn test_aoe_damage_hits_all_enemies() {
     app.insert_resource(VictoryDelay::new(2.0));
 
     // 生成三个敌人
-    app.world_mut().spawn(Enemy::new(1, "狼1", 20));
-    app.world_mut().spawn(Enemy::new(2, "狼2", 20));
-    app.world_mut().spawn(Enemy::new(3, "狼3", 20));
+    app.world_mut().spawn(Enemy::new(1, "狼1", 20, 0));
+    app.world_mut().spawn(Enemy::new(2, "狼2", 20, 0));
+    app.world_mut().spawn(Enemy::new(3, "狼3", 20, 0));
     
     // 生成玩家
     app.world_mut().spawn(Player::default());

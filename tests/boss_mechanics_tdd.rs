@@ -17,15 +17,15 @@ fn test_boss_vs_minion_scale() {
 
 #[test]
 fn test_boss_hp_and_type() {
-    let boss = Enemy::with_type(99, "幽冥白虎".to_string(), 150, EnemyType::GreatDemon);
-    assert_eq!(boss.hp, 150);
+    let boss = Enemy::with_type(99, "幽冥白虎", 0, EnemyType::GreatDemon);
+    assert!(boss.hp >= 150, "BOSS 血量应具有压迫感");
     assert_eq!(boss.enemy_type, EnemyType::GreatDemon);
 }
 
 #[test]
 fn test_boss_ai_cycle() {
     // 逻辑：BOSS 应该具备更复杂的行为模式
-    let mut boss = Enemy::with_type(99, "幽冥白虎".to_string(), 150, EnemyType::GreatDemon);
+    let mut boss = Enemy::with_type(99, "幽冥白虎", 0, EnemyType::GreatDemon);
     
     // 回合 1: 啸天 (大伤害)
     boss.choose_new_intent();

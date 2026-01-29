@@ -468,15 +468,16 @@ impl Enemy {
 
     /// 设置敌人类型并根据层级自动缩放基础属性
     pub fn with_type(id: u32, name: &str, layer: u32, enemy_type: EnemyType) -> Self {
-        let base_hp = match enemy_type {
-            EnemyType::DemonicWolf => 35,
-            EnemyType::PoisonSpider => 25,
-            EnemyType::CursedSpirit => 45,
-            EnemyType::GreatDemon => 160, // BOSS 基础血量
+        let (base_hp, ai_pattern) = match enemy_type {
+            EnemyType::DemonicWolf => (35, AiPattern::demonic_wolf()),
+            EnemyType::PoisonSpider => (25, AiPattern::poison_spider()),
+            EnemyType::CursedSpirit => (45, AiPattern::cursed_spirit()),
+            EnemyType::GreatDemon => (160, AiPattern::great_demon()),
         };
         
         let mut enemy = Self::new(id, name, base_hp, layer);
         enemy.enemy_type = enemy_type;
+        enemy.ai_pattern = ai_pattern; // 关键修复：同步 AI 模式
         enemy
     }
 

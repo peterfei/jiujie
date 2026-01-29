@@ -14,7 +14,7 @@ fn test_enemy_entities_persist_after_cleanup_bug() {
     app.insert_resource(PlayerDeck::new());
     
     // 2. 生成一个敌人
-    let enemy_ent = app.world_mut().spawn(Enemy::new(1, "旧敌人", 100)).id();
+    let enemy_ent = app.world_mut().spawn(Enemy::new(1, "旧敌人", 100, 0)).id();
     
     // 3. 运行目前的清理系统
     // 注意：我们必须手动调用它，或者模拟 OnExit(Combat)

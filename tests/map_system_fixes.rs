@@ -107,10 +107,12 @@ fn test_event_node_completed_after_choice() {
     assert!(event_node.is_some(), "应该找到事件节点");
     assert!(event_node.unwrap().completed, "事件节点应该标记为已完成");
 
-    // 验证下一层节点已解锁
-    let next_layer_node = progress.nodes.iter().find(|n| n.id == 1);
-    assert!(next_layer_node.is_some(), "应该找到下一层节点");
-    assert!(next_layer_node.unwrap().unlocked, "下一层节点应该已解锁");
+    // 3. 验证解锁状态 (适配拓扑解锁)
+    let next_ids = progress.nodes[0].next_nodes.clone();
+    for next_id in next_ids {
+        let next_node = progress.nodes.iter().find(|n| n.id == next_id).unwrap();
+        assert!(next_node.unlocked, "下一层连通节点（ID: {}）应该已解锁", next_id);
+    }
 }
 
 #[test]

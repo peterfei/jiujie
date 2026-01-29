@@ -5,7 +5,7 @@ use bevy_card_battler::components::combat::{Enemy, Player, EnemyIntent, IntentIc
 fn test_intent_math_logic() {
     let mut player = Player::default();
     player.vulnerable = 1; // 玩家易伤 1.5x
-    let mut enemy = Enemy::new(1, "怪", 100);
+    let mut enemy = Enemy::new(1, "怪", 100, 0);
     enemy.weakness = 1; // 敌人虚弱 0.75x
     
     // 原始 10 -> 虚弱 7 -> 玩家易伤 10
@@ -17,7 +17,7 @@ fn test_intent_math_logic() {
 fn test_intent_ui_formatting_and_visibility() {
     let mut app = App::new();
     
-    let enemy_ent = app.world_mut().spawn(Enemy::new(1, "测试怪", 100)).id();
+    let enemy_ent = app.world_mut().spawn(Enemy::new(1, "测试怪", 100, 0)).id();
     let text_ent = app.world_mut().spawn((Text::new(""), EnemyIntentText { owner: enemy_ent })).id();
     let icon_ent = app.world_mut().spawn((Node::default(), Visibility::Hidden, IntentIconMarker { owner: enemy_ent })).id();
 

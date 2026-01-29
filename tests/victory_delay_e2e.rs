@@ -203,7 +203,7 @@ fn e2e_delay_203_multiple_victories_reset_delay() {
 
 #[test]
 fn e2e_delay_301_enemy_death_can_trigger_victory() {
-    let mut enemy = Enemy::new(1, "测试敌人", 50);
+    let mut enemy = Enemy::new(1, "测试敌人", 50, 0);
 
     assert!(!enemy.is_dead(), "初始状态敌人应该存活");
 

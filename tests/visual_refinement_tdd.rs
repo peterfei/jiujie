@@ -24,7 +24,7 @@ fn test_wolf_triple_strike_logic() {
         }
     }
 
-    app.world_mut().spawn(Enemy::new(1, "魔狼", 100));
+    app.world_mut().spawn(Enemy::new(1, "魔狼", 100, 0));
     app.add_systems(Update, mock_wolf_attack_system);
     app.update();
 

@@ -4,26 +4,20 @@ use bevy_card_battler::components::sprite::AnimationState;
 
 #[test]
 fn test_death_event_on_damage() {
-    let mut enemy = Enemy::with_type(1, "受气包", 10, EnemyType::DemonicWolf);
+    // 逻辑：伤害导致 HP 降至 0 应标记死亡
+    let mut enemy = Enemy::new(1, "受气包", 10, 0);
+    assert_eq!(enemy.hp, 10);
     
-    // 模拟受到 10 点伤害
     enemy.take_damage(10);
-    
-    // 逻辑验证：HP 应为 0
     assert_eq!(enemy.hp, 0);
-    
-    // 预期：此时逻辑层应能识别出需要播放死亡动画
-    let should_trigger_death = enemy.is_dead();
-    assert!(should_trigger_death, "HP 归零后应标记为死亡状态");
+    assert!(enemy.is_dead());
 }
 
 #[test]
 fn test_dead_enemy_skipped_in_logic() {
-    let mut enemy = Enemy::with_type(1, "测试怪", 0, EnemyType::DemonicWolf);
-    
-    // 逻辑验证：如果 HP <= 0，不应执行意图
-    let can_act = enemy.hp > 0;
-    assert!(!can_act, "死掉的敌人不应该能够行动");
+    let enemy = Enemy::new(1, "测试怪", 0, 0);
+    // 验证死亡状态
+    assert!(enemy.is_dead(), "HP 为 0 的敌人应被视为死亡");
 }
 
 #[test]

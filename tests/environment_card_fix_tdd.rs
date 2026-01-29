@@ -13,7 +13,7 @@ fn test_environment_card_damage_and_animation() {
     app.insert_resource(Environment::default());
 
     let player_ent = app.world_mut().spawn((Player::default(), PlayerSpriteMarker)).id();
-    let enemy_ent = app.world_mut().spawn(Enemy::new(1, "测试怪", 50)).id();
+    let enemy_ent = app.world_mut().spawn(Enemy::new(1, "测试怪", 50, 0)).id();
 
     let thunder_card = Card::new(
         500, "天象·引雷术", "造成5点伤害。环境变为雷暴",

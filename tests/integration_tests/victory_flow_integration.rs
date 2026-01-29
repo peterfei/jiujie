@@ -14,7 +14,7 @@ use bevy_card_battler::components::Enemy;
 #[ignore = "粒子特效在无头模式下生成不稳定"]
 fn integration_victory_generates_particles() {
     let mut app = create_test_app();
-    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30));
+    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30, 0));
     let enemy_entity = setup_combat_scene(&mut app);
     advance_frames(&mut app, 1);
     kill_enemy(&mut app, enemy_entity);
@@ -27,7 +27,7 @@ fn integration_victory_generates_particles() {
 #[ignore = "粒子特效在无头模式下生成不稳定"]
 fn integration_victory_particle_count_matches_expected() {
     let mut app = create_test_app();
-    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30));
+    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30, 0));
     let enemy_entity = setup_combat_scene(&mut app);
     advance_frames(&mut app, 1);
     kill_enemy(&mut app, enemy_entity);
@@ -38,7 +38,7 @@ fn integration_victory_particle_count_matches_expected() {
 #[ignore = "屏幕特效在无头模式下生成不稳定"]
 fn integration_victory_creates_screen_flash() {
     let mut app = create_test_app();
-    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30));
+    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30, 0));
     let enemy_entity = setup_combat_scene(&mut app);
     advance_frames(&mut app, 1);
     kill_enemy(&mut app, enemy_entity);
@@ -49,7 +49,7 @@ fn integration_victory_creates_screen_flash() {
 #[test]
 fn integration_victory_delay_activates_on_enemy_death() {
     let mut app = create_test_app();
-    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30));
+    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30, 0));
     let enemy_entity = setup_combat_scene(&mut app);
     advance_frames(&mut app, 1);
     kill_enemy(&mut app, enemy_entity);
@@ -60,7 +60,7 @@ fn integration_victory_delay_activates_on_enemy_death() {
 #[test]
 fn integration_victory_delay_increases_over_time() {
     let mut app = create_test_app();
-    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30));
+    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30, 0));
     let enemy_entity = setup_combat_scene(&mut app);
     advance_frames(&mut app, 1);
     kill_enemy(&mut app, enemy_entity);
@@ -73,7 +73,7 @@ fn integration_victory_delay_increases_over_time() {
 #[test]
 fn integration_victory_delay_does_not_reset_indefinitely() {
     let mut app = create_test_app();
-    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30));
+    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30, 0));
     let enemy_entity = setup_combat_scene(&mut app);
     advance_frames(&mut app, 1);
     kill_enemy(&mut app, enemy_entity);
@@ -86,7 +86,7 @@ fn integration_victory_delay_does_not_reset_indefinitely() {
 #[test]
 fn integration_victory_with_instant_zero_hp() {
     let mut app = create_test_app();
-    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30));
+    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30, 0));
     let enemy_entity = setup_combat_scene(&mut app);
     advance_frames(&mut app, 1);
     if let Some(mut enemy) = app.world_mut().get_mut::<Enemy>(enemy_entity) {

@@ -42,7 +42,7 @@ fn test_full_game_flow_with_starting_relic() {
 
     // 设置敌人并进入战斗
     let enemy_hp_before = 30;
-    app.world_mut().spawn(Enemy::new(0, "测试敌人", enemy_hp_before));
+    app.world_mut().spawn(Enemy::new(0, "测试敌人", enemy_hp_before, 0));
     app.insert_state(GameState::Combat);
     app.update();
     app.update();
@@ -81,7 +81,7 @@ fn test_multiple_relics_stack_effects() {
     info!("=== 第一场战斗（只有初始遗物）===");
     let enemy1_hp_before = 30;
     // 玩家实体已由 CorePlugin 自动创建，无需手动 spawn
-    app.world_mut().spawn(Enemy::new(0, "敌人1", enemy1_hp_before));
+    app.world_mut().spawn(Enemy::new(0, "敌人1", enemy1_hp_before, 0));
     app.insert_state(GameState::Combat);
     app.update();
     app.update();
@@ -116,7 +116,7 @@ fn test_multiple_relics_stack_effects() {
     info!("=== 第二场战斗（有两个遗物）===");
     let enemy2_hp_before = 30;
     app.world_mut().spawn(Player::default());
-    app.world_mut().spawn(Enemy::new(0, "敌人2", enemy2_hp_before));
+    app.world_mut().spawn(Enemy::new(0, "敌人2", enemy2_hp_before, 0));
     app.insert_state(GameState::Combat);
     app.update();
     app.update();

@@ -46,7 +46,7 @@ fn test_spider_attack_triggers_web_effects() {
 
     // 2. 创建蜘蛛敌人
     let spider_id = app.world_mut().spawn((
-        Enemy::with_type(1, "剧毒蛛", 20, EnemyType::PoisonSpider),
+        Enemy::with_type(1, "剧毒蛛", 0, EnemyType::PoisonSpider),
         Transform::from_xyz(3.0, 0.0, 0.0),
     )).id();
     println!("✓ 创建蜘蛛敌人 (entity: {:?})", spider_id);

@@ -14,7 +14,7 @@ fn bug_enemy_wait_001_enemy_can_choose_wait() {
     let iterations = 100;
 
     for _ in 0..iterations {
-        let mut enemy = bevy_card_battler::components::Enemy::new(0, "嗜血妖狼", 30);
+        let mut enemy = bevy_card_battler::components::Enemy::new(0, "嗜血妖狼", 30, 0);
         enemy.choose_new_intent();
 
         if matches!(enemy.intent, EnemyIntent::Wait) {
@@ -121,7 +121,7 @@ fn bug_enemy_wait_003_attack_intent_deals_damage() {
 #[test]
 fn bug_enemy_wait_004_ai_probability_sum_check() {
     // 检查AI概率总和是否为1.0
-    let enemy = bevy_card_battler::components::Enemy::new(0, "嗜血妖狼", 30);
+    let enemy = bevy_card_battler::components::Enemy::new(0, "嗜血妖狼", 30, 0);
 
     let sum = enemy.ai_pattern.attack_chance
            + enemy.ai_pattern.defend_chance

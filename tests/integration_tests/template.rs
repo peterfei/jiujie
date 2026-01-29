@@ -37,7 +37,7 @@ fn example_combat_test() {
 
     // 2. 预设敌人以确保测试确定性
     use bevy_card_battler::components::{Enemy};
-    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30));
+    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30, 0));
 
     // 3. 设置测试场景
     let enemy_entity = setup_combat_scene(&mut app);

@@ -13,7 +13,7 @@ fn bug_victory_delay_001_active_reset_after_reward() {
     let mut app = create_test_app();
 
     // 第一场战斗
-    app.world_mut().spawn(Enemy::new(0, "妖兽1", 30));
+    app.world_mut().spawn(Enemy::new(0, "妖兽1", 30, 0));
     app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::Combat);
     app.world_mut().run_schedule(StateTransition);
     advance_frames(&mut app, 1);
@@ -59,7 +59,7 @@ fn bug_victory_delay_002_full_cycle_reproduces_bug() {
     let mut app = create_test_app();
 
     // ===== 第一场战斗 =====
-    app.world_mut().spawn(Enemy::new(0, "妖兽1", 30));
+    app.world_mut().spawn(Enemy::new(0, "妖兽1", 30, 0));
     app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::Combat);
     app.world_mut().run_schedule(StateTransition);
     advance_frames(&mut app, 1);
@@ -86,7 +86,7 @@ fn bug_victory_delay_002_full_cycle_reproduces_bug() {
 
     // ===== 进入第二场战斗 =====
     // 预设第二场战斗的敌人
-    app.world_mut().spawn(Enemy::new(0, "妖兽2", 30));
+    app.world_mut().spawn(Enemy::new(0, "妖兽2", 30, 0));
     app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::Combat);
     app.world_mut().run_schedule(StateTransition);
     advance_frames(&mut app, 1);
@@ -124,7 +124,7 @@ fn bug_victory_delay_003_check_combat_end_called_after_transition() {
     let mut app = create_test_app();
 
     // 进入战斗
-    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30));
+    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30, 0));
     app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::Combat);
     app.world_mut().run_schedule(StateTransition);
     advance_frames(&mut app, 1);

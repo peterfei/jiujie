@@ -38,7 +38,7 @@ fn test_hand_slot_sealing_logic() {
 fn test_enemy_seal_intent_execution() {
     // 验证敌人执行 Seal 意图时，能正确触发效果
     // 这通常需要一个系统来处理 EnemyIntent
-    let mut enemy = Enemy::new(1, "封印者", 50);
+    let mut enemy = Enemy::new(1, "封印者", 50, 0);
     enemy.intent = EnemyIntent::Seal { slot_index: 0, duration: 2 };
     
     let executed = enemy.execute_intent();

@@ -23,7 +23,7 @@ fn test_integration_victory_gold_reward_flow() {
     assert_eq!(initial_gold, 100);
 
     // 2. 模拟遭遇战
-    app.world_mut().spawn(Enemy::new(1, "遭遇毒蛛", 50));
+    app.world_mut().spawn(Enemy::new(1, "遭遇毒蛛", 50, 0));
     
     // 3. 模拟战斗过程
     let mut enemy_query = app.world_mut().query::<&mut Enemy>();

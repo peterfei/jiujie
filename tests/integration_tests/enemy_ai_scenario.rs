@@ -19,7 +19,7 @@ fn scenario_ai_001_demonic_wolf_prefers_attack() {
     let mut app = create_test_app();
     
     // 预设敌人以确保测试确定性
-    app.world_mut().spawn(Enemy::with_type(0, "嗜血妖狼", 30, EnemyType::DemonicWolf));
+    app.world_mut().spawn(Enemy::with_type(0, "嗜血妖狼", 0, EnemyType::DemonicWolf));
     
     let _enemy_entity = setup_combat_scene(&mut app);
     advance_frames(&mut app, 1);
@@ -41,7 +41,7 @@ fn scenario_ai_002_demonic_wolf_damage_range() {
     let mut app = create_test_app();
     
     // 预设敌人
-    app.world_mut().spawn(Enemy::with_type(0, "嗜血妖狼", 30, EnemyType::DemonicWolf));
+    app.world_mut().spawn(Enemy::with_type(0, "嗜血妖狼", 0, EnemyType::DemonicWolf));
     
     let _enemy_entity = setup_combat_scene(&mut app);
     advance_frames(&mut app, 1);
@@ -65,7 +65,7 @@ fn scenario_ai_003_demonic_wolf_intent_selection() {
     let mut buff_count = 0;
 
     for _seed in 0..100 {
-        let mut enemy = Enemy::new(0, "嗜血妖狼", 30);
+        let mut enemy = Enemy::new(0, "嗜血妖狼", 30, 0);
         enemy.choose_new_intent();
 
         match enemy.intent {
@@ -93,7 +93,7 @@ fn scenario_ai_003_demonic_wolf_intent_selection() {
 
 #[test]
 fn scenario_ai_101_poison_spider_pattern() {
-    let enemy = Enemy::with_type(0, "剧毒蛛", 20, EnemyType::PoisonSpider);
+    let enemy = Enemy::with_type(0, "剧毒蛛", 0, EnemyType::PoisonSpider);
 
     assert_eq!(enemy.enemy_type, EnemyType::PoisonSpider);
     assert_eq!(enemy.ai_pattern.attack_chance, 0.3);
@@ -106,7 +106,7 @@ fn scenario_ai_101_poison_spider_pattern() {
 
 #[test]
 fn scenario_ai_102_poison_spider_stats() {
-    let enemy = Enemy::with_type(0, "剧毒蛛", 20, EnemyType::PoisonSpider);
+    let enemy = Enemy::with_type(0, "剧毒蛛", 0, EnemyType::PoisonSpider);
 
     assert_eq!(enemy.ai_pattern.damage_range, (5, 8));
     assert_eq!(enemy.ai_pattern.block_range, (4, 6));
@@ -120,7 +120,7 @@ fn scenario_ai_102_poison_spider_stats() {
 
 #[test]
 fn scenario_ai_201_cursed_spirit_pattern() {
-    let enemy = Enemy::with_type(0, "怨灵", 40, EnemyType::CursedSpirit);
+    let enemy = Enemy::with_type(0, "怨灵", 0, EnemyType::CursedSpirit);
 
     assert_eq!(enemy.enemy_type, EnemyType::CursedSpirit);
     assert_eq!(enemy.ai_pattern.attack_chance, 0.2);
@@ -133,7 +133,7 @@ fn scenario_ai_201_cursed_spirit_pattern() {
 
 #[test]
 fn scenario_ai_202_cursed_spirit_stats() {
-    let enemy = Enemy::with_type(0, "怨灵", 40, EnemyType::CursedSpirit);
+    let enemy = Enemy::with_type(0, "怨灵", 0, EnemyType::CursedSpirit);
 
     assert_eq!(enemy.ai_pattern.damage_range, (10, 15));
     assert_eq!(enemy.ai_pattern.block_range, (5, 10));
@@ -147,7 +147,7 @@ fn scenario_ai_202_cursed_spirit_stats() {
 
 #[test]
 fn scenario_ai_301_great_demon_powerful_pattern() {
-    let enemy = Enemy::with_type(0, "筑基大妖", 100, EnemyType::GreatDemon);
+    let enemy = Enemy::with_type(0, "筑基大妖", 0, EnemyType::GreatDemon);
 
     assert_eq!(enemy.enemy_type, EnemyType::GreatDemon);
     assert_eq!(enemy.ai_pattern.attack_chance, 0.5);
@@ -159,7 +159,7 @@ fn scenario_ai_301_great_demon_powerful_pattern() {
 
 #[test]
 fn scenario_ai_302_great_demon_high_damage() {
-    let enemy = Enemy::with_type(0, "筑基大妖", 100, EnemyType::GreatDemon);
+    let enemy = Enemy::with_type(0, "筑基大妖", 0, EnemyType::GreatDemon);
 
     assert_eq!(enemy.ai_pattern.damage_range, (12, 18));  // 高伤害
     assert_eq!(enemy.ai_pattern.block_range, (6, 10));
@@ -174,7 +174,7 @@ fn scenario_ai_302_great_demon_high_damage() {
 
 #[test]
 fn scenario_ai_401_execute_attack_intent() {
-    let mut enemy = Enemy::new(0, "嗜血妖狼", 30);
+    let mut enemy = Enemy::new(0, "嗜血妖狼", 30, 0);
     enemy.intent = EnemyIntent::Attack { damage: 10 };
 
     let executed = enemy.execute_intent();
@@ -190,7 +190,7 @@ fn scenario_ai_401_execute_attack_intent() {
 
 #[test]
 fn scenario_ai_402_execute_defend_intent() {
-    let mut enemy = Enemy::new(0, "嗜血妖狼", 30);
+    let mut enemy = Enemy::new(0, "嗜血妖狼", 30, 0);
     enemy.intent = EnemyIntent::Defend { block: 5 };
 
     let executed = enemy.execute_intent();
@@ -207,7 +207,7 @@ fn scenario_ai_402_execute_defend_intent() {
 
 #[test]
 fn scenario_ai_403_execute_buff_intent() {
-    let mut enemy = Enemy::new(0, "嗜血妖狼", 30);
+    let mut enemy = Enemy::new(0, "嗜血妖狼", 30, 0);
     enemy.intent = EnemyIntent::Buff { strength: 2 };
 
     let executed = enemy.execute_intent();
@@ -224,7 +224,7 @@ fn scenario_ai_403_execute_buff_intent() {
 
 #[test]
 fn scenario_ai_404_buff_increases_damage() {
-    let mut enemy = Enemy::new(0, "嗜血妖狼", 30);
+    let mut enemy = Enemy::new(0, "嗜血妖狼", 30, 0);
     enemy.strength = 3;  // 先获得3点攻击力
     enemy.intent = EnemyIntent::Attack { damage: 8 };
 
@@ -249,7 +249,7 @@ fn scenario_ai_404_buff_increases_damage() {
 
 #[test]
 fn scenario_ai_501_enemy_start_turn_clears_block() {
-    let mut enemy = Enemy::new(0, "嗜血妖狼", 30);
+    let mut enemy = Enemy::new(0, "嗜血妖狼", 30, 0);
     enemy.block = 10;
 
     enemy.start_turn();
@@ -262,7 +262,7 @@ fn scenario_ai_501_enemy_start_turn_clears_block() {
 
 #[test]
 fn scenario_ai_502_enemy_start_turn_chooses_new_intent() {
-    let mut enemy = Enemy::new(0, "嗜血妖狼", 30);
+    let mut enemy = Enemy::new(0, "嗜血妖狼", 30, 0);
     enemy.intent = EnemyIntent::Attack { damage: 10 };
 
     enemy.start_turn();
@@ -283,10 +283,10 @@ fn scenario_ai_502_enemy_start_turn_chooses_new_intent() {
 
 #[test]
 fn scenario_ai_601_all_enemy_types_valid() {
-    let demonic_wolf = Enemy::with_type(0, "嗜血妖狼", 30, EnemyType::DemonicWolf);
-    let poison_spider = Enemy::with_type(1, "剧毒蛛", 20, EnemyType::PoisonSpider);
-    let cursed_spirit = Enemy::with_type(2, "怨灵", 40, EnemyType::CursedSpirit);
-    let great_demon = Enemy::with_type(3, "筑基大妖", 100, EnemyType::GreatDemon);
+    let demonic_wolf = Enemy::with_type(0, "嗜血妖狼", 0, EnemyType::DemonicWolf);
+    let poison_spider = Enemy::with_type(1, "剧毒蛛", 0, EnemyType::PoisonSpider);
+    let cursed_spirit = Enemy::with_type(2, "怨灵", 0, EnemyType::CursedSpirit);
+    let great_demon = Enemy::with_type(3, "筑基大妖", 0, EnemyType::GreatDemon);
 
     // 验证概率总和为1.0
     let wolf_sum = demonic_wolf.ai_pattern.attack_chance + demonic_wolf.ai_pattern.defend_chance + demonic_wolf.ai_pattern.buff_chance + demonic_wolf.ai_pattern.debuff_chance + demonic_wolf.ai_pattern.curse_chance + demonic_wolf.ai_pattern.seal_chance;
@@ -306,9 +306,9 @@ fn scenario_ai_601_all_enemy_types_valid() {
 
 #[test]
 fn scenario_ai_602_enemy_types_have_distinct_patterns() {
-    let demonic_wolf = Enemy::with_type(0, "嗜血妖狼", 30, EnemyType::DemonicWolf);
-    let poison_spider = Enemy::with_type(1, "剧毒蛛", 20, EnemyType::PoisonSpider);
-    let cursed_spirit = Enemy::with_type(2, "怨灵", 40, EnemyType::CursedSpirit);
+    let demonic_wolf = Enemy::with_type(0, "嗜血妖狼", 0, EnemyType::DemonicWolf);
+    let poison_spider = Enemy::with_type(1, "剧毒蛛", 0, EnemyType::PoisonSpider);
+    let cursed_spirit = Enemy::with_type(2, "怨灵", 0, EnemyType::CursedSpirit);
 
     // 嗜血妖狼攻击概率最高
     assert!(demonic_wolf.ai_pattern.attack_chance > poison_spider.ai_pattern.attack_chance);

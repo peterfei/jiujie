@@ -6,7 +6,7 @@ fn test_ui_despawns_when_enemy_dies() {
     let mut app = App::new();
     
     // 1. 创建敌人和对应的 UI
-    let enemy_ent = app.world_mut().spawn(Enemy::new(1, "僵尸怪", 100)).id();
+    let enemy_ent = app.world_mut().spawn(Enemy::new(1, "僵尸怪", 100, 0)).id();
     let ui_ent = app.world_mut().spawn(EnemyStatusUi { owner: enemy_ent }).id();
     
     // 手动关联：为了测试方便，我们假设 EnemyStatusUi 逻辑上关联了 enemy_ent

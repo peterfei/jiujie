@@ -23,7 +23,7 @@ fn test_hp_sync_works_with_param_set() {
     app.add_plugins(MinimalPlugins);
     
     let enemy_id = 1;
-    let enemy_ent = app.world_mut().spawn(Enemy::new(enemy_id, "测试怪", 100)).id();
+    let enemy_ent = app.world_mut().spawn(Enemy::new(enemy_id, "测试怪", 100, 0)).id();
 
     // 构建嵌套 UI 树
     let row = app.world_mut().spawn(Node::default()).id();

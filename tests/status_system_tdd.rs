@@ -6,7 +6,7 @@ use bevy_card_battler::components::cards::{Card, CardType, CardEffect, CardRarit
 fn test_card_applies_status_to_enemy() {
     let mut app = App::new();
     // 1. 准备环境
-    let enemy_id = app.world_mut().spawn(Enemy::new(1, "测试怪", 100)).id();
+    let enemy_id = app.world_mut().spawn(Enemy::new(1, "测试怪", 100, 0)).id();
     
     // 2. 模拟一张“虚弱”卡牌的效果 (假设我们要实现的逻辑)
     // 这里的逻辑需要在 apply_card_effect 中实现

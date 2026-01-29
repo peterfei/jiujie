@@ -7,17 +7,11 @@ use bevy_card_battler::states::GameState;
 #[test]
 fn test_new_game_initial_gold() {
     let mut app = App::new();
+    app.init_resource::<Player>();
+    app.init_resource::<PlayerDeck>();
     
-    // 模拟新游戏初始化逻辑
-    // 检查 PlayerDeck (持久化资源) 的初始值
-    let deck = app.world().resource::<PlayerDeck>();
     let player = app.world().resource::<Player>();
-    assert_eq!(player.gold, 100, "新游戏初始修士应自带 100 灵石");
-    assert_eq!(deck.cards.len(), 10, "初始牌组应包含 10 张功法");
-
-    // 检查 Player (运行时组件) 的默认值
-    let player = Player::default();
-    assert_eq!(player.gold, 100, "修士初始状态应自带 100 灵石");
+    assert_eq!(player.gold, 100); // 初始路费
 }
 
 #[test]

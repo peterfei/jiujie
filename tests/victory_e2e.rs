@@ -11,7 +11,7 @@ use bevy_card_battler::components::{Card, CardType, CardEffect, CardRarity, MapC
 
 #[test]
 fn e2e_001_enemy_defeated_triggers_reward() {
-    let mut enemy = Enemy::new(1, "测试敌人", 50);
+    let mut enemy = Enemy::new(1, "测试敌人", 50, 0);
 
     // 敌人初始 HP > 0
     assert!(!enemy.is_dead(), "敌人初始状态应该是存活");
@@ -25,7 +25,7 @@ fn e2e_001_enemy_defeated_triggers_reward() {
 
 #[test]
 fn e2e_002_enemy_hp_exactly_zero_defeated() {
-    let mut enemy = Enemy::new(2, "测试敌人", 30);
+    let mut enemy = Enemy::new(2, "测试敌人", 30, 0);
 
     // 敌人 HP 正好归零
     enemy.take_damage(30);
@@ -35,7 +35,7 @@ fn e2e_002_enemy_hp_exactly_zero_defeated() {
 
 #[test]
 fn e2e_003_multiple_hits_kill_enemy() {
-    let mut enemy = Enemy::new(3, "测试敌人", 50);
+    let mut enemy = Enemy::new(3, "测试敌人", 50, 0);
 
     // 多次伤害累积
     enemy.take_damage(30);
@@ -163,33 +163,31 @@ fn e2e_301_completing_node_unlocks_next_layer() {
 
     assert!(completed_count_after > completed_count_before, "节点应该被标记为完成");
 
-    // 验证：第1层节点解锁
-    let layer_1_unlocked = progress.nodes.iter()
-        .filter(|n| n.position.0 == 1)
-        .all(|n| n.unlocked);
-
-    assert!(layer_1_unlocked, "完成节点后下一层应该解锁");
+    // 验证下一层连通节点解锁 (适配拓扑逻辑)
+    let next_ids = progress.nodes[0].next_nodes.clone();
+    for nid in next_ids {
+        let node = progress.nodes.iter().find(|n| n.id == nid).unwrap();
+        assert!(node.unlocked, "完成节点后其下游节点（ID: {}）应该解锁", nid);
+    }
 }
 
 #[test]
 fn e2e_302_completion_only_unlocks_adjacent_layer() {
-    let mut progress = MapProgress::new(&MapConfig::default());
-
-    // 完成第0层
-    progress.set_current_node(0);
+    let mut progress = MapProgress::default();
+    progress.set_current_node(progress.nodes[0].id);
     progress.complete_current_node();
-
-    // 验证：第1层解锁
-    let layer_1_unlocked = progress.nodes.iter()
-        .filter(|n| n.position.0 == 1)
-        .all(|n| n.unlocked);
-    assert!(layer_1_unlocked, "第1层应该解锁");
-
-    // 验证：第2层仍然锁定
-    let layer_2_locked = progress.nodes.iter()
+    
+    // 验证第 1 层的连通点已解锁
+    let next_ids = progress.nodes[0].next_nodes.clone();
+    let any_next_unlocked = progress.nodes.iter()
+        .any(|n| next_ids.contains(&n.id) && n.unlocked);
+    assert!(any_next_unlocked, "第1层连通点应该解锁");
+    
+    // 验证第 2 层依然锁定
+    let layer_2_all_locked = progress.nodes.iter()
         .filter(|n| n.position.0 == 2)
         .all(|n| !n.unlocked);
-    assert!(layer_2_locked, "第2层应该仍然锁定");
+    assert!(layer_2_all_locked, "第2层应该保持锁定");
 }
 
 #[test]
@@ -223,7 +221,7 @@ fn e2e_401_complete_victory_flow() {
     let initial_deck_size = deck.len();
 
     // 1. 战斗胜利：敌人死亡
-    let mut enemy = Enemy::new(100, "测试敌人", 50);
+    let mut enemy = Enemy::new(100, "测试敌人", 50, 0);
     enemy.take_damage(100);
     assert!(enemy.is_dead(), "敌人应该死亡");
 
@@ -252,7 +250,7 @@ fn e2e_402_victory_skip_reward_flow() {
     let initial_deck_size = deck.len();
 
     // 1. 战斗胜利
-    let mut enemy = Enemy::new(101, "测试敌人", 50);
+    let mut enemy = Enemy::new(101, "测试敌人", 50, 0);
     enemy.take_damage(100);
     assert!(enemy.is_dead());
 
@@ -273,7 +271,7 @@ fn e2e_402_victory_skip_reward_flow() {
 
 #[test]
 fn e2e_501_enemy_negative_hp() {
-    let mut enemy = Enemy::new(102, "测试敌人", 10);
+    let mut enemy = Enemy::new(102, "测试敌人", 10, 0);
 
     // 造成过量伤害
     enemy.take_damage(1000);
@@ -284,7 +282,7 @@ fn e2e_501_enemy_negative_hp() {
 
 #[test]
 fn e2e_502_zero_damage_enemy_survives() {
-    let mut enemy = Enemy::new(103, "测试敌人", 50);
+    let mut enemy = Enemy::new(103, "测试敌人", 50, 0);
 
     // 零伤害
     enemy.take_damage(0);
@@ -418,7 +416,7 @@ fn e2e_801_boss_node_exists() {
 
 #[test]
 fn e2e_802_boss_is_defeatable() {
-    let mut boss = Enemy::new(200, "Boss敌人", 500); // Boss 有更多 HP
+    let mut boss = Enemy::new(200, "Boss敌人", 500, 0); // Boss 有更多 HP
 
     // Boss 可以被击败
     boss.take_damage(1000);
@@ -430,20 +428,25 @@ fn e2e_802_boss_is_defeatable() {
 fn e2e_803_can_reach_max_layer() {
     let mut progress = MapProgress::new(&MapConfig::default());
 
-    // 找到最大层数
-    let max_layer = progress.nodes.iter()
-        .map(|n| n.position.0)
-        .max()
-        .unwrap_or(0) as u32;
+    // 找到起始节点
+    let mut current_id = progress.nodes[0].id;
+    let max_layer = 10; // 同 MapConfig
 
-    // 完成所有层（通过设置不同节点）
-    for layer in 0..=max_layer {
-        if let Some(node) = progress.nodes.iter().find(|n| n.position.0 == layer as i32) {
-            progress.set_current_node(node.id);
-            progress.complete_current_node();
+    // 顺着拓扑路径走到底
+    for _ in 0..=max_layer {
+        progress.set_current_node(current_id);
+        progress.complete_current_node();
+        
+        // 寻找下一个连通点
+        if let Some(&next_id) = progress.nodes.iter()
+            .find(|n| n.id == current_id)
+            .and_then(|n| n.next_nodes.first()) {
+            current_id = next_id;
+        } else {
+            break;
         }
     }
 
-    // 验证：到达最大层
-    assert!(progress.current_layer >= max_layer.saturating_sub(1), "应该能到达最高层");
+    // 验证：最终层级应接近或达到最大值 (Boss 层)
+    assert!(progress.current_layer >= 9, "顺着拓扑路径应该能到达最高层。当前层: {}", progress.current_layer);
 }

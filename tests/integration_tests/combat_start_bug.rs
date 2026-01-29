@@ -10,7 +10,7 @@ use bevy_card_battler::components::Enemy;
 #[test]
 fn bug_combat_001_enemy_hp_on_combat_enter() {
     let mut app = create_test_app();
-    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30));
+    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30, 0));
 
     // 进入战斗状态
     app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::Combat);
@@ -29,7 +29,7 @@ fn bug_combat_001_enemy_hp_on_combat_enter() {
 #[test]
 fn bug_combat_002_victory_delay_not_active_on_start() {
     let mut app = create_test_app();
-    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30));
+    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30, 0));
 
     app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::Combat);
     app.world_mut().run_schedule(StateTransition);
@@ -43,7 +43,7 @@ fn bug_combat_002_victory_delay_not_active_on_start() {
 fn bug_combat_003_multiple_combat_entries() {
     for i in 0..10 {
         let mut app = create_test_app();
-        app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30));
+        app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30, 0));
 
         app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::Combat);
         app.world_mut().run_schedule(StateTransition);
@@ -72,7 +72,7 @@ fn bug_combat_003_multiple_combat_entries() {
 #[test]
 fn bug_combat_004_check_enemy_entity_creation() {
     let mut app = create_test_app();
-    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30));
+    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30, 0));
 
     app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::Combat);
     app.world_mut().run_schedule(StateTransition);
@@ -92,7 +92,7 @@ fn bug_combat_004_check_enemy_entity_creation() {
 #[test]
 fn bug_combat_005_state_before_first_update() {
     let mut app = create_test_app();
-    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30));
+    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30, 0));
 
     app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::Combat);
     app.world_mut().run_schedule(StateTransition);
@@ -113,7 +113,7 @@ fn bug_combat_005_state_before_first_update() {
 #[test]
 fn bug_combat_006_enemy_creation_timing() {
     let mut app = create_test_app();
-    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30));
+    app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30, 0));
 
     app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::Combat);
     app.world_mut().run_schedule(StateTransition);
@@ -131,7 +131,7 @@ fn bug_combat_006_enemy_creation_timing() {
 fn bug_combat_007_stress_test_reproduce_bug() {
     for _ in 0..50 {
         let mut app = create_test_app();
-        app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30));
+        app.world_mut().spawn(Enemy::new(0, "测试妖兽", 30, 0));
 
         app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::Combat);
         app.world_mut().run_schedule(StateTransition);
@@ -152,7 +152,7 @@ fn bug_combat_008_sequential_battles() {
     let mut app = create_test_app();
 
     // 第一场战斗
-    app.world_mut().spawn(Enemy::new(0, "妖兽1", 30));
+    app.world_mut().spawn(Enemy::new(0, "妖兽1", 30, 0));
     app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::Combat);
     app.world_mut().run_schedule(StateTransition);
     advance_frames(&mut app, 1);
@@ -173,7 +173,7 @@ fn bug_combat_008_sequential_battles() {
     advance_frames(&mut app, 1);
 
     // 第二场战斗
-    app.world_mut().spawn(Enemy::new(0, "妖兽2", 30));
+    app.world_mut().spawn(Enemy::new(0, "妖兽2", 30, 0));
     app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::Combat);
     app.world_mut().run_schedule(StateTransition);
     advance_frames(&mut app, 1);

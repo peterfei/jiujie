@@ -5,7 +5,7 @@ use bevy_card_battler::components::combat::{Enemy, EnemyStatusUi};
 fn test_changed_filter_causes_ui_genocide() {
     let mut app = App::new();
     
-    let enemy_ent = app.world_mut().spawn(Enemy::new(1, "幸存者", 100)).id();
+    let enemy_ent = app.world_mut().spawn(Enemy::new(1, "幸存者", 100, 0)).id();
     let ui_ent = app.world_mut().spawn(EnemyStatusUi { owner: enemy_ent }).id();
 
     // 1. 模拟错误的清理系统 (使用了 Changed 过滤器)
@@ -43,7 +43,7 @@ fn test_changed_filter_causes_ui_genocide() {
 #[test]
 fn test_without_changed_filter_is_safe() {
     let mut app = App::new();
-    let enemy_ent = app.world_mut().spawn(Enemy::new(1, "幸存者", 100)).id();
+    let enemy_ent = app.world_mut().spawn(Enemy::new(1, "幸存者", 100, 0)).id();
     let ui_ent = app.world_mut().spawn(EnemyStatusUi { owner: enemy_ent }).id();
 
     // 2. 修正后的清理系统 (移除 Changed)
