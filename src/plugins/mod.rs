@@ -42,7 +42,7 @@ impl Plugin for CorePlugin {
         // 应用启动时设置2D相机（用于渲染UI）
         app.add_systems(Startup, (setup_camera, init_character_assets));
         // 初始化胜利延迟计时器
-        app.insert_resource(VictoryDelay::new(4.0)); // 延迟4.0秒让粒子特效播放
+        app.insert_resource(VictoryDelay::new(1.5)); // 延迟1.5秒让粒子特效播放
 
         // 玩家实体初始化系统 - 在所有OnEnter系统之前运行
         // 使用world_mut().spawn()确保实体立即可用，避免重复创建
@@ -199,7 +199,7 @@ impl Plugin for GamePlugin {
         ))
         .init_state::<GameState>()
         .init_resource::<Player>() // 初始化玩家全局资源
-        .insert_resource(VictoryDelay::new(4.0))
+        .insert_resource(VictoryDelay::new(1.5))
         .init_resource::<PlayerDeck>() // 初始化玩家持久化牌组
         .init_resource::<RelicCollection>() // 初始化遗物背包
         .init_resource::<CurrentRewardCards>()
@@ -2341,8 +2341,10 @@ pub fn check_combat_end_wrapper(
     next_state: ResMut<NextState<GameState>>,
     victory_events: EventWriter<VictoryEvent>,
     victory_delay: ResMut<VictoryDelay>,
+    asset_server: Res<AssetServer>,
+    commands: Commands,
 ) {
-    check_combat_end(state, player_query, enemy_query, next_state, victory_events, victory_delay);
+    check_combat_end(state, player_query, enemy_query, next_state, victory_events, victory_delay, asset_server, commands);
 }
 
 /// 检查战斗是否结束
@@ -2353,6 +2355,8 @@ fn check_combat_end(
     mut next_state: ResMut<NextState<GameState>>,
     mut victory_events: EventWriter<VictoryEvent>,
     mut victory_delay: ResMut<VictoryDelay>,
+    asset_server: Res<AssetServer>, // 新增参数
+    mut commands: Commands, // 确保有 commands
 ) {
     if **state != GameState::Combat { return; }
 
@@ -2372,6 +2376,7 @@ fn check_combat_end(
         if victory_delay.active { return; }
 
         info!("【战斗】众妖肃清，机缘显现！");
+        let chinese_font = asset_server.load("fonts/Arial Unicode.ttf");
         
         // 1. 获得感悟
         if let Ok((mut player, mut cultivation)) = player_query.get_single_mut() {
@@ -2390,6 +2395,32 @@ fn check_combat_end(
         victory_events.send(VictoryEvent);
         victory_delay.active = true;
         victory_delay.elapsed = 0.0;
+
+        // --- [新增] 胜利横幅演出 ---
+        commands.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                height: Val::Px(120.0),
+                top: Val::Percent(40.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            ZIndex(300), 
+            CombatUiRoot, 
+        )).with_children(|banner| {
+            banner.spawn((
+                Text::new("众 妖 伏 诛"),
+                TextFont {
+                    font: chinese_font,
+                    font_size: 80.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(1.0, 0.9, 0.3)), // 亮金色
+                crate::components::map::EntranceAnimation::new(0.5),
+            ));
+        });
     }
 }
 
@@ -2430,15 +2461,24 @@ fn update_victory_delay(
     ui_query: Query<Entity, With<CombatUiRoot>>,
     _sprite_query: Query<Entity, With<SpriteMarker>>,
     particle_query: Query<Entity, With<ParticleMarker>>,
+    mouse_button: Res<ButtonInput<MouseButton>>, // 监听鼠标输入
 ) {
     if !victory_delay.active {
         return;
     }
 
-    victory_delay.elapsed += time.delta_secs();
+    // 允许点击跳过：如果按下左键，直接将进度设满
+    if mouse_button.just_pressed(MouseButton::Left) {
+        victory_delay.elapsed = victory_delay.duration;
+        info!("【交互】玩家点击，跳过胜利演出");
+    } else {
+        victory_delay.elapsed += time.delta_secs();
+    }
 
     // 只在激活时输出日志
-    info!("胜利延迟进行中: {:.2}/{:.2}", victory_delay.elapsed, victory_delay.duration);
+    if victory_delay.elapsed < victory_delay.duration {
+        info!("胜利延迟进行中: {:.2}/{:.2}", victory_delay.elapsed, victory_delay.duration);
+    }
 
     if victory_delay.elapsed >= victory_delay.duration {
         // 延迟结束，切换到奖励界面
