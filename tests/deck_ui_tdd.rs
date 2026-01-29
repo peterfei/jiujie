@@ -7,6 +7,7 @@ fn test_deck_view_card_count() {
     
     // 模拟玩家牌组：3 张牌
     let mut deck = PlayerDeck::default();
+    deck.cards.clear(); // 清空默认初始牌
     let all = CardPool::all_cards();
     deck.add_card(all[0].clone());
     deck.add_card(all[1].clone());

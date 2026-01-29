@@ -1,59 +1,28 @@
-//! ECS组件定义
+//! ECS组件定义汇聚模块
 
-pub mod map;
-pub mod combat;
-pub mod cards;
 pub mod animation;
-pub mod sprite;
-pub mod particle;
-pub mod screen_effect;
-pub mod relic;
-pub mod shop;
+pub mod audio;
+pub mod cards;
+pub mod combat;
 pub mod cultivation;
 pub mod dialogue;
-pub mod audio;
+pub mod map;
+pub mod particle;
+pub mod relic;
+pub mod screen_effect;
+pub mod shop;
+pub mod sprite;
 
-pub use map::{MapNode, NodeType, MapConfig, generate_map_nodes, MapProgress};
-pub use combat::{
-    Player, Enemy, EnemyIntent, EnemyType, AiPattern, CombatConfig, CombatState, TurnPhase, 
-    PlayerDeck, VictoryDelay, CardHoverPanelMarker, RelicHoverPanelMarker, EnemyActionQueue,
-    DamageNumber, DamageEffectEvent, BlockIconMarker, BlockText, StatusIndicator,
-    EnemyHpText, EnemyIntentText, EnemyStatusUi, PlayerHpText, PlayerEnergyText, PlayerBlockText,
-    TopBar, TopBarHpText, TopBarGoldText, EnergyOrb, EndTurnButton, HandArea, CombatUiRoot,
-    StatusEffectEvent, CardDescriptionMarker, PlayerHpBarMarker, EnemyHpBarMarker, IntentIconMarker,
-    PlayerHpBufferMarker, EnemyHpBufferMarker, Environment, HeavenlyStrikeCinematic,
-};
-pub use cards::{
-    Card, CardType, CardEffect, CardRarity,
-    DrawPile, DiscardPile, Hand,
-    DeckConfig, CardPool, RewardCard,
-    create_starting_deck,
-};
-pub use cultivation::{Cultivation, Realm};
-pub use dialogue::{Dialogue, DialogueLine};
-pub use audio::{PlaySfxEvent, SfxType};
-pub use animation::{
-    MovementAnimation, ShakeAnimation, FloatingDamageText,
-    EnemyUiMarker, PlayerUiMarker, EasingFunction, EnemyAttackEvent
-};
-pub use sprite::{
-    CharacterSprite, AnimationState, CharacterType, CharacterAssets,
-    CharacterAnimationEvent, SpriteMarker, PlayerSpriteMarker, EnemySpriteMarker
-};
-pub use particle::{
-    Particle, ParticleEmitter, EmitterConfig, EffectType,
-    SpawnEffectEvent, ParticleMarker, EmitterMarker,
-    EnemyDeathAnimation, VictoryEvent, LightningBolt
-};
-pub use screen_effect::{
-    CameraShake, ScreenFlash, ScreenEffectEvent, ScreenEffectMarker, ScreenWarning
-};
-pub use relic::{
-    Relic, RelicId, RelicRarity, RelicEffect,
-    RelicCollection, RelicObtainedEvent, RelicTriggeredEvent
-};
-pub use shop::{
-    ShopItem, ShopUiRoot, ShopCardButton, ShopRelicButton,
-    ShopRemoveCardButton, ShopExitButton, ShopGoldText, CurrentShopItems,
-    SelectedCardForRemoval
-};
+// 批量重导出
+pub use animation::*;
+pub use audio::*;
+pub use cards::*;
+pub use combat::*;
+pub use cultivation::*;
+pub use dialogue::*;
+pub use map::*;
+pub use particle::*;
+pub use relic::*;
+pub use screen_effect::*;
+pub use shop::*;
+pub use sprite::*;

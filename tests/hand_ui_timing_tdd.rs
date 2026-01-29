@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 use bevy_card_battler::components::{Hand, DrawPile, DiscardPile};
-use bevy_card_battler::plugins::{HandArea, update_hand_ui, HandCard};
+use bevy_card_battler::components::combat::{HandArea};
+use bevy_card_battler::plugins::{HandCard};
+use bevy_card_battler::plugins::hand_ui_v2::update_hand_ui_v2;
 use bevy_card_battler::states::GameState;
 
 #[test]
@@ -28,7 +30,7 @@ fn test_hand_ui_sync_after_delayed_setup() {
     app.world_mut().spawn(DiscardPile::new());
 
     // 2. 注册 UI 更新系统
-    app.add_systems(Update, update_hand_ui);
+    app.add_systems(Update, update_hand_ui_v2);
 
     // 3. 运行一帧：此时没有 HandArea，系统应该静默失败，不报错但也不生成牌
     app.update();

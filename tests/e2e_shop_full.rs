@@ -50,7 +50,7 @@ fn e2e_full_shop_flow_from_map_to_shop() {
             node_type: NodeType::Shop,
             position: (0, 0),
             unlocked: true,
-            completed: false,
+            completed: false, next_nodes: Vec::new(),
         },
     ];
     app.world_mut().insert_resource(progress);

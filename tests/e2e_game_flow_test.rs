@@ -255,11 +255,12 @@ fn e2e_map_nodes_created() {
     // WHEN: 添加地图节点组件
     use bevy_card_battler::components::{MapNode, NodeType};
     let node_entity = app.world_mut().spawn(MapNode {
-        id: 1,
+        id: 0,
         node_type: NodeType::Normal,
         position: (0, 0),
         unlocked: true,
         completed: false,
+        next_nodes: Vec::new(),
     }).id();
 
     app.update();
@@ -271,7 +272,7 @@ fn e2e_map_nodes_created() {
         .get(world, node_entity)
         .unwrap();
 
-    assert_eq!(node.id, 1);
+    assert_eq!(node.id, 0);
     assert_eq!(node.node_type, NodeType::Normal);
 }
 

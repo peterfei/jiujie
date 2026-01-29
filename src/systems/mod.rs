@@ -9,6 +9,7 @@ pub mod shop;
 pub mod rest;
 pub mod audio;
 pub mod ui;
+pub mod map;
 
 pub use animation::AnimationPlugin;
 pub use sprite::SpritePlugin;
@@ -22,3 +23,4 @@ pub use shop::{ShopPlugin, update_gold_display};
 pub use rest::RestPlugin;
 pub use audio::SfxPlugin;
 pub use ui::UiPlugin;
+pub use map::MapPlugin;

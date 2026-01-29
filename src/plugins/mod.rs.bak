@@ -1,12 +1,11 @@
 //! 游戏插件定义
-pub mod hand_ui_v2;
+mod hand_ui_v2;
 use bevy::prelude::*;
 use crate::states::GameState;
 
 use crate::components::{
     Player, Enemy, EnemyType, EnemyIntent, Card, CardType, CardEffect, CardRarity, Hand, DrawPile, DiscardPile, 
     CombatState, TurnPhase, NodeType, Realm, Cultivation, MapNode, MapProgress, PlayerDeck, DeckConfig, CardPool, 
-    MapUiRoot, MapNodeButton, RippleEffect, // 新增导入
     CharacterType, EnemyAttackEvent, 
     SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent, 
     PlayerHpBufferMarker, EnemyHpBarMarker, EnemyHpBufferMarker, 
@@ -60,9 +59,9 @@ impl Plugin for CorePlugin {
 /// 此函数使用 world_mut().spawn() 而不是 commands.spawn()
 /// 在 Bevy 0.15 中，world_mut().spawn() 是立即生效的，而 commands.spawn() 是延迟的
 /// 这确保玩家实体在当前帧立即可用，避免重复创建
-pub fn init_player(mut commands: Commands, player_data: Option<Res<Player>>) {
-    // 关键修复：在闭包外部提取数据，避免生命周期冲突
-    let initial_player = player_data.map(|p| p.clone());
+fn init_player(mut commands: Commands, player_deck: Res<PlayerDeck>) {
+    // 关键修复：先克隆数据，避免将 Res 引用传进闭包
+    let deck_data = player_deck.clone();
 
     // 使用 Deferred 视图访问 World 进行立即 spawn
     commands.queue(move |world: &mut World| {
@@ -70,9 +69,13 @@ pub fn init_player(mut commands: Commands, player_data: Option<Res<Player>>) {
         let player_entity = player_query.iter(world).next();
 
         if player_entity.is_none() {
-            let player = initial_player.unwrap_or_default();
+            let mut player = Player::default();
+            // 从克隆的数据加载
+            player.hp = deck_data.hp;
+            player.max_hp = deck_data.max_hp;
+            player.gold = deck_data.gold;
             
-            info!("【持久化】初始化修士: HP={}/{}, 灵石={}", player.hp, player.max_hp, player.gold);
+            info!("【持久化】从存档加载修士: HP={}/{}, 灵石={}", player.hp, player.max_hp, player.gold);
             world.spawn((
                 player,
                 crate::components::Cultivation::new(),
@@ -106,8 +109,16 @@ impl Plugin for MenuPlugin {
         // 处理按钮点击
         app.add_systems(Update, handle_button_clicks.run_if(in_state(GameState::MainMenu)));
 
-        // 在进入Map状态时设置地图UI - 已迁移至 MapPlugin
-        // app.add_systems(OnEnter(GameState::Map)...);
+        // 在进入Map状态时设置地图UI
+        app.add_systems(OnEnter(GameState::Map), (
+            setup_map_ui, 
+            setup_breakthrough_button, 
+            setup_cultivation_status_ui
+        ).after(init_player));
+        // 在退出Map状态时清理地图UI
+        app.add_systems(OnExit(GameState::Map), cleanup_map_ui);
+        // 处理地图界面按钮点击
+        app.add_systems(Update, handle_map_button_clicks.run_if(in_state(GameState::Map)));
         // 全局牌组查看系统
         app.add_systems(Update, handle_deck_view_toggle);
 
@@ -195,7 +206,6 @@ impl Plugin for GamePlugin {
             crate::systems::screen_effect::ScreenEffectPlugin,
             crate::systems::sprite::SpritePlugin,
             crate::systems::ui::UiPlugin,
-            crate::systems::map::MapPlugin, // 新增地图插件
         ))
         .init_state::<GameState>()
         .insert_resource(VictoryDelay::new(4.0))
@@ -435,11 +445,131 @@ fn cleanup_main_menu(mut commands: Commands, query: Query<Entity, (With<Node>, W
     }
 }
 
-// cleanup_map_ui 已迁移至 src/systems/map.rs
+/// 清理地图UI
+fn cleanup_map_ui(mut commands: Commands, query: Query<Entity, With<MapUiRoot>>) {
+    for entity in query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+}
 
-// BreakthroughButtonMarker 已迁移至 src/components/map.rs
+/// 标记渡劫按钮，便于清理
+#[derive(Component)]
+struct BreakthroughButtonMarker;
 
-// UI 设置函数已迁移至 src/systems/map.rs
+/// 设置修为状态显示（左上角）
+fn setup_cultivation_status_ui(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    player_query: Query<(&Player, &crate::components::Cultivation)>,
+) {
+    let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
+
+    if let Ok((player, cultivation)) = player_query.get_single() {
+        let realm_name = match cultivation.realm {
+            crate::components::cultivation::Realm::QiRefining => "炼气期",
+            crate::components::cultivation::Realm::FoundationEstablishment => "筑基期",
+            crate::components::cultivation::Realm::GoldenCore => "金丹期",
+            crate::components::cultivation::Realm::NascentSoul => "元婴期",
+        };
+
+        commands
+            .spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: Val::Px(20.0),
+                    left: Val::Px(20.0),
+                    padding: UiRect::all(Val::Px(10.0)),
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)),
+                MapUiRoot,
+            ))
+            .with_children(|parent| {
+                // 境界显示
+                parent.spawn((
+                    Text::new(format!("当前境界: {}", realm_name)),
+                    TextFont {
+                        font: chinese_font.clone(),
+                        font_size: 24.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.4, 1.0, 0.4)),
+                ));
+
+                // 感悟进度
+                parent.spawn((
+                    Text::new(format!("感悟进度: {} / {}", cultivation.insight, cultivation.get_threshold())),
+                    TextFont {
+                        font: chinese_font.clone(),
+                        font_size: 18.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.8, 0.8, 1.0)),
+                ));
+
+                // 道行（HP）显示
+                parent.spawn((
+                    Text::new(format!("当前道行: {} / {}", player.hp, player.max_hp)),
+                    TextFont {
+                        font: chinese_font.clone(),
+                        font_size: 18.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(1.0, 0.6, 0.6)),
+                ));
+            });
+    }
+}
+
+/// 设置渡劫按钮（仅在可突破时显示）
+fn setup_breakthrough_button(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    cultivation_query: Query<&crate::components::Cultivation>,
+) {
+    if let Ok(cultivation) = cultivation_query.get_single() {
+        if cultivation.can_breakthrough() {
+            info!("【UI】检测到可突破，创建引动雷劫按钮");
+            
+            commands
+                .spawn((
+                    Button,
+                    Node {
+                        position_type: PositionType::Absolute,
+                        bottom: Val::Px(40.0),
+                        right: Val::Px(40.0),
+                        width: Val::Px(240.0),
+                        height: Val::Px(90.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(5.0)),
+                        ..default()
+                    },
+                    ZIndex(100), // 确保在最顶层，防止被地图节点遮挡
+                    BorderColor(Color::srgb(1.0, 0.8, 0.2)),
+                    BackgroundColor(Color::srgba(0.1, 0.05, 0.2, 0.95)),
+                    BreakthroughButtonMarker,
+                    MapUiRoot,
+                ))
+                .with_children(|parent| {
+                    parent.spawn((
+                        Text::new("引动雷劫"),
+                        TextFont {
+                            font: asset_server.load("fonts/Arial Unicode.ttf"),
+                            font_size: 36.0,
+                            ..default()
+                        },
+                        TextColor(Color::srgb(1.0, 0.9, 0.5)),
+                    ));
+                })
+                .observe(|_entity: Trigger<Pointer<Click>>, mut next_state: ResMut<NextState<GameState>>| {
+                    info!("【点击测试】点击了引动雷劫按钮！尝试进入 Tribulation 状态");
+                    next_state.set(GameState::Tribulation);
+                });
+        }
+    }
+}
 
 // ============================================================================
 // 组件标记
@@ -454,8 +584,83 @@ struct ContinueGameButton;
 #[derive(Component)]
 struct QuitGameButton;
 
-// 地图组件已迁移至 src/components/map.rs
-// 视觉效果组件已迁移至 src/components/map.rs
+/// 地图UI根节点标记
+#[derive(Component)]
+pub struct MapUiRoot;
+
+/// 地图节点按钮标记
+#[derive(Component)]
+pub struct MapNodeButton {
+    pub node_id: u32,
+}
+
+// ============================================================================
+// 地图视觉效果组件
+// ============================================================================
+
+/// 呼吸动画组件 - 用于未完成节点的缩放脉冲
+#[derive(Component)]
+pub struct BreathingAnimation {
+    pub min_scale: f32,
+    pub max_scale: f32,
+    pub speed: f32,
+    pub current: f32,
+    pub phase: f32,
+}
+
+impl Default for BreathingAnimation {
+    fn default() -> Self {
+        Self {
+            min_scale: 0.95,
+            max_scale: 1.05,
+            speed: 2.0,
+            current: 1.0,
+            phase: 0.0,
+        }
+    }
+}
+
+/// 连接线标记
+#[derive(Component)]
+pub struct ConnectionLineMarker;
+
+/// 脉冲动画组件 - 用于当前节点的发光脉冲
+#[derive(Component)]
+pub struct PulseAnimation {
+    pub intensity: f32,
+    pub speed: f32,
+    pub phase: f32,
+}
+
+impl Default for PulseAnimation {
+    fn default() -> Self {
+        Self {
+            intensity: 0.5,
+            speed: 3.0,
+            phase: 0.0,
+        }
+    }
+}
+
+/// 悬停效果组件
+#[derive(Component)]
+pub struct HoverEffect {
+    pub base_scale: f32,
+    pub hover_scale: f32,
+}
+
+impl Default for HoverEffect {
+    fn default() -> Self {
+        Self {
+            base_scale: 1.0,
+            hover_scale: 1.15,
+        }
+    }
+}
+
+/// 变暗效果组件 - 用于未解锁节点
+#[derive(Component)]
+pub struct DimmedEffect;
 
 // ============================================================================
 // 按钮交互系统
@@ -491,9 +696,12 @@ fn handle_button_clicks(
                     // 恢复状态
                     commands.insert_resource(save.player.clone()); // 插入 Player 资源
                     commands.insert_resource(save.cultivation);
-                    // 关键修复：从 save.deck 初始化 PlayerDeck (不再包含 HP/金币)
+                    // 关键修复：从 save.player 初始化 PlayerDeck
                     commands.insert_resource(PlayerDeck { 
                         cards: save.deck,
+                        hp: save.player.hp,
+                        max_hp: save.player.max_hp,
+                        gold: save.player.gold,
                     });
                     commands.insert_resource(RelicCollection { relic: save.relics });
                     commands.insert_resource(MapProgress::from_save(
@@ -523,36 +731,15 @@ fn handle_button_clicks(
 
 /// 处理地图界面按钮点击
 fn handle_map_button_clicks(
-    mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
     mut map_progress: ResMut<MapProgress>,
     player_query: Query<(&Player, &crate::components::Cultivation)>,
     deck: Res<PlayerDeck>,
     relics: Res<RelicCollection>,
-    button_queries: Query<(&Interaction, &MapNodeButton, &Node), Changed<Interaction>>,
+    button_queries: Query<(&Interaction, &MapNodeButton), Changed<Interaction>>,
 ) {
-    for (interaction, node_btn, node) in button_queries.iter() {
+    for (interaction, node_btn) in button_queries.iter() {
         if matches!(interaction, Interaction::Pressed) {
-            // 创建波纹特效
-            if let Val::Px(size) = node.width {
-                let center = size / 2.0;
-                commands.spawn((
-                    Node {
-                        width: Val::Px(0.0),
-                        height: Val::Px(0.0),
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(center),
-                        top: Val::Px(center),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 1.0)),
-                    BorderRadius::all(Val::Px(100.0)),
-                    RippleEffect::new(size * 1.5, 0.6), // 波纹扩散到节点大小的1.5倍，持续0.6秒
-                    ZIndex(-1), // 在节点下方
-                ));
-            }
             let node_id = node_btn.node_id;
             
             // 找到对应的节点
@@ -630,7 +817,310 @@ fn handle_map_button_clicks(
 // 地图系统
 // ============================================================================
 
-// 地图 UI 设置函数已迁移至 src/systems/map.rs
+/// 设置地图UI
+fn setup_map_ui(
+    mut commands: Commands, 
+    asset_server: Res<AssetServer>, 
+    map_progress: Option<Res<MapProgress>>,
+    player_query: Query<(&Player, &crate::components::Cultivation)>,
+) {
+    let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
+
+    // 健壮性处理：如果资源不存在，则创建并插入
+    let progress = if let Some(p) = map_progress {
+        p.clone()
+    } else {
+        info!("【地图系统】未找到地图进度，创建新机缘地图");
+        let new_progress = MapProgress::default();
+        // 关键修复：将新创建的进度插入为全局资源，供其它系统使用
+        commands.insert_resource(new_progress.clone());
+        new_progress
+    };
+
+    let nodes = progress.nodes.clone();
+    let current_layer = progress.current_node_id
+        .and_then(|id| nodes.iter().find(|n| n.id == id))
+        .map(|n| n.position.0)
+        .unwrap_or(0);
+
+    // 健壮性处理：获取玩家数据，如果不存在则使用默认值
+    let player_info = player_query.get_single().ok();
+    
+    use crate::components::cultivation::Realm;
+    let vision_range = if let Some((_, cultivation)) = player_info {
+        match cultivation.realm {
+            Realm::QiRefining => 1,
+            Realm::FoundationEstablishment => 2,
+            Realm::GoldenCore => 3,
+            _ => 99,
+        }
+    } else {
+        1 // 默认为炼气期视野
+    };
+    let visible_limit = current_layer + vision_range;
+
+    let player_gold = if let Some((p, _)) = player_info { p.gold } else { 0 };
+
+    commands
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                padding: UiRect::all(Val::Px(20.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgb(0.05, 0.05, 0.05)),
+            MapUiRoot,
+            ZIndex(100), // 确保在中间层级
+        ))
+        .with_children(|parent| {
+            // 地图标题与境界显示
+            parent.spawn(Node {
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                margin: UiRect::bottom(Val::Px(20.0)),
+                ..default()
+            }).with_children(|header| {
+                header.spawn((
+                    Text::new("寻 仙 觅 缘"),
+                    TextFont { font: chinese_font.clone(), font_size: 42.0, ..default() },
+                    TextColor(Color::srgb(0.8, 1.0, 0.8)),
+                ));
+                
+                let realm_text = if let Some((_, cultivation)) = player_info {
+                    match cultivation.realm {
+                        Realm::QiRefining => "炼气期 - 神识笼罩周边",
+                        Realm::FoundationEstablishment => "筑基期 - 神识洞察远方",
+                        Realm::GoldenCore => "金丹期 - 神识横扫百里",
+                        Realm::NascentSoul => "元婴期 - 神识通天彻地",
+                        _ => "凡人 - 只能看到脚下",
+                    }
+                } else {
+                    "凡人 - 只能看到脚下"
+                };
+                
+                header.spawn((
+                    Text::new(realm_text),
+                    TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() },
+                    TextColor(Color::srgb(0.5, 0.7, 0.5)),
+                ));
+            });
+
+            // 地图节点容器
+            parent
+                .spawn(Node {
+                    width: Val::Percent(90.0),
+                    height: Val::Percent(70.0),
+                    justify_content: JustifyContent::SpaceEvenly,
+                    align_items: AlignItems::Center,
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                })
+                .with_children(|map_parent| {
+                    let max_layer = nodes.iter().map(|n| n.position.0).max().unwrap_or(0);
+
+                    for layer in 0..=max_layer {
+                        // 只显示视野范围内的层级，或者已经走过的层级，或者最后一层Boss
+                        let is_visible = layer <= visible_limit || layer == max_layer;
+
+                        map_parent
+                            .spawn(Node {
+                                width: Val::Percent(100.0),
+                                height: Val::Auto,
+                                justify_content: JustifyContent::SpaceEvenly,
+                                align_items: AlignItems::Center,
+                                flex_direction: FlexDirection::Row,
+                                column_gap: Val::Px(20.0),
+                                ..default()
+                            })
+                            .with_children(|layer_parent| {
+                                if is_visible {
+                                    for node in &nodes {
+                                        if node.position.0 == layer {
+                                            spawn_map_node(layer_parent, node, &chinese_font, &progress);
+                                        }
+                                    }
+                                } else {
+                                    // 迷雾效果：在该层显示一些模糊的占位符
+                                    for _ in 0..4 {
+                                        layer_parent.spawn((
+                                            Node {
+                                                width: Val::Px(60.0),
+                                                height: Val::Px(60.0),
+                                                justify_content: JustifyContent::Center,
+                                                align_items: AlignItems::Center,
+                                                ..default()
+                                            },
+                                            BackgroundColor(Color::srgba(0.2, 0.2, 0.2, 0.3)),
+                                            BorderRadius::all(Val::Px(30.0)),
+                                        )).with_children(|p| {
+                                            p.spawn((
+                                                Text::new("?"),
+                                                TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() },
+                                                TextColor(Color::srgba(0.5, 0.5, 0.5, 0.5)),
+                                            ));
+                                        });
+                                    }
+                                }
+                            });
+                    }
+                });
+
+            // 底部状态栏（显示灵石等）
+            parent.spawn(Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(20.0),
+                bottom: Val::Px(20.0),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(30.0),
+                ..default()
+            }).with_children(|footer| {
+                // 1. 查看牌组按钮
+                footer.spawn((
+                    Button,
+                    Node {
+                        width: Val::Px(120.0),
+                        height: Val::Px(45.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.2, 0.2, 0.4)),
+                    BorderRadius::all(Val::Px(8.0)),
+                    crate::components::cards::ViewDeckButton,
+                )).with_children(|btn| {
+                    btn.spawn((
+                        Text::new("藏经阁"), // 更有修仙味的名字
+                        TextFont { font: chinese_font.clone(), font_size: 22.0, ..default() },
+                        TextColor(Color::WHITE),
+                    ));
+                });
+
+                // 2. 灵石信息
+                footer.spawn((
+                    Text::new(format!("灵石: {}", player_gold)),
+                    TextFont { font: chinese_font.clone(), font_size: 20.0, ..default() },
+                    TextColor(Color::srgb(1.0, 0.8, 0.2)),
+                ));
+            });
+        });
+}
+
+/// 地图节点
+fn spawn_map_node(
+    parent: &mut ChildBuilder,
+    node: &MapNode,
+    font: &Handle<Font>,
+    map_progress: &MapProgress,
+) {
+    // 检查是否是当前节点 (且尚未完成，解决视觉误导)
+    let is_current_active = map_progress.current_node_id == Some(node.id) && !node.completed;
+
+    // 根据节点类型选择颜色
+    let node_color = match node.node_type {
+        NodeType::Normal => Color::srgb(0.3, 0.5, 0.3),  // 绿色
+        NodeType::Elite => Color::srgb(0.6, 0.3, 0.1),   // 橙色
+        NodeType::Boss => Color::srgb(0.7, 0.1, 0.1),    // 红色
+        NodeType::Rest => Color::srgb(0.3, 0.4, 0.6),    // 蓝色
+        NodeType::Shop => Color::srgb(0.8, 0.8, 0.2),
+        NodeType::Event => Color::srgb(0.2, 0.6, 0.8), 
+        NodeType::Treasure => Color::srgb(1.0, 0.8, 0.2), // 金色
+        NodeType::Unknown => Color::srgb(0.4, 0.4, 0.4),
+    };
+
+    // 节点名称
+    let node_name = match node.node_type {
+        NodeType::Normal => "普通",
+        NodeType::Elite => "精英",
+        NodeType::Boss => "Boss",
+        NodeType::Rest => "休息",
+        NodeType::Shop => "坊市",
+        NodeType::Event => "机缘",
+        NodeType::Treasure => "遗宝",
+        NodeType::Unknown => "未知",
+    };
+
+    // 根据节点状态计算显示颜色 (大作级对比度优化)
+    let (display_color, border_color) = if node.completed {
+        // 已完成：深蓝色足迹，代表已探索完毕
+        (Color::srgb(0.1, 0.3, 0.6), Color::BLACK)
+    } else if is_current_active {
+        // 当前正处于：黄色发光
+        (Color::srgb(1.0, 0.9, 0.3), Color::WHITE)
+    } else if node.unlocked {
+        // 已解锁：高对比度彩色 + 白色描边 (核心引导)
+        (node_color, Color::WHITE)
+    } else {
+        // 未解锁：暗色半透明，无描边
+        let mut c = node_color;
+        c.set_alpha(0.2); // 极低透明度
+        (c, Color::BLACK)
+    };
+
+    parent.spawn((
+        Button,
+        Node {
+            width: Val::Px(60.0),
+            height: Val::Px(60.0),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: if node.unlocked && !node.completed { UiRect::all(Val::Px(3.0)) } else { UiRect::all(Val::Px(1.0)) },
+            ..default()
+        },
+        BackgroundColor(display_color),
+        BorderColor(border_color),
+        BorderRadius::all(Val::Px(30.0)),
+        MapNodeButton { node_id: node.id },
+        // TDD: 添加视觉效果组件
+        HoverEffect::default(),
+    )).with_children(|btn| {
+        let icon = match node.node_type {
+            NodeType::Normal => "战",
+            NodeType::Elite => "强",
+            NodeType::Boss => "王",
+            NodeType::Shop => "坊",
+            NodeType::Rest => "府",
+            NodeType::Treasure => "缘",
+            _ => "？",
+        };
+        btn.spawn((
+            Text::new(icon),
+            TextFont { font: font.clone(), font_size: 28.0, ..default() },
+            TextColor(if node.unlocked { Color::WHITE } else { Color::srgba(1.0, 1.0, 1.0, 0.1) }),
+        ));
+    });
+}
+
+/// 获取节点描述文字
+fn get_node_description(node_type: NodeType) -> &'static str {
+    match node_type {
+        NodeType::Normal => "战斗",
+        NodeType::Elite => "强敌",
+        NodeType::Boss => "首领",
+        NodeType::Rest => "恢复HP",
+        NodeType::Shop => "购买",
+        NodeType::Event => "机缘",
+        NodeType::Treasure => "奖励",
+        NodeType::Unknown => "???",
+    }
+}
+
+/// 获取节点图标（使用文字代替emoji以确保兼容性）
+fn get_node_icon(node_type: NodeType) -> &'static str {
+    match node_type {
+        NodeType::Normal => "战",
+        NodeType::Elite => "精",
+        NodeType::Boss => "王",
+        NodeType::Rest => "休",
+        NodeType::Shop => "店",
+        NodeType::Event => "缘",
+        NodeType::Treasure => "宝",
+        NodeType::Unknown => "?",
+    }
+}
 
 // ============================================================================
 // 战斗系统
@@ -779,7 +1269,6 @@ fn handle_event_choices(
     mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
     mut player_query: Query<&mut Player>,
-    mut map_progress: ResMut<MapProgress>,
     button_query: Query<(&Interaction, &EventChoiceButton), Changed<Interaction>>,
     ui_query: Query<Entity, With<EventUiRoot>>,
 ) {
@@ -799,17 +1288,13 @@ fn handle_event_choices(
                         info!("【机缘】悄然离去");
                     }
                 }
+                
+                // 清理并退出
+                for e in ui_query.iter() {
+                    commands.entity(e).despawn_recursive();
+                }
+                next_state.set(GameState::Map);
             }
-
-            // 完成当前节点，防止重复进入
-            map_progress.complete_current_node();
-            info!("【机缘】事件节点已完成，下一层已解锁");
-
-            // 清理并退出
-            for e in ui_query.iter() {
-                commands.entity(e).despawn_recursive();
-            }
-            next_state.set(GameState::Map);
         }
     }
 }
@@ -1420,7 +1905,7 @@ pub fn cleanup_combat_ui(
     mut commands: Commands,
     query: Query<Entity, With<CombatUiRoot>>,
     player_query: Query<&Player>,
-    mut player_resource: ResMut<Player>,
+    mut player_deck: ResMut<PlayerDeck>,
     // 增加对残留实体的查询
     enemy_query: Query<Entity, With<Enemy>>,
     sprite_query: Query<Entity, With<SpriteMarker>>,
@@ -1430,8 +1915,8 @@ pub fn cleanup_combat_ui(
 ) {
     // 1. 持久化同步
     if let Ok(player) = player_query.get_single() {
-        *player_resource = player.clone();
-        info!("【持久化】修士状态已同步：HP={}, 灵石={}", player_resource.hp, player_resource.gold);
+        player_deck.update_from_player(player);
+        info!("【持久化】修士状态已同步至存档：HP={}, 灵石={}", player_deck.hp, player_deck.gold);
     }
 
     // 2. 彻底肃清战斗实体

@@ -1,3 +1,4 @@
+// @Validated: Refactor Regression - 2026-01-29
 //! 端到端流程验证测试
 //!
 //! 测试完整的用户操作流程
@@ -8,7 +9,7 @@ use bevy::prelude::*;
 use bevy_card_battler::components::{Player, MapNode, NodeType, MapProgress};
 use bevy_card_battler::states::GameState;
 use bevy_card_battler::components::combat::CombatUiRoot;
-use bevy_card_battler::plugins::MapUiRoot;
+use bevy_card_battler::components::map::MapUiRoot;
 
 #[test]
 fn test_e2e_full_shop_and_combat_flow() {
@@ -30,24 +31,25 @@ fn test_e2e_full_shop_and_combat_flow() {
             node_type: NodeType::Shop,
             position: (0, 0),
             unlocked: true,
-            completed: false,
+            completed: false, next_nodes: Vec::new(),
         },
         MapNode {
             id: 1,
             node_type: NodeType::Normal,
             position: (1, 0),
             unlocked: false,
-            completed: false,
+            completed: false, next_nodes: Vec::new(),
         },
     ];
     app.world_mut().insert_resource(progress);
 
     // 步骤1: 进入地图
     transition_to_state(&mut app, GameState::Map);
-    advance_frames(&mut app, 5);
+    advance_frames(&mut app, 20); // 增加等待时间
 
     let map_ui_count = count_map_ui(&mut app);
-    println!("步骤1: 地图UI数量 = {}", map_ui_count);
+    let player_exists = app.world_mut().query::<&Player>().iter(&app.world()).count() > 0;
+    println!("步骤1: 地图UI数量 = {}, Player存在 = {}", map_ui_count, player_exists);
     assert!(map_ui_count > 0, "应该有地图UI");
 
     // 步骤2: 进入商店

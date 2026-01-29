@@ -199,9 +199,15 @@ impl Card {
 // ============================================================================
 
 /// 玩家牌组资源
-#[derive(Resource, Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Resource, Debug, Clone)]
 pub struct PlayerDeck {
     pub cards: Vec<Card>,
+}
+
+impl Default for PlayerDeck {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// 牌组查看 UI 标记
@@ -217,18 +223,29 @@ pub struct ViewDeckButton;
 pub struct CloseDeckButton;
 
 impl PlayerDeck {
-    pub fn new(cards: Vec<Card>) -> Self {
-        Self { cards }
+    /// 创建新牌组
+    pub fn new() -> Self {
+        Self {
+            cards: create_starting_deck(),
+        }
     }
 
+    /// 重置牌组
+    pub fn reset(&mut self) {
+        self.cards = create_starting_deck();
+    }
+
+    /// 添加卡牌到牌组
     pub fn add_card(&mut self, card: Card) {
         self.cards.push(card);
     }
 
+    /// 获取牌组大小
     pub fn len(&self) -> usize {
         self.cards.len()
     }
 
+    /// 检查是否为空
     pub fn is_empty(&self) -> bool {
         self.cards.is_empty()
     }

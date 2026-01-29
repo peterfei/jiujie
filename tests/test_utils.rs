@@ -21,7 +21,7 @@ use bevy::prelude::*;
 use bevy::text::TextPlugin;
 use bevy_card_battler::plugins::{CorePlugin, MenuPlugin};
 use bevy_card_battler::components::sprite::CharacterAssets;
-use bevy_card_battler::systems::{AnimationPlugin, SpritePlugin, ParticlePlugin, ScreenEffectPlugin, ShopPlugin, RestPlugin};
+use bevy_card_battler::systems::{AnimationPlugin, SpritePlugin, ParticlePlugin, ScreenEffectPlugin, ShopPlugin, RestPlugin, MapPlugin};
 use bevy_card_battler::states::GameState;
 use bevy_card_battler::components::{VictoryDelay, Enemy, Player, PlayerDeck, MapProgress, CombatConfig, RelicCollection};
 use bevy_card_battler::components::shop::CurrentShopItems;
@@ -73,6 +73,7 @@ pub fn create_test_app() -> App {
     app.add_plugins(MenuPlugin);
     app.add_plugins(ShopPlugin);
     app.add_plugins(RestPlugin);
+    app.add_plugins(MapPlugin);
 
     // 注册特效插件
     app.add_plugins(AnimationPlugin);
@@ -85,6 +86,7 @@ pub fn create_test_app() -> App {
     app.insert_resource(VictoryDelay::new(0.1));
     app.insert_resource(CharacterAssets::default());
     app.insert_resource(bevy_card_battler::components::Environment::default());
+    app.insert_resource(Player::default());
     app.insert_resource(PlayerDeck::default());
     app.insert_resource(MapProgress::default());
     app.insert_resource(CombatConfig::default());

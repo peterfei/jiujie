@@ -1,10 +1,13 @@
 use bevy::prelude::*;
-use bevy_card_battler::components::combat::{Enemy, Player, PlayerDeck, CombatUiRoot};
+use bevy_card_battler::components::combat::{Enemy};
+use bevy_card_battler::components::{Player, PlayerDeck};
 use bevy_card_battler::plugins::cleanup_combat_ui;
 
 #[test]
 fn test_enemy_entities_persist_after_cleanup_bug() {
     let mut app = App::new();
+    app.insert_resource(Player::default());
+    app.init_resource::<PlayerDeck>();
     app.add_plugins(MinimalPlugins);
     
     // 1. 准备环境

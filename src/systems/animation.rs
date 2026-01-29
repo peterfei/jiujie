@@ -5,6 +5,11 @@
 //! - 震动动画更新
 //! - 浮动伤害数字更新
 //! - 敌人攻击事件处理
+//!
+//! 地图视觉效果系统：
+//! - 呼吸动画
+//! - 脉冲发光
+//! - 悬停交互
 
 use bevy::prelude::*;
 use bevy::ui::UiSystem;
@@ -12,6 +17,8 @@ use crate::components::animation::{
     FloatingDamageText,
     EnemyUiMarker, PlayerUiMarker, EasingFunction, EnemyAttackEvent
 };
+use crate::components::map::{BreathingAnimation, PulseAnimation, HoverEffect, MapNodeButton, OriginalSize, RippleEffect, EntranceAnimation, ConnectorDot};
+use crate::states::GameState;
 
 /// 动画插件
 ///
@@ -31,11 +38,25 @@ impl Plugin for AnimationPlugin {
                 update_ui_shake_animations,
                 update_floating_damage_texts,
             ).after(UiSystem::Layout)
-            .run_if(in_state(crate::states::GameState::Combat))
+            .run_if(in_state(GameState::Combat))
         );
         app.add_systems(
             Update,
-            handle_enemy_attack_events.run_if(in_state(crate::states::GameState::Combat))
+            handle_enemy_attack_events.run_if(in_state(GameState::Combat))
+        );
+
+        // 地图视觉效果系统
+        app.add_systems(
+            Update,
+            (
+                update_breathing_animations,
+                update_pulse_animations,
+                update_hover_effects,
+                update_ripple_effects,
+                update_entrance_animations,
+                update_connector_dots,
+            ).after(UiSystem::Layout)
+            .run_if(in_state(GameState::Map))
         );
     }
 }
@@ -270,5 +291,188 @@ fn handle_enemy_attack_events(
             });
 
         info!("伤害数字已生成");
+    }
+}
+
+// ============================================================================
+// 地图视觉效果系统
+// ============================================================================
+
+/// 更新呼吸动画
+///
+/// 为未完成的节点添加平滑的缩放呼吸效果
+fn update_breathing_animations(
+    mut query: Query<(&mut BreathingAnimation, &OriginalSize, &mut Node)>,
+    time: Res<Time>,
+) {
+    for (mut anim, original, mut node) in query.iter_mut() {
+        anim.phase += time.delta_secs() * anim.speed;
+
+        // 使用正弦波计算缩放值
+        let normalized = (anim.phase.sin() + 1.0) / 2.0; // 0.0 到 1.0
+        anim.current = anim.min_scale + (anim.max_scale - anim.min_scale) * normalized;
+
+        // 应用缩放到 Node 的 width/height
+        if let Val::Px(base_w) = original.width {
+            node.width = Val::Px(base_w * anim.current);
+        }
+        if let Val::Px(base_h) = original.height {
+            node.height = Val::Px(base_h * anim.current);
+        }
+    }
+}
+
+/// 更新脉冲发光动画
+///
+/// 为当前激活节点添加发光脉冲效果
+fn update_pulse_animations(
+    mut query: Query<(&mut PulseAnimation, &mut BorderColor)>,
+    time: Res<Time>,
+) {
+    for (mut anim, mut border_color) in query.iter_mut() {
+        anim.phase += time.delta_secs() * anim.speed;
+
+        // 使用正弦波计算发光强度
+        let pulse = (anim.phase.sin() + 1.0) / 2.0; // 0.0 到 1.0
+        let intensity = anim.intensity * pulse;
+
+        // 在白色和黄色之间脉冲
+        let base_r = 1.0; let base_g = 1.0; let base_b = 1.0; // 白色
+        let glow_r = 1.0; let glow_g = 0.9; let glow_b = 0.3;  // 黄色
+
+        let r = base_r + (glow_r - base_r) * intensity;
+        let g = base_g + (glow_g - base_g) * intensity;
+        let b = base_b + (glow_b - base_b) * intensity;
+
+        *border_color = BorderColor(Color::srgb(r, g, b));
+    }
+}
+
+/// 更新悬停效果
+///
+/// 检测鼠标悬停状态并应用缩放效果
+fn update_hover_effects(
+    mut query: Query<(&HoverEffect, &Interaction, &OriginalSize, &mut Node)>,
+) {
+    for (effect, interaction, original, mut node) in query.iter_mut() {
+        let target_scale = match interaction {
+            Interaction::Hovered => effect.hover_scale,
+            _ => effect.base_scale,
+        };
+
+        // 应用缩放到 Node 的 width/height
+        if let Val::Px(base_w) = original.width {
+            node.width = Val::Px(base_w * target_scale);
+        }
+        if let Val::Px(base_h) = original.height {
+            node.height = Val::Px(base_h * target_scale);
+        }
+    }
+}
+
+/// 更新波纹特效
+///
+/// 节点点击时创建的波纹扩散动画
+fn update_ripple_effects(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut RippleEffect, &mut Node, &mut BackgroundColor)>,
+    time: Res<Time>,
+) {
+    for (entity, mut ripple, mut node, mut bg_color) in query.iter_mut() {
+        ripple.elapsed += time.delta_secs();
+
+        let progress = (ripple.elapsed / ripple.duration).min(1.0);
+
+        // 扩散半径
+        ripple.radius = ripple.max_radius * progress;
+
+        // 淡出效果
+        ripple.alpha = 1.0 - progress;
+
+        // 更新波纹尺寸和透明度
+        let diameter = ripple.radius * 2.0;
+        node.width = Val::Px(diameter);
+        node.height = Val::Px(diameter);
+
+        // 更新背景颜色透明度
+        if let Color::Srgba(srgba) = bg_color.0 {
+            let mut new_srgba = Srgba::from(srgba);
+            new_srgba.alpha = ripple.alpha.clamp(0.0, 1.0);
+            *bg_color = BackgroundColor(new_srgba.into());
+        }
+
+        // 动画完成后移除波纹
+        if progress >= 1.0 {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+}
+
+/// 更新入场动画
+///
+/// 节点首次出现时的淡入和缩放动画
+fn update_entrance_animations(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut EntranceAnimation, &mut Node, &mut BackgroundColor, &OriginalSize)>,
+    time: Res<Time>,
+) {
+    for (entity, mut anim, mut node, mut bg_color, original) in query.iter_mut() {
+        anim.elapsed += time.delta_secs();
+
+        let progress = (anim.elapsed / anim.duration).min(1.0);
+
+        // 使用 easeOutCubic 缓动函数
+        let eased_progress = 1.0 - (1.0 - progress).powi(3);
+
+        // 计算当前缩放（从 start_scale 到 1.0）
+        let current_scale = anim.start_scale + (1.0 - anim.start_scale) * eased_progress;
+
+        // 计算当前透明度（从 start_alpha 到 1.0）
+        let current_alpha = anim.start_alpha + (1.0 - anim.start_alpha) * eased_progress;
+
+        // 应用缩放到 Node 的 width/height
+        if let Val::Px(base_w) = original.width {
+            node.width = Val::Px(base_w * current_scale);
+        }
+        if let Val::Px(base_h) = original.height {
+            node.height = Val::Px(base_h * current_scale);
+        }
+
+        // 应用透明度
+        if let Color::Srgba(srgba) = bg_color.0 {
+            let mut new_srgba = Srgba::from(srgba);
+            new_srgba.alpha = current_alpha.clamp(0.0, 1.0);
+            *bg_color = BackgroundColor(new_srgba.into());
+        }
+
+        // 动画完成后移除入场动画组件
+        if progress >= 1.0 {
+            commands.entity(entity).remove::<EntranceAnimation>();
+        }
+    }
+}
+
+/// 更新连接圆点动画
+///
+/// 连接区域中的圆点脉冲效果，从左到右流动
+fn update_connector_dots(
+    mut query: Query<(&ConnectorDot, &mut BackgroundColor)>,
+    time: Res<Time>,
+) {
+    let time_elapsed = time.elapsed_secs();
+
+    for (dot, mut bg_color) in query.iter_mut() {
+        // 计算脉冲效果，使用相位偏移创建流动感
+        let phase = time_elapsed * 2.0 + dot.offset;
+        let pulse = ((phase.sin() + 1.0) / 2.0).powf(2.0); // 平方使峰值更尖锐
+
+        // 在 0.4 到 0.9 之间变化透明度
+        let alpha = 0.4 + 0.5 * pulse;
+
+        if let Color::Srgba(srgba) = bg_color.0 {
+            let mut new_srgba = Srgba::from(srgba);
+            new_srgba.alpha = alpha.clamp(0.0, 1.0);
+            *bg_color = BackgroundColor(new_srgba.into());
+        }
     }
 }

@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 use bevy_card_battler::components::{Hand, DrawPile, DiscardPile};
 use bevy_card_battler::components::cards::Card;
-use bevy_card_battler::plugins::{HandArea, HandCountText, HandCard, CombatUiRoot};
+use bevy_card_battler::components::combat::{HandArea, CombatUiRoot};
+use bevy_card_battler::plugins::{HandCountText, HandCard};
+use bevy_card_battler::plugins::hand_ui_v2::update_hand_ui_v2;
 use bevy_card_battler::states::GameState;
 
 #[test]
@@ -39,7 +41,7 @@ fn test_hand_ui_reconstruction_on_data_mismatch() {
     }).id();
 
     // 3. 运行 update_hand_ui
-    app.add_systems(Update, bevy_card_battler::plugins::update_hand_ui);
+    app.add_systems(Update, update_hand_ui_v2);
     
     // 运行一帧
     app.update();

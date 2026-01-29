@@ -28,9 +28,10 @@ fn test_boss_node_visual_distinctness() {
     let node = MapNode {
         id: 99,
         node_type: NodeType::Boss,
-        position: (5, 0),
+        position: (4, 1),
         unlocked: true,
         completed: false,
+        next_nodes: Vec::new(),
     };
     
     let color = match node.node_type {

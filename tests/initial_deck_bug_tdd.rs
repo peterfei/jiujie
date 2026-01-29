@@ -1,5 +1,6 @@
 use bevy::prelude::*;
-use bevy_card_battler::components::combat::{Player, PlayerDeck};
+use bevy_card_battler::components::combat::{Player};
+use bevy_card_battler::components::PlayerDeck;
 
 #[test]
 fn test_new_game_must_have_cards() {
@@ -11,7 +12,7 @@ fn test_new_game_must_have_cards() {
 
 #[test]
 fn test_new_game_initial_gold_and_hp() {
-    let deck = PlayerDeck::new();
-    assert_eq!(deck.gold, 100, "初始灵石应为 100");
-    assert_eq!(deck.max_hp, 80, "初始血量上限应为 80");
+    let player = Player::default();
+    assert_eq!(player.gold, 100, "初始灵石应为 100");
+    assert_eq!(player.max_hp, 80, "初始血量上限应为 80");
 }

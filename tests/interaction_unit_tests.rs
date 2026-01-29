@@ -8,7 +8,8 @@ use bevy::asset::AssetPlugin;
 use bevy::state::app::StatesPlugin;
 use bevy_card_battler::components::*;
 use bevy_card_battler::components::shop::*;
-use bevy_card_battler::plugins::{CorePlugin, MenuPlugin, MapNodeButton};
+use bevy_card_battler::components::map::{MapNodeButton};
+use bevy_card_battler::plugins::{CorePlugin, MenuPlugin};
 use bevy_card_battler::states::GameState;
 use bevy_card_battler::systems::rest::RestContinueButton;
 

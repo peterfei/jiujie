@@ -39,8 +39,8 @@ fn test_map_save_load_recovery() {
 
 #[test]
 fn test_map_node_visual_state() {
-    let node_unlocked = MapNode { id: 1, node_type: NodeType::Normal, position: (1, 0), unlocked: true, completed: false };
-    let node_locked = MapNode { id: 2, node_type: NodeType::Normal, position: (1, 1), unlocked: false, completed: false };
+    let node_unlocked = MapNode { id: 1, node_type: NodeType::Normal, position: (0, 0), unlocked: true, completed: false, next_nodes: Vec::new() };
+    let node_locked = MapNode { id: 2, node_type: NodeType::Normal, position: (1, 0), unlocked: false, completed: false, next_nodes: Vec::new() };
     
     let color_unlocked = if node_unlocked.completed { Color::srgb(0.2, 0.5, 1.0) } 
                         else if node_unlocked.unlocked { Color::WHITE } 

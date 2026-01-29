@@ -16,7 +16,7 @@ fn coverage_map_node_button_component_exists() {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins);
 
-    use bevy_card_battler::plugins::MapNodeButton;
+    use bevy_card_battler::components::map::MapNodeButton;
     app.world_mut().spawn(MapNodeButton { node_id: 42 });
 
     let mut query = app.world_mut().query::<&MapNodeButton>();

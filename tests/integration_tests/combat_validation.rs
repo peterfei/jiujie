@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use bevy_card_battler::components::{Player, MapNode, NodeType, MapProgress};
 use bevy_card_battler::states::GameState;
 use bevy_card_battler::components::combat::CombatUiRoot;
-use bevy_card_battler::plugins::MapUiRoot;
+use bevy_card_battler::components::map::MapUiRoot;
 
 // ============================================================================
 // 测试1: 跨状态转换 - 实体唯一性
@@ -29,14 +29,14 @@ fn test_no_duplicate_players_after_state_transitions() {
             node_type: NodeType::Shop,
             position: (0, 0),
             unlocked: true,
-            completed: false,
+            completed: false, next_nodes: Vec::new(),
         },
         MapNode {
             id: 1,
             node_type: NodeType::Normal,
             position: (1, 0),
             unlocked: false,
-            completed: false,
+            completed: false, next_nodes: Vec::new(),
         },
     ];
     app.world_mut().insert_resource(progress);
