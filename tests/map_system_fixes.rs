@@ -72,20 +72,22 @@ fn test_event_node_completed_after_choice() {
     // 创建一个包含事件节点的地图
     let mut progress = MapProgress::default();
     progress.nodes = vec![
-        MapNode {
-            id: 0,
-            position: (0, 0),
-            node_type: NodeType::Event,
-            unlocked: true,
-            completed: false, next_nodes: Vec::new(),
-        },
-        MapNode {
-            id: 1,
-            position: (1, 0),
-            node_type: NodeType::Normal,
-            unlocked: false,  // 初始未解锁
-            completed: false, next_nodes: Vec::new(),
-        },
+                MapNode {
+                    id: 0,
+                    position: (0, 0),
+                    node_type: NodeType::Event,
+                    unlocked: true,
+                    completed: false,
+                    next_nodes: vec![1], // 显式添加通往节点 1 的连线
+                },
+                MapNode {
+                    id: 1,
+                    position: (1, 0),
+                    node_type: NodeType::Normal,
+                    unlocked: false,  // 初始未解锁
+                    completed: false, next_nodes: Vec::new(),
+                },
+        
     ];
     progress.current_node_id = Some(0);
     progress.current_layer = 0;
