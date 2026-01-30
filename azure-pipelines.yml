@@ -41,12 +41,9 @@ steps:
   displayName: 'Install cargo-wix'
 
 # 4. 构建并生成 MSI
-# cargo wix 会自动执行 cargo build --release
+# cargo wix 默认会自动执行 release 构建，不需要手动 cargo build
 - script: |
-    cargo wix --no-build --nocapture
-    # 如果你也想让它执行 release 构建，去掉 --no-build。
-    # 鉴于我们需要 release 二进制，标准的命令是：
-    cargo wix --release
+    cargo wix --nocapture
   displayName: 'Build Release and Create MSI'
 
 # 5. 查找并发布 MSI 文件
