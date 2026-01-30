@@ -44,6 +44,8 @@ pub fn create_test_app() -> App {
 
     // 使用无头模式运行，避免窗口创建问题
     app.add_plugins(MinimalPlugins)
+        // 添加核心 UI 和层次结构支持
+        .add_plugins(HierarchyPlugin)
         // 添加资产插件（无头模式）
         .add_plugins(AssetPlugin::default())
         .add_plugins(TextPlugin::default())

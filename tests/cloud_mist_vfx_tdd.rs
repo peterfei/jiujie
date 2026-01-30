@@ -6,8 +6,8 @@ fn test_cloud_mist_soft_edge_logic() {
     let config = EmitterConfig::cloud_mist();
     
     // 验证：真实世界的云雾绝不应该是硬边缘的
-    // 我们将通过检查配置中是否指定了 CloudMist 类型，并在渲染层应用特殊贴图来保证
-    assert_eq!(config.lifetime.0, 6.0); 
+    // 我们更新基准以匹配“史诗级”参数 (12.0 - 18.0s)
+    assert!(config.lifetime.0 >= 10.0, "水墨云雾应具有长效生命周期"); 
 }
 
 #[test]

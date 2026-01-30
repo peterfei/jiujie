@@ -1,18 +1,23 @@
 use bevy::prelude::*;
-use bevy_card_battler::components::particle::{EffectType, ParticleEmitter};
+use bevy_card_battler::components::particle::{EffectType};
 use bevy_card_battler::states::GameState;
+
+#[path = "test_utils.rs"]
+mod test_utils;
+use test_utils::*;
 
 #[test]
 fn test_main_menu_cloud_coverage_logic() {
-    let mut app = App::new();
-    app.init_state::<GameState>();
+    let mut app = create_test_app();
     
-    // 模拟主菜单发射器参数
-    // 为了覆盖 1280x720 屏幕，发射器的随机范围应涵盖 X(-600..600), Y(-300..300)
+    // 模拟切换到主菜单
+    app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::MainMenu);
+    app.update(); // 触发 OnEnter(MainMenu)
+    
+    // 验证：配置参数符合史诗级设计
     let config = EffectType::CloudMist.config();
-    
-    assert!(config.size.1 >= 300.0, "全屏云雾单体尺寸应足够大以保证遮盖感");
-    assert!(config.lifetime.1 >= 8.0, "主菜单云雾应具有极长的停留时间以保持平稳感");
+    assert!(config.size.1 >= 1000.0, "全屏云雾单体尺寸应足够大");
+    assert!(config.lifetime.1 >= 15.0, "主菜单云雾应具有极长的停留时间");
 }
 
 #[test]
