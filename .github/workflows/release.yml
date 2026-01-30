@@ -1,0 +1,55 @@
+name: 多平台自动构建打包
+
+on:
+  push:
+    branches: [ feat/map-difficulty-scaling, main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            artifact_name: bevy_card_battler_linux
+            binary_path: target/release/bevy_card_battler
+          - os: windows-latest
+            artifact_name: bevy_card_battler_windows
+            binary_path: target/release/bevy_card_battler.exe
+          - os: macos-latest
+            artifact_name: bevy_card_battler_macos
+            binary_path: target/release/bevy_card_battler
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+
+      - name: 安装 Linux 依赖 (仅 Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ pkg-config libx11-dev libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+
+      - name: 执行 Release 编译
+        run: cargo build --release
+
+      - name: 准备打包目录
+        shell: bash
+        run: |
+          mkdir -p build_dist
+          cp ${{ matrix.binary_path }} build_dist/
+          cp -r assets build_dist/
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: build_dist/
