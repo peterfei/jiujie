@@ -174,12 +174,14 @@ pub fn handle_shop_interactions(
     relic_buttons: Query<(&Interaction, &ShopRelicButton), Changed<Interaction>>,
     remove_buttons: Query<&Interaction, (With<ShopRemoveCardButton>, Changed<Interaction>)>,
     exit_buttons: Query<(&Interaction, &ShopExitButton), Changed<Interaction>>,
+    mut sfx_events: EventWriter<PlaySfxEvent>,
 ) {
     let mut should_save = false;
 
     // 1. 处理离开 (优先级最高)
     for (interaction, _) in exit_buttons.iter() {
         if matches!(interaction, Interaction::Pressed) {
+            sfx_events.send(PlaySfxEvent::new(SfxType::UiClick));
             info!("【仙家坊市】告辞离开");
             map_progress.complete_current_node();
             next_state.set(GameState::Map);
@@ -204,12 +206,14 @@ pub fn handle_shop_interactions(
                         ShopItem::Card(card) => {
                             player.gold -= price;
                             deck.add_card(card.clone());
+                            sfx_events.send(PlaySfxEvent::new(SfxType::GoldGain));
                             info!("【仙家坊市】换取功法: {}", card.name);
                             should_save = true;
                         }
                         ShopItem::Elixir { name, hp_restore, .. } => {
                             player.gold -= price;
                             player.hp = (player.hp + hp_restore).min(player.max_hp);
+                            sfx_events.send(PlaySfxEvent::new(SfxType::Heal));
                             info!("【仙家坊市】服下 {}", name);
                             should_save = true;
                         }

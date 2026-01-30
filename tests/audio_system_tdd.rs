@@ -1,38 +1,62 @@
-#[cfg(test)]
-mod tests {
-    use bevy::prelude::*;
-    use bevy_card_battler::components::audio::{PlaySfxEvent, SfxType};
-    use bevy_card_battler::components::{Card, CardEffect, CardType, CardRarity};
+use bevy::prelude::*;
+use bevy_card_battler::components::audio::{SfxType};
+use std::path::Path;
 
-    #[test]
-    fn test_card_play_triggers_audio_event() {
-        let mut app = App::new();
-        app.add_event::<PlaySfxEvent>();
-
-        // 模拟逻辑：发送一个出牌事件（这里假设我们有一个系统在处理出牌逻辑时发送音效）
-        // 在实际代码中，我们需要在 apply_card_effect 中加入此逻辑
-        let mut event_writer = app.world_mut().resource_mut::<Events<PlaySfxEvent>>();
-        event_writer.send(PlaySfxEvent::new(SfxType::CardPlay));
-
-        // 验证事件是否已发送
-        let events = app.world().resource::<Events<PlaySfxEvent>>();
-        let mut reader = events.get_cursor();
-        let first_event = reader.read(events).next().expect("应该触发音效事件");
-        assert_eq!(first_event.sfx_type, SfxType::CardPlay);
+#[test]
+fn test_sfx_file_paths_existence() {
+    // 检查所有在 SfxType 中定义的文件是否在 assets 目录中真实存在
+    let types = [
+        SfxType::CardPlay,
+        SfxType::DrawCard,
+        SfxType::ShuffleCard,
+        SfxType::CardHover,
+        SfxType::CardSelect,
+        SfxType::PlayerAttack,
+        SfxType::PlayerHit,
+        SfxType::EnemyHit,
+        SfxType::Block,
+        SfxType::CriticalHit,
+        SfxType::Dodge,
+        SfxType::LightningStrike,
+        SfxType::FireSpell,
+        SfxType::IceSpell,
+        SfxType::Heal,
+        SfxType::BuffApply,
+        SfxType::DebuffApply,
+        SfxType::ShieldUp,
+        SfxType::UltimateStart,
+        SfxType::UltimateRelease,
+        SfxType::SwordStrike,
+        SfxType::ThousandSwords,
+        SfxType::UiClick,
+        SfxType::UiHover,
+        SfxType::UiConfirm,
+        SfxType::UiCancel,
+        SfxType::UiError,
+        SfxType::BreakthroughStart,
+        SfxType::BreakthroughSuccess,
+        SfxType::LevelUp,
+        SfxType::GoldGain,
+        SfxType::RelicObtain,
+        SfxType::Victory,
+        SfxType::Defeat,
+        SfxType::EnemySpawn,
+        SfxType::EnemyDeath,
+        SfxType::BossAppear,
+        SfxType::BossDeath,
+    ];
+    
+    let mut missing_files = Vec::new();
+    
+    for sfx in types {
+        let rel_path = sfx.file_path();
+        let full_path = format!("assets/{}", rel_path);
+        if !Path::new(&full_path).exists() {
+            missing_files.push(full_path);
+        }
     }
-
-    #[test]
-    fn test_lightning_strike_triggers_audio_event() {
-        let mut app = App::new();
-        app.add_event::<PlaySfxEvent>();
-
-        // 模拟雷劫落下的逻辑
-        let mut event_writer = app.world_mut().resource_mut::<Events<PlaySfxEvent>>();
-        event_writer.send(PlaySfxEvent::new(SfxType::LightningStrike));
-
-        let events = app.world().resource::<Events<PlaySfxEvent>>();
-        let mut reader = events.get_cursor();
-        let event = reader.read(events).next().unwrap();
-        assert_eq!(event.sfx_type, SfxType::LightningStrike);
+    
+    if !missing_files.is_empty() {
+        panic!("以下音效文件缺失: \n{}", missing_files.join("\n"));
     }
 }
