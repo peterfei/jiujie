@@ -5,12 +5,10 @@
 use bevy::prelude::*;
 use crate::states::GameState;
 use crate::components::{
-    Player, Cultivation, PlayerDeck, RelicCollection,
-};
-use crate::components::map::{
-    MapProgress, MapNode, NodeType, MapUiRoot, MapNodeContainer, MapNodeButton,
-    BreakthroughButtonMarker, OriginalSize, BreathingAnimation, RippleEffect,
-    EntranceAnimation, ConnectorDot, PulseAnimation, HoverEffect,
+    Player, Cultivation, PlayerDeck,
+    PlaySfxEvent, SfxType,
+    relic::RelicCollection,
+    map::{MapProgress, MapNode, NodeType, MapNodeButton, RippleEffect, MapNodeContainer, MapUiRoot, BreakthroughButtonMarker, BreathingAnimation, OriginalSize, HoverEffect, EntranceAnimation, PulseAnimation, ConnectorDot}
 };
 use crate::resources::save::GameStateSave;
 use crate::plugins::init_player;
@@ -430,9 +428,13 @@ fn handle_map_button_clicks(
     deck: Res<PlayerDeck>,
     relics: Res<RelicCollection>,
     button_queries: Query<(&Interaction, &MapNodeButton, &Node), Changed<Interaction>>,
+    mut sfx_events: EventWriter<PlaySfxEvent>,
 ) {
     for (interaction, node_btn, node) in button_queries.iter() {
         if matches!(interaction, Interaction::Pressed) {
+            // 播放音效
+            sfx_events.send(PlaySfxEvent::new(SfxType::UiClick));
+
             // 创建波纹特效
             if let Val::Px(size) = node.width {
                 let center = size / 2.0;

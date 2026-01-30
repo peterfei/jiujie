@@ -574,10 +574,12 @@ fn handle_button_clicks(
         Query<&Interaction, (Changed<Interaction>, With<QuitGameButton>)>,
     )>,
     mut exit: EventWriter<AppExit>,
+    mut sfx_events: EventWriter<PlaySfxEvent>,
 ) {
     // 1. 开始修行（重塑道基）
     for interaction in button_queries.p0().iter() {
         if matches!(interaction, Interaction::Pressed) {
+            sfx_events.send(PlaySfxEvent::new(SfxType::UiClick));
             info!("【主菜单】开始新修行，删除旧存档");
             crate::resources::save::GameStateSave::delete_save();
             next_state.set(GameState::Prologue);
@@ -588,6 +590,7 @@ fn handle_button_clicks(
     // 2. 继续修行（读档）
     for interaction in button_queries.p1().iter() {
         if matches!(interaction, Interaction::Pressed) {
+            sfx_events.send(PlaySfxEvent::new(SfxType::UiClick));
             info!("【主菜单】继续修行，尝试加载存档");
             match crate::resources::save::GameStateSave::load_from_disk() {
                 Ok(save) => {
@@ -618,9 +621,10 @@ fn handle_button_clicks(
         }
     }
 
-    // 3. 离开尘世
+    // 3. 归隐山林（退出）
     for interaction in button_queries.p2().iter() {
         if matches!(interaction, Interaction::Pressed) {
+            sfx_events.send(PlaySfxEvent::new(SfxType::UiClick));
             exit.send(AppExit::Success);
         }
     }
@@ -1648,12 +1652,13 @@ pub fn process_enemy_turn_queue(
         EventWriter<SpawnEffectEvent>,
         EventWriter<ScreenEffectEvent>,
         EventWriter<EnemyAttackEvent>,
+        EventWriter<PlaySfxEvent>,
     ),
     enemy_sprite_query: Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
     time: Res<Time>,
     env: Option<Res<Environment>>,
 ) {
-    let (mut anim_events, mut effect_events, mut screen_events, mut attack_events) = events;
+    let (mut anim_events, mut effect_events, mut screen_events, mut attack_events, mut sfx_events) = events;
     let Some(mut combat_state) = combat_state_opt else { return; };
     if !queue.processing || combat_state.phase != TurnPhase::EnemyTurn {
         return;
@@ -1746,6 +1751,7 @@ pub fn process_enemy_turn_queue(
                         if let Ok((mut player, _)) = player_query.get_single_mut() {
                             player.take_damage_with_env(final_damage, env.as_ref().map(|r| r.as_ref()));
                             attack_events.send(EnemyAttackEvent::new(final_damage, false));
+                            sfx_events.send(PlaySfxEvent::new(SfxType::PlayerHit));
                             screen_events.send(ScreenEffectEvent::Shake { trauma: 0.6, decay: 6.0 });
                             if player.hp <= 0 {
                                 next_state.set(GameState::GameOver);
@@ -2034,10 +2040,12 @@ fn draw_cards_on_turn_start(
 
 fn handle_hand_card_hover(
     mut query: Query<(&Interaction, &HandCard, &mut ZIndex, &mut Transform), (With<HandCard>, Changed<Interaction>)>,
+    mut sfx_events: EventWriter<PlaySfxEvent>,
 ) {
     for (interaction, hand_card, mut z_index, mut transform) in query.iter_mut() {
         match interaction {
             Interaction::Hovered => {
+                sfx_events.send(PlaySfxEvent::new(SfxType::CardHover));
                 // 悬停：视觉上浮、放大、置顶
                 // 注意：修改 transform.translation.y 而非 node.bottom，防止 Picking 区域随之位移导致闪烁
                 transform.translation.y = 40.0; 
@@ -2166,6 +2174,7 @@ fn handle_card_play(
                             &camera_query,
                             env.as_ref().map(|r| r.as_ref()),
                             &mut heavenly_cinematic, // 传递演出资源
+                            &mut sfx_events,
                         );
 
                     // 3. 移出手牌
@@ -2205,6 +2214,7 @@ fn apply_card_effect(
     _camera_query: &Query<(&Camera, &GlobalTransform), With<Camera3d>>,
     environment: Option<&Environment>,
     heavenly_cinematic: &mut HeavenlyStrikeCinematic, // 新增
+    sfx_events: &mut EventWriter<PlaySfxEvent>,
 ) {
     let card_name = card.name.clone();
     match &card.effect {
@@ -2244,6 +2254,9 @@ fn apply_card_effect(
                     let target_id = enemy.id;
                     enemy.take_damage_with_env(final_damage, environment);
                     let is_dead = enemy.hp <= 0;
+                    
+                    // 播放受击音效
+                    sfx_events.send(PlaySfxEvent::new(SfxType::EnemyHit));
                 
                     for (entity, marker, transform) in enemy_sprite_query.iter() {
                         if marker.id == target_id {
@@ -2292,6 +2305,13 @@ fn apply_card_effect(
             }
             
             if hit_count > 0 {
+                // 播放音效
+                if card_name.contains("万剑归宗") {
+                    sfx_events.send(PlaySfxEvent::new(SfxType::ThousandSwords));
+                } else {
+                    sfx_events.send(PlaySfxEvent::new(SfxType::EnemyHit));
+                }
+
                 // ... (后面是特效和飘字，保持不变，但删掉末尾统一发的 Hit 动画)
                 for (_, _marker, impact) in enemy_impact_query.iter() {
                     let x_world = impact.home_position.x * 100.0;
@@ -2332,15 +2352,14 @@ fn apply_card_effect(
         CardEffect::GainBlock { amount } => {
             if let Ok((mut player, _)) = player_query.get_single_mut() {
                 player.gain_block_with_env(*amount, environment);
+                sfx_events.send(PlaySfxEvent::new(SfxType::ShieldUp));
                 info!("【卡牌】获得 {} 点护甲 (受环境修正)", amount);
-                effect_events.send(SpawnEffectEvent::new(EffectType::Shield, Vec3::new(-3.5, 0.5, 0.5)));
             }
         }
         CardEffect::Heal { amount } => {
             if let Ok((mut player, _)) = player_query.get_single_mut() {
                 player.heal(*amount);
-                info!("【卡牌】回复 {} 点生命", amount);
-                effect_events.send(SpawnEffectEvent::new(EffectType::Heal, Vec3::new(-3.5, -0.5, 0.5)));
+                sfx_events.send(PlaySfxEvent::new(SfxType::Heal));
             }
         }
         CardEffect::ChangeEnvironment { name } => {
@@ -2460,8 +2479,9 @@ pub fn check_combat_end_wrapper(
     victory_delay: ResMut<VictoryDelay>,
     asset_server: Res<AssetServer>,
     commands: Commands,
+    sfx_events: EventWriter<PlaySfxEvent>,
 ) {
-    check_combat_end(state, player_query, enemy_query, next_state, victory_events, victory_delay, asset_server, commands);
+    check_combat_end(state, player_query, enemy_query, next_state, victory_events, victory_delay, asset_server, commands, sfx_events);
 }
 
 /// 检查战斗是否结束
@@ -2474,6 +2494,7 @@ fn check_combat_end(
     mut victory_delay: ResMut<VictoryDelay>,
     asset_server: Res<AssetServer>, // 新增参数
     mut commands: Commands, // 确保有 commands
+    mut sfx_events: EventWriter<PlaySfxEvent>,
 ) {
     if **state != GameState::Combat { return; }
 
@@ -2506,9 +2527,11 @@ fn check_combat_end(
             let mut rng = rand::thread_rng();
             let gold_drop = rng.gen_range(10..26);
             player.gold += gold_drop;
+            sfx_events.send(PlaySfxEvent::new(SfxType::GoldGain));
             info!("【战斗】搜刮战场，获得 {} 块灵石！当前持有: {}", gold_drop, player.gold);
         }
 
+        sfx_events.send(PlaySfxEvent::new(SfxType::Victory));
         victory_events.send(VictoryEvent);
         victory_delay.active = true;
         victory_delay.elapsed = 0.0;

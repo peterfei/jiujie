@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use bevy::text::TextFont;
-use crate::components::Player;
+use crate::components::{Player, PlaySfxEvent, SfxType};
 use crate::states::GameState;
 
 /// 休息UI标记
@@ -222,6 +222,7 @@ pub fn handle_rest_interactions(
     mut result_area_query: Query<(&mut Node, Entity), (With<ResultText>, Without<ChoiceArea>)>,
     mut text_query: Query<&mut Text>,
     children_query: Query<&Children>,
+    mut sfx_events: EventWriter<PlaySfxEvent>,
 ) {
     let player = player_query.get_single().expect("必须有玩家实体");
 
@@ -252,6 +253,7 @@ pub fn handle_rest_interactions(
             // [关键修复] 立即执行治疗
             if let Ok(mut player_mut) = player_query.get_single_mut() {
                 player_mut.heal(heal_amount);
+                sfx_events.send(PlaySfxEvent::new(SfxType::Heal));
             }
             trigger_result(format!("运转周天，恢复了 {} 点道行！", heal_amount));
             return;
@@ -275,6 +277,7 @@ pub fn handle_rest_interactions(
                     let old_name = player_deck.cards[index].name.clone();
                     player_deck.cards[index].upgrade();
                     let new_name = player_deck.cards[index].name.clone();
+                    sfx_events.send(PlaySfxEvent::new(SfxType::LevelUp));
                     trigger_result(format!("{} 已进阶为 {}！", old_name, new_name));
                 }
             } else {
@@ -289,13 +292,13 @@ pub fn handle_rest_interactions(
 pub fn handle_leave_interaction(
     mut next_state: ResMut<NextState<GameState>>,
     mut map_progress: ResMut<crate::components::map::MapProgress>,
-    leave_buttons: Query<&Interaction, (Changed<Interaction>, With<LeaveButton>)>,
-    player_query: Query<(&crate::components::Player, &crate::components::Cultivation)>,
-    player_deck: Res<crate::components::PlayerDeck>,
-    relic_collection: Res<crate::components::relic::RelicCollection>,
+    leave_buttons: Query<&Interaction, (Changed<Interaction>, With<LeaveButton>) >,
+    mut sfx_events: EventWriter<PlaySfxEvent>,
 ) {
     for interaction in leave_buttons.iter() {
         if matches!(interaction, Interaction::Pressed) {
+            // 播放音效
+            sfx_events.send(PlaySfxEvent::new(SfxType::UiClick));
             // 只有在没切换状态时才执行
             info!("【洞府闭关】玩家点击离开，正在结算...");
             
