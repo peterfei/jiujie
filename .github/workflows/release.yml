@@ -48,6 +48,18 @@ jobs:
           cp ${{ matrix.binary_path }} build_dist/
           cp -r assets build_dist/
 
+      - name: 构建 Windows MSI 安装包
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          cargo install cargo-wix --version 0.3.10
+          # 初始化 wix 模板
+          cargo wix init
+          # 执行打包 (跳过重新构建二进制)
+          cargo wix --no-build
+          # 拷贝产物以便上传
+          cp target/wix/*.msi build_dist/
+
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:

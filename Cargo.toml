@@ -12,6 +12,10 @@ license = "MIT OR Apache-2.0"
 # TODO: 暂时开启 mp3 支持以验证效果，生产环境建议替换为 .ogg 格式并移除此 feature
 bevy = { version = "0.15", features = ["mp3"] }
 
+# 图像处理（用于加载图标）
+image = "0.25"
+winit = "0.30"
+
 # 随机数生成
 rand = "0.8"
 rand_core = "0.6"
@@ -55,3 +59,6 @@ strip = true
 # 基准测试优化
 [profile.bench]
 inherits = "release"
+
+[build-dependencies]
+winres = "0.1"

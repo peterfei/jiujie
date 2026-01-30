@@ -10,6 +10,8 @@ use bevy_card_battler::systems::{RelicPlugin, RelicUiPlugin, ShopPlugin, RestPlu
 use bevy::prelude::*;
 use bevy::render::RenderPlugin;
 use bevy::render::settings::{WgpuSettings, PowerPreference};
+use bevy::winit::WinitWindows;
+use winit::window::Icon;
 
 // ============================================================================
 // 主函数
@@ -36,20 +38,38 @@ fn main() {
             }.into(),
             ..default()
         }))
+        // 注册图标设置系统
+        .add_systems(Startup, set_window_icon)
         // 注册核心插件（包含状态注册）
         .add_plugins(CorePlugin)
-        // 注册主菜单插件
+        // ... (其他插件保持不变)
         .add_plugins(MenuPlugin)
-        // 注册游戏逻辑核心插件（已包含 Animation, Sprite, Particle, ScreenEffect 等插件）
         .add_plugins(GamePlugin)
-        // 注册商店插件
         .add_plugins(ShopPlugin)
-        // 注册休息插件
         .add_plugins(RestPlugin)
-        // 注册遗物插件
         .add_plugins(RelicPlugin)
-        // 注册遗物UI插件
         .add_plugins(RelicUiPlugin)
         // 运行应用
         .run();
+}
+
+/// 设置窗口图标
+fn set_window_icon(
+    windows: NonSend<WinitWindows>,
+) {
+    // 在 Bevy 0.15 中，主窗口可以通过 winit 获取
+    for window in windows.windows.values() {
+        // 使用 image 库读取图片（Bevy 默认包含 image 依赖）
+        // 我们直接读取 assets 目录下的 256px 图标
+        let path = std::path::Path::new("assets/icons/icon_256.png");
+        if let Ok(image) = image::open(path) {
+            let image = image.into_rgba8();
+            let (width, height) = image.dimensions();
+            let rgba = image.into_raw();
+            
+            if let Ok(icon) = Icon::from_rgba(rgba, width, height) {
+                window.set_window_icon(Some(icon));
+            }
+        }
+    }
 }
