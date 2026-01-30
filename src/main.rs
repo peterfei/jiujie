@@ -54,40 +54,37 @@ fn main() {
         .run();
 }
 
-/// 设置窗口图标
 fn set_window_icon(
-    windows: NonSend<WinitWindows>,
+    // 确保我们只执行一次，无论成功与否
     mut is_set: Local<bool>,
+    windows: Query<(Entity, &Window), With<bevy::window::PrimaryWindow>>,
+    winit_windows: NonSend<WinitWindows>,
 ) {
-    if *is_set { return; }
+    if *is_set {
+        return;
+    }
 
-    // 在 Bevy 0.15 中，主窗口可以通过 winit 获取
-    for window in windows.windows.values() {
-        let path = std::path::Path::new("assets/icons/icon_256.png");
-        
-        match image::open(path) {
-            Ok(image) => {
-                let image = image.into_rgba8();
-                let (width, height) = image.dimensions();
-                let rgba = image.into_raw();
-                
-                match Icon::from_rgba(rgba, width, height) {
-                    Ok(icon) => {
-                        window.set_window_icon(Some(icon));
-                        *is_set = true;
-                        info!("【发布准备】窗口图标已成功加载并注入识海");
-                    },
-                    Err(e) => error!("【图标失败】RGBA转换错误: {}", e),
-                }
-            },
-            Err(e) => {
-                // 如果是第一次尝试失败，我们不立即报错，因为可能还没准备好
-                static mut FAIL_COUNT: u32 = 0;
-                unsafe {
-                    FAIL_COUNT += 1;
-                    if FAIL_COUNT % 60 == 0 { // 每秒打印一次
-                        error!("【图标失败】无法在路径 {:?} 找到图标文件: {}", path, e);
+    for (entity, _) in windows.iter() {
+        // 标记为已尝试，防止下一帧重复执行
+        *is_set = true;
+
+        if let Some(winit_window) = winit_windows.get_window(entity) {
+            let icon_path = "assets/icons/icon_256.png";
+            let path = std::path::Path::new(icon_path);
+            
+            match image::open(path) {
+                Ok(image) => {
+                    let (width, height) = image.dimensions();
+                    let rgba = image.into_rgba8().into_vec();
+                    match Icon::from_rgba(rgba, width, height) {
+                        Ok(icon) => winit_window.set_window_icon(Some(icon)),
+                        Err(e) => warn!("【图标】创建图标对象失败: {:?}", e),
                     }
+                    info!("【图标】窗口图标已设置");
+                }
+                Err(e) => {
+                    // 仅在开发环境警告，发布环境如果缺失通常由exe资源处理
+                    warn!("【图标】无法加载图标文件 (路径: {}): {:?}。如果是开发环境 cargo run，请确保工作目录正确。", icon_path, e);
                 }
             }
         }
