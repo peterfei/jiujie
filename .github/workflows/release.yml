@@ -25,14 +25,19 @@ jobs:
           mkdir -p build_dist
           cp target/release/${{ env.PROJECT_NAME }}.exe build_dist/
           cp -r assets build_dist/
-      - name: 构建 MSI 安装包
+      - name: 安装打包工具 (cargo-wix)
+        if: matrix.os == 'windows-latest'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-wix
+
+      - name: 构建 Windows MSI 安装包
+        if: matrix.os == 'windows-latest'
         shell: powershell
         run: |
-          cargo install cargo-wix
-          # 将 WiX 工具链加入环境变量
+          # 确保 WiX 路径在环境路径中 (GitHub Runner 默认路径)
           $env:PATH += ";C:\Program Files (x86)\WiX Toolset v3.11\bin"
           cargo wix init
-          # 显式指定包名，不重新编译
           cargo wix --no-build
           if (Test-Path "target/wix/*.msi") {
             cp target/wix/*.msi build_dist/
