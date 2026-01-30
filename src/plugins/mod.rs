@@ -385,7 +385,7 @@ pub fn preload_assets(
         wolf: asset_server.load("textures/enemies/wolf.png"),
         spider: asset_server.load("textures/enemies/spider.png"),
         spirit: asset_server.load("textures/enemies/spirit.png"),
-        boss: asset_server.load("textures/enemies/demon.png"),
+        boss: asset_server.load("textures/enemies/boss.png"),
     };
     commands.insert_resource(character_assets);
 

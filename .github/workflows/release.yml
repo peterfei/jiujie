@@ -44,20 +44,53 @@ jobs:
       - name: 准备打包目录
         shell: bash
         run: |
-          mkdir -p build_dist
-          cp ${{ matrix.binary_path }} build_dist/
-          cp -r assets build_dist/
+          if [ "${{ matrix.os }}" == "macos-latest" ]; then
+            # 创建 macOS App Bundle 结构
+            APP_NAME="九界：渡劫"
+            mkdir -p "build_dist/${APP_NAME}.app/Contents/MacOS"
+            mkdir -p "build_dist/${APP_NAME}.app/Contents/Resources"
+            cp ${{ matrix.binary_path }} "build_dist/${APP_NAME}.app/Contents/MacOS/bevy_card_battler"
+            cp -r assets "build_dist/${APP_NAME}.app/Contents/Resources/"
+            cp assets/icons/icon.icns "build_dist/${APP_NAME}.app/Contents/Resources/AppIcon.icns"
+            
+            # 创建基础 PList (控制图标识别)
+            cat > "build_dist/${APP_NAME}.app/Contents/Info.plist" <<EOF
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+                <key>CFBundleExecutable</key>
+                <string>bevy_card_battler</string>
+                <key>CFBundleIconFile</key>
+                <string>AppIcon.icns</string>
+                <key>CFBundleIdentifier</key>
+                <string>com.peterfei.bevy-card-battler</string>
+                <key>CFBundleName</key>
+                <string>${APP_NAME}</string>
+                <key>CFBundlePackageType</key>
+                <string>APPL</string>
+                <key>LSMinimumSystemVersion</key>
+                <string>10.12</string>
+            </dict>
+            </plist>
+            EOF
+          else
+            # Windows 和 Linux 保持原有绿色包逻辑
+            mkdir -p build_dist
+            cp ${{ matrix.binary_path }} build_dist/
+            cp -r assets build_dist/
+          fi
 
-      - name: 构建 Windows MSI 安装包
+      - name: 构建 Windows MSI 安装包 (仅限 Windows)
         if: matrix.os == 'windows-latest'
         shell: bash
         run: |
           cargo install cargo-wix --version 0.3.10
-          # 初始化 wix 模板
-          cargo wix init
-          # 执行打包 (跳过重新构建二进制)
+          # 初始化 wix 模板 (如果不存在)
+          [ -d wix ] || cargo wix init
+          # 执行打包
           cargo wix --no-build
-          # 拷贝产物以便上传
+          # 将 MSI 拷贝到发布目录，此时 build_dist 下同时存在 .exe 和 .msi
           cp target/wix/*.msi build_dist/
 
       - name: 上传构建产物

@@ -38,8 +38,8 @@ fn main() {
             }.into(),
             ..default()
         }))
-        // 注册图标设置系统
-        .add_systems(Startup, set_window_icon)
+        // 注册图标设置系统 (监听窗口创建，确保句柄已就绪)
+        .add_systems(Update, set_window_icon.run_if(any_with_component::<Window>))
         // 注册核心插件（包含状态注册）
         .add_plugins(CorePlugin)
         // ... (其他插件保持不变)
@@ -56,19 +56,38 @@ fn main() {
 /// 设置窗口图标
 fn set_window_icon(
     windows: NonSend<WinitWindows>,
+    mut is_set: Local<bool>,
 ) {
+    if *is_set { return; }
+
     // 在 Bevy 0.15 中，主窗口可以通过 winit 获取
     for window in windows.windows.values() {
-        // 使用 image 库读取图片（Bevy 默认包含 image 依赖）
-        // 我们直接读取 assets 目录下的 256px 图标
         let path = std::path::Path::new("assets/icons/icon_256.png");
-        if let Ok(image) = image::open(path) {
-            let image = image.into_rgba8();
-            let (width, height) = image.dimensions();
-            let rgba = image.into_raw();
-            
-            if let Ok(icon) = Icon::from_rgba(rgba, width, height) {
-                window.set_window_icon(Some(icon));
+        
+        match image::open(path) {
+            Ok(image) => {
+                let image = image.into_rgba8();
+                let (width, height) = image.dimensions();
+                let rgba = image.into_raw();
+                
+                match Icon::from_rgba(rgba, width, height) {
+                    Ok(icon) => {
+                        window.set_window_icon(Some(icon));
+                        *is_set = true;
+                        info!("【发布准备】窗口图标已成功加载并注入识海");
+                    },
+                    Err(e) => error!("【图标失败】RGBA转换错误: {}", e),
+                }
+            },
+            Err(e) => {
+                // 如果是第一次尝试失败，我们不立即报错，因为可能还没准备好
+                static mut FAIL_COUNT: u32 = 0;
+                unsafe {
+                    FAIL_COUNT += 1;
+                    if FAIL_COUNT % 60 == 0 { // 每秒打印一次
+                        error!("【图标失败】无法在路径 {:?} 找到图标文件: {}", path, e);
+                    }
+                }
             }
         }
     }
