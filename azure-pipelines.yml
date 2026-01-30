@@ -9,8 +9,9 @@ trigger:
     include:
       - v*
 
-pool:
-  vmImage: 'windows-latest'
+# 使用自托管 Agent (Default 池)
+# 您的 NV6ads A10 v5 机器需要注册到这个池中
+pool: 'Default'
 
 variables:
   RUST_BACKTRACE: 1
