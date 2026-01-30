@@ -625,11 +625,12 @@ fn handle_button_clicks(
     for interaction in button_queries.p1().iter() {
         if matches!(interaction, Interaction::Pressed) {
             sfx_events.send(PlaySfxEvent::new(SfxType::UiClick));
-            info!("【主菜单】继续修行，尝试加载存档");
-            match crate::resources::save::GameStateSave::load_from_disk() {
-                Ok(save) => {
-                    // 使用 commands.queue 确保资源立即插入，防止 setup_map_ui 读取不到
-                    commands.queue(move |world: &mut World| {
+            info!("【主菜单】继续修行，正在读取识海存档...");
+            
+            // [性能优化] 将同步 IO 移入队列，防止主线程卡顿
+            commands.queue(move |world: &mut World| {
+                match crate::resources::save::GameStateSave::load_from_disk() {
+                    Ok(save) => {
                         world.insert_resource(save.player.clone());
                         world.insert_resource(save.cultivation.clone());
                         world.insert_resource(PlayerDeck { cards: save.deck.clone() });
@@ -640,17 +641,16 @@ fn handle_button_clicks(
                             save.current_map_layer,
                         ));
                         
-                        // 在同一个 queue 中设置状态，确保顺序
                         if let Some(mut next_state) = world.get_resource_mut::<NextState<GameState>>() {
                             next_state.set(GameState::Map);
                         }
-                    });
-                    info!("【存档系统】读档操作已排队，即将进入大地图");
+                        info!("【存档系统】读档成功，准备重返大地图");
+                    }
+                    Err(e) => {
+                        error!("【存档系统】读取识海失败: {}", e);
+                    }
                 }
-                Err(e) => {
-                    error!("【存档系统】加载失败: {}", e);
-                }
-            }
+            });
             return;
         }
     }
@@ -964,9 +964,10 @@ fn setup_combat_ui(
 ) {
     info!("【战斗】进入战场，众妖环伺");
     
-    // 防御性清理：确保没有任何残留的 UI (包括战斗和地图)
-    for entity in existing_ui.iter() { commands.entity(entity).despawn_recursive(); }
-    for entity in map_ui.iter() { commands.entity(entity).despawn_recursive(); }
+    // [性能优化] 仅清理地图残留 UI，不再清理自己的标记
+    for entity in map_ui.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
     
     if victory_delay.active { victory_delay.active = false; victory_delay.elapsed = 0.0; }
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
@@ -1257,7 +1258,7 @@ fn setup_combat_ui(
         }
     }
 
-    spawn_character_sprite(&mut commands, &character_assets, CharacterType::Player, Vec3::new(-350.0, -80.0, 10.0), Vec2::new(100.0, 140.0), None);
+    spawn_character_sprite(&mut commands, &character_assets, CharacterType::Player, Vec3::new(-350.0, -80.0, 10.0), Vec2::new(120.0, 140.0), None);
 
     // --- 法宝 3D 视觉生成 ---
     for (i, relic) in relic_collection.relic.iter().enumerate() {

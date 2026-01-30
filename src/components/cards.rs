@@ -549,6 +549,28 @@ pub fn create_starting_deck() -> Vec<Card> {
             CardRarity::Common,
             "textures/cards/skill.png",
         ),
+        // [新增] 初始天象大招
+        Card::new(
+            500,
+            "天象·引雷术",
+            "造成20点全场伤害。将环境变为【雷暴】：伤害提升 20%",
+            CardType::Attack,
+            1,
+            CardEffect::ChangeEnvironment { name: "雷暴".to_string() },
+            CardRarity::Uncommon,
+            "textures/cards/attack.png",
+        ),
+        // [新增] 初始万剑归宗
+        Card::new(
+            151,
+            "万剑归宗",
+            "剑气纵横！对全场造成10点伤害",
+            CardType::Attack,
+            2,
+            CardEffect::DealAoEDamage { amount: 10 },
+            CardRarity::Rare,
+            "textures/cards/attack.png",
+        ),
     ]
 }
 

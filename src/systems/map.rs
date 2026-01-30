@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use crate::states::GameState;
 use crate::components::{
     Player, Cultivation, PlayerDeck,
-    PlaySfxEvent, SfxType,
+    PlaySfxEvent, SfxType, CombatUiRoot,
     relic::RelicCollection,
     map::{MapProgress, MapNode, NodeType, MapNodeButton, RippleEffect, MapNodeContainer, MapUiRoot, BreakthroughButtonMarker, BreathingAnimation, OriginalSize, HoverEffect, EntranceAnimation, PulseAnimation, ConnectorDot}
 };
@@ -18,6 +18,9 @@ pub struct MapPlugin;
 
 impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
+        // 初始化地图进度资源（确保重新开始时不闪退）
+        app.init_resource::<MapProgress>();
+        
         // 在进入Map状态时设置地图UI
         app.add_systems(OnEnter(GameState::Map), (
             init_player,
@@ -44,13 +47,14 @@ fn cleanup_map_ui(mut commands: Commands, query: Query<Entity, With<MapUiRoot>>)
 }
 
 /// 设置地图UI
-fn setup_map_ui(
-    mut commands: Commands, 
-    asset_server: Res<AssetServer>, 
-    map_progress: Option<Res<MapProgress>>,
+pub fn setup_map_ui(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut map_progress: Option<ResMut<MapProgress>>, // 保持 ResMut
     player_query: Query<(&Player, &Cultivation)>,
     player_deck: Res<PlayerDeck>,
     relic_collection: Res<RelicCollection>,
+    existing_ui: Query<Entity, With<CombatUiRoot>>, 
 ) {
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
 
@@ -66,20 +70,33 @@ fn setup_map_ui(
                 current_map_node_id: progress.current_node_id,
                 current_map_layer: progress.current_layer,
             };
-            let _ = save.save_to_disk();
-            info!("【自动存档】进入寻仙觅缘，进度已同步至识海");
+            
+            // [关键优化] 使用 commands.queue 将磁盘 IO 移出主逻辑系统
+            // 这能防止同步 IO 阻塞导致的音频/状态机死锁
+            commands.queue(move |_world: &mut World| {
+                if let Err(e) = save.save_to_disk() {
+                    error!("【存档失败】无法持久化识海进度: {}", e);
+                } else {
+                    info!("【自动存档】进入寻仙觅缘，进度已同步至识海");
+                }
+            });
         }
     }
 
-    // 1. 健壮性处理地图进度
-    let mut progress = if let Some(p) = map_progress {
-        p.clone()
-    } else {
-        info!("【地图系统】未找到地图进度，创建新机缘地图");
-        let new_progress = MapProgress::default();
-        commands.insert_resource(new_progress.clone());
-        new_progress
-    };
+    // 1. 健壮性处理地图进度 (如果缺失则新建)
+    if map_progress.is_none() {
+        warn!("【地图】识海中未发现地图进度资源，正在推演全新命途...");
+        commands.insert_resource(MapProgress::default());
+        // 标记本次 setup 提前结束，依赖下一帧的资源就绪
+        return; 
+    }
+    let mut progress = map_progress.unwrap();
+
+    // [关键修复] 仅清理战斗相关的 UI，不要清理自己的标记
+    for entity in existing_ui.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+
 
     // 关键修复：如果进度中节点为空（可能由于坏档或旧版本存档），强制重新生成
     if progress.nodes.is_empty() {
@@ -423,13 +440,14 @@ fn spawn_map_node(
 fn handle_map_button_clicks(
     mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
-    mut map_progress: ResMut<MapProgress>,
+    map_progress_opt: Option<ResMut<MapProgress>>,
     player_query: Query<(&Player, &Cultivation)>,
     deck: Res<PlayerDeck>,
     relics: Res<RelicCollection>,
     button_queries: Query<(&Interaction, &MapNodeButton, &Node), Changed<Interaction>>,
     mut sfx_events: EventWriter<PlaySfxEvent>,
 ) {
+    let Some(mut map_progress) = map_progress_opt else { return; };
     for (interaction, node_btn, node) in button_queries.iter() {
         if matches!(interaction, Interaction::Pressed) {
             // 播放音效
