@@ -679,6 +679,14 @@ pub struct CombatState {
     pub cards_drawn_this_turn: bool,
 }
 
+/// 天象环境UI面板标记
+#[derive(Component)]
+pub struct EnvironmentPanel;
+
+/// 天象环境文本标记
+#[derive(Component)]
+pub struct EnvironmentText;
+
 /// 天象打击演出资源
 #[derive(Resource, Debug, Clone)]
 pub struct HeavenlyStrikeCinematic {

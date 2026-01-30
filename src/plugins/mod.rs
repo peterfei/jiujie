@@ -26,6 +26,7 @@ use crate::components::{
     EnemySpriteMarker, VictoryDelay, RelicCollection, Relic, RelicId,
     EnemyActionQueue, RelicObtainedEvent, RelicTriggeredEvent, HeavenlyStrikeCinematic,
     ParticleEmitter, PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker, DialogueLine,
+    EnvironmentPanel, EnvironmentText, // 新增导入
     Particle, DamageNumber, DamageEffectEvent, BlockIconMarker, BlockText, StatusIndicator,
     EnemyHpText, EnemyIntentText, EnemyStatusUi, PlayerHpText, PlayerEnergyText, PlayerBlockText,
     TopBar, TopBarHpText, TopBarGoldText, EnergyOrb, EndTurnButton, HandArea, CombatUiRoot,
@@ -40,8 +41,8 @@ pub struct CorePlugin;
 impl Plugin for CorePlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<GameState>();
-        // 应用启动时设置2D相机（用于渲染UI）
-        app.add_systems(Startup, (setup_camera, init_character_assets));
+        // 应用启动时设置相机与资产预热
+        app.add_systems(Startup, (setup_camera, preload_assets));
         // 初始化胜利延迟计时器
         app.insert_resource(VictoryDelay::new(1.5)); // 延迟1.5秒让粒子特效播放
 
@@ -127,7 +128,10 @@ impl Plugin for MenuPlugin {
         // 处理战斗界面按钮点击
         app.add_systems(Update, handle_combat_button_clicks.run_if(in_state(GameState::Combat)));
         // 更新战斗UI显示
-        app.add_systems(Update, update_combat_ui.run_if(in_state(GameState::Combat)));
+        app.add_systems(Update, (
+            update_combat_ui,
+            update_environment_ui, // 新增
+        ).run_if(in_state(GameState::Combat)));
         // 回合开始时抽牌
         app.add_systems(Update, draw_cards_on_turn_start.run_if(in_state(GameState::Combat)));
         // 处理手牌中的诅咒效果
@@ -352,10 +356,40 @@ fn setup_camera(mut commands: Commands) {
     ));
 }
 
-/// 初始化角色资源
-fn init_character_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.insert_resource(CharacterAssets::load(&asset_server));
-    info!("CharacterAssets 已加载");
+/// 资产预加载系统
+///
+/// 在启动时一次性加载所有核心资产，防止游戏过程中的 IO 抖动
+pub fn preload_assets(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+) {
+    info!("【发布准备】正在静默预热识海（资产预加载）...");
+
+    // 1. 预加载核心贴图
+    let _ = asset_server.load::<Image>("textures/logo.png");
+    let _ = asset_server.load::<Image>("textures/magic_circle.png");
+    let _ = asset_server.load::<Image>("textures/web_effect.png");
+    let _ = asset_server.load::<Image>("textures/cards/attack.png");
+    let _ = asset_server.load::<Image>("textures/cards/defense.png");
+    let _ = asset_server.load::<Image>("textures/cards/skill.png");
+
+    // 2. 预加载字体
+    let _ = asset_server.load::<Font>("fonts/Arial Unicode.ttf");
+
+    // 3. 初始化角色资产
+    let character_assets = CharacterAssets {
+        player_idle: asset_server.load("textures/cards/attack.png"),
+        player_attack: asset_server.load("textures/cards/attack.png"),
+        player_defense: asset_server.load("textures/cards/defense.png"),
+        player_prise: asset_server.load("textures/cards/prise.png"),
+        wolf: asset_server.load("textures/enemies/wolf.png"),
+        spider: asset_server.load("textures/enemies/spider.png"),
+        spirit: asset_server.load("textures/enemies/spirit.png"),
+        boss: asset_server.load("textures/enemies/demon.png"),
+    };
+    commands.insert_resource(character_assets);
+
+    info!("【发布准备】资产预热完成，系统进入巅峰性能模式");
 }
 
 /// 设置战斗环境（3D 地板和灯光）
@@ -1393,6 +1427,37 @@ fn setup_combat_ui(
         )).with_children(|parent| {
             parent.spawn((Text::new("手牌: 0/10"), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::srgba(1.0, 1.0, 1.0, 0.5)), Node { position_type: PositionType::Absolute, top: Val::Px(10.0), ..default() }, HandCountText));
         });
+
+        // --- [补全] 天象环境显示面板 ---
+        root.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(20.0),
+                bottom: Val::Px(260.0), // 位于牌区正上方
+                padding: UiRect::axes(Val::Px(15.0), Val::Px(8.0)),
+                flex_direction: FlexDirection::Column,
+                border: UiRect::all(Val::Px(1.5)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.05, 0.1, 0.85)),
+            BorderColor(Color::srgb(0.3, 0.6, 1.0)),
+            EnvironmentPanel,
+            ZIndex(60),
+        )).with_children(|p| {
+            p.spawn((
+                Text::new("当前天象: 【平湖】"),
+                TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() },
+                TextColor(Color::srgb(0.6, 0.9, 1.0)),
+                EnvironmentText,
+            ));
+            p.spawn((
+                Text::new("无修正"),
+                TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() },
+                TextColor(Color::srgb(0.5, 0.5, 0.5)),
+                EnvironmentText, // 复用标记以便同步更新
+            ));
+        });
+
         root.spawn(Node { position_type: PositionType::Absolute, left: Val::Px(30.0), bottom: Val::Px(30.0), ..default() }).with_children(|p| {
             p.spawn((Text::new("剑冢: 0"), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE), DrawPileText));
         });
@@ -1795,6 +1860,26 @@ pub fn process_enemy_turn_queue(
             }
             combat_state.cards_drawn_this_turn = false;
             combat_state.phase = TurnPhase::PlayerAction;
+        }
+    }
+}
+
+/// 更新天象环境显示
+fn update_environment_ui(
+    env: Option<Res<Environment>>,
+    mut text_query: Query<&mut Text, With<EnvironmentText>>,
+) {
+    if let Some(environment) = env {
+        let mut texts = text_query.iter_mut();
+        
+        // 第一个文本是名称
+        if let Some(mut text) = texts.next() {
+            text.0 = format!("当前天象: 【{}】", environment.name);
+        }
+        
+        // 第二个文本是描述
+        if let Some(mut text) = texts.next() {
+            text.0 = environment.description.clone();
         }
     }
 }

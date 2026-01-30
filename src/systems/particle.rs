@@ -125,27 +125,48 @@ fn spawn_particle_entity(commands: &mut Commands, assets: &ParticleAssets, parti
     let ui_x = 640.0 + particle.position.x;
     let ui_y = 360.0 - particle.position.y;
     let handle = assets.textures.get(&particle.effect_type).unwrap_or(&assets.default_texture).clone();
-    let (w, h) = if particle.effect_type == EffectType::WanJian { (size, size * 4.0) } else { (size, size) };
+    
+    // [优化] 万剑归宗的长宽比在 Transform 中处理
     let initial_rotation = if particle.effect_type == EffectType::WanJian || particle.effect_type == EffectType::SwordEnergy {
         particle.rotation - std::f32::consts::PI / 2.0
     } else {
         particle.rotation
     };
 
-    commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            left: Val::Px(ui_x - w/2.0), top: Val::Px(ui_y - h/2.0),
-            width: Val::Px(w), height: Val::Px(h), ..default()
-        },
-        ImageNode::new(handle).with_color(particle.start_color),
-        PickingBehavior::IGNORE, // [关键修复] 粒子不应拦截 UI 鼠标事件
-        ZIndex(5),
-        particle,
-        ParticleMarker,
-        Transform::from_translation(Vec3::new(0.0, 0.0, rand::random::<f32>() * 0.01)).with_rotation(Quat::from_rotation_z(initial_rotation)),
-        GlobalTransform::default(),
-    )).id()
+    if particle.effect_type == EffectType::WanJian {
+        let (w, h) = (size * 1.83, size);
+        commands.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(ui_x - w/2.0), top: Val::Px(ui_y - h/2.0),
+                width: Val::Px(w), height: Val::Px(h), ..default()
+            },
+            ImageNode::new(handle).with_color(particle.start_color),
+            PickingBehavior::IGNORE,
+            ZIndex(5),
+            particle,
+            ParticleMarker,
+            Transform::from_translation(Vec3::new(0.0, 0.0, rand::random::<f32>() * 0.01)).with_rotation(Quat::from_rotation_z(initial_rotation)),
+            GlobalTransform::default(),
+        )).id()
+    } else {
+        commands.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(ui_x), top: Val::Px(ui_y),
+                width: Val::Px(1.0), height: Val::Px(1.0), ..default()
+            },
+            ImageNode::new(handle).with_color(particle.start_color),
+            PickingBehavior::IGNORE,
+            ZIndex(5),
+            particle,
+            ParticleMarker,
+            Transform::from_translation(Vec3::new(0.0, 0.0, rand::random::<f32>() * 0.01))
+                .with_scale(Vec3::splat(size))
+                .with_rotation(Quat::from_rotation_z(initial_rotation)),
+            GlobalTransform::default(),
+        )).id()
+    }
 }
 
 pub fn update_emitters(
@@ -271,7 +292,7 @@ pub fn update_particles(
     camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
 ) {
     let delta = time.delta_secs();
-    for (entity, mut p, mut node, mut image, mut visibility, mut transform) in query.iter_mut() {
+    for (entity, mut p, mut _node, mut image, mut visibility, mut transform) in query.iter_mut() {
         p.elapsed += delta;
         let global_prog = (p.elapsed / p.lifetime).min(1.0);
 
@@ -297,12 +318,28 @@ pub fn update_particles(
             else { let rs = p.rotation_speed; p.rotation += rs * delta; }
         }
 
-        let size = p.current_size();
-        let (w, h) = if p.effect_type == EffectType::WanJian { (size * 1.83, size) } else { (size, size) };
-        let ui_x = 640.0 + p.position.x;
-        let ui_y = 360.0 - p.position.y;
-        node.left = Val::Px(ui_x - w/2.0); node.top = Val::Px(ui_y - h/2.0);
-        node.width = Val::Px(w); node.height = Val::Px(h);
+        // [性能分流] 万剑归宗涉及复杂 UI 轨迹，需使用 Node 布局；普通粒子使用 Transform 优化
+        let current_size = p.current_size();
+        if p.effect_type == EffectType::WanJian {
+            let (w, h) = (current_size * 1.83, current_size); // 还原经典长宽比
+            let ui_x = 640.0 + p.position.x;
+            let ui_y = 360.0 - p.position.y;
+            _node.left = Val::Px(ui_x - w/2.0); 
+            _node.top = Val::Px(ui_y - h/2.0);
+            _node.width = Val::Px(w); 
+            _node.height = Val::Px(h);
+            
+            transform.scale = Vec3::ONE; // 缩放已由 Node 处理
+            transform.translation = Vec3::ZERO;
+        } else {
+            let ui_x = 640.0 + p.position.x;
+            let ui_y = 360.0 - p.position.y;
+            transform.translation.x = ui_x;
+            transform.translation.y = ui_y;
+            transform.scale = Vec3::splat(current_size);
+        }
+        
+        transform.rotation = Quat::from_rotation_z(p.rotation);
         
         // 针对 CloudMist 优化平滑淡入淡出
         if p.effect_type == EffectType::CloudMist {
@@ -317,8 +354,6 @@ pub fn update_particles(
         } else {
             image.color = p.current_color();
         }
-        
-        transform.rotation = Quat::from_rotation_z(p.rotation);
 
         if p.is_dead() { commands.entity(entity).despawn_recursive(); continue; }
     }

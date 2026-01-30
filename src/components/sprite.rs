@@ -136,6 +136,8 @@ pub struct CharacterAssets {
     pub player_idle: Handle<Image>,
     /// 玩家攻击图
     pub player_attack: Handle<Image>,
+    /// 玩家防御图
+    pub player_defense: Handle<Image>,
     /// 玩家祈祷图 (天象施法)
     pub player_prise: Handle<Image>,
     /// 嗜血妖狼图
@@ -154,8 +156,10 @@ impl CharacterAssets {
         Self {
             player_idle: asset_server.load("textures/cards/attack.png"),
             player_attack: asset_server.load("textures/cards/attack.png"),
+            player_defense: asset_server.load("textures/cards/defense.png"),
             player_prise: asset_server.load("textures/cards/prise.png"),
             wolf: asset_server.load("textures/enemies/wolf.png"),
+
             spider: asset_server.load("textures/enemies/spider.png"),
             spirit: asset_server.load("textures/enemies/spirit.png"),
             boss: asset_server.load("textures/enemies/boss.png"),

@@ -8,6 +8,8 @@
 use bevy_card_battler::plugins::{CorePlugin, MenuPlugin, GamePlugin};
 use bevy_card_battler::systems::{RelicPlugin, RelicUiPlugin, ShopPlugin, RestPlugin};
 use bevy::prelude::*;
+use bevy::render::RenderPlugin;
+use bevy::render::settings::{WgpuSettings, PowerPreference};
 
 // ============================================================================
 // 主函数
@@ -22,11 +24,18 @@ fn main() {
                 primary_window: Some(Window {
                     title: format!("{} v{}", bevy_card_battler::GAME_NAME, bevy_card_battler::VERSION),
                     resolution: (1280., 720.).into(),
+                    present_mode: bevy::window::PresentMode::AutoNoVsync, // 减少输入延迟
                     ..default()
                 }),
                 ..default()
             },
-        ))
+        ).set(RenderPlugin {
+            render_creation: WgpuSettings {
+                power_preference: PowerPreference::HighPerformance,
+                ..default()
+            }.into(),
+            ..default()
+        }))
         // 注册核心插件（包含状态注册）
         .add_plugins(CorePlugin)
         // 注册主菜单插件

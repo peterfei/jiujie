@@ -351,11 +351,16 @@ fn handle_animation_events(
     for event in events.read() {
         if let Ok((mut sprite, is_player)) = query.get_mut(event.target) {
             match event.animation {
-                AnimationState::Attack => {
-                    sprite.set_attack(4, 0.3);
-                }
-                AnimationState::ImperialSword => {
-                    sprite.set_attack(8, 0.5);
+                AnimationState::Attack | AnimationState::ImperialSword => {
+                    // 如果是玩家，切换到攻击贴图
+                    if is_player.is_some() {
+                        sprite.texture = character_assets.player_attack.clone();
+                    }
+                    if event.animation == AnimationState::Attack {
+                        sprite.set_attack(4, 0.3);
+                    } else {
+                        sprite.set_attack(8, 0.5);
+                    }
                 }
                 AnimationState::HeavenCast => {
                     // 天象施法：如果是玩家，切换到祈祷贴图
@@ -365,6 +370,10 @@ fn handle_animation_events(
                     sprite.set_attack(6, 3.5);
                 }
                 AnimationState::Defense => {
+                    // 防御功法：如果是玩家，切换到防御贴图
+                    if is_player.is_some() {
+                        sprite.texture = character_assets.player_defense.clone();
+                    }
                     sprite.set_attack(4, 0.3);
                 }
                 AnimationState::DemonAttack => {
