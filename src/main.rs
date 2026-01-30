@@ -33,6 +33,7 @@ fn main() {
             },
         ).set(RenderPlugin {
             render_creation: WgpuSettings {
+                // 优先高性能，但不再强制，确保兼容性
                 power_preference: PowerPreference::HighPerformance,
                 ..default()
             }.into(),

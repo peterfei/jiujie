@@ -442,7 +442,7 @@ fn update_breath_animations(
 /// 同步系统：将 2D 贴图同步到 3D 立牌材质
 fn sync_2d_to_3d_render(
     mut commands: Commands,
-    sprite_query: Query<(Entity, &CharacterSprite, &Transform, Option<&Combatant3d>, Option<&MeshMaterial3d<StandardMaterial>>, Has<RelicVisualMarker>), (With<SpriteMarker>, Changed<CharacterSprite>)>,
+    sprite_query: Query<(Entity, &CharacterSprite, &Transform, Option<&Combatant3d>, Option<&MeshMaterial3d<StandardMaterial>>, Has<RelicVisualMarker>), With<SpriteMarker>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -471,17 +471,16 @@ fn sync_2d_to_3d_render(
                 materials.add(StandardMaterial {
                     base_color: Color::WHITE,
                     base_color_texture: Some(char_sprite.texture.clone()),
-                    emissive: LinearRgba::WHITE, 
-                    emissive_texture: Some(char_sprite.texture.clone()),
-                    reflectance: 0.0,
-                    alpha_mode: AlphaMode::Mask(0.5), 
+                    // 移除强制白光发光，改用 unlit 确保在所有显卡上亮度一致
+                    unlit: true,
+                    alpha_mode: AlphaMode::Blend, 
                     cull_mode: None,
                     double_sided: true,
                     ..default()
                 })
             };
 
-            let home_pos = Vec3::new(x_3d, 0.05, z_3d + 0.1);
+            let home_pos = Vec3::new(x_3d, 0.2, z_3d + 0.1);
             let mut entity_cmd = commands.entity(entity);
             entity_cmd.insert((
                 Combatant3d { facing_right: true },

@@ -8,17 +8,20 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
         include:
           - os: ubuntu-latest
             artifact_name: bevy_card_battler_linux
+            binary_name: bevy_card_battler
             binary_path: target/release/bevy_card_battler
           - os: windows-latest
             artifact_name: bevy_card_battler_windows
+            binary_name: bevy_card_battler.exe
             binary_path: target/release/bevy_card_battler.exe
           - os: macos-latest
             artifact_name: bevy_card_battler_macos
+            binary_name: bevy_card_battler
             binary_path: target/release/bevy_card_battler
 
     runs-on: ${{ matrix.os }}
@@ -53,7 +56,7 @@ jobs:
             cp -r assets "build_dist/${APP_NAME}.app/Contents/Resources/"
             cp assets/icons/icon.icns "build_dist/${APP_NAME}.app/Contents/Resources/AppIcon.icns"
             
-            # 创建基础 PList (控制图标识别)
+            # 创建基础 PList
             cat > "build_dist/${APP_NAME}.app/Contents/Info.plist" <<EOF
             <?xml version="1.0" encoding="UTF-8"?>
             <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -86,11 +89,11 @@ jobs:
         shell: bash
         run: |
           cargo install cargo-wix --version 0.3.10
-          # 初始化 wix 模板 (如果不存在)
+          # 初始化 wix 模板
           [ -d wix ] || cargo wix init
-          # 执行打包
+          # 执行打包 (复用已编译的 .exe)
           cargo wix --no-build
-          # 将 MSI 拷贝到发布目录，此时 build_dist 下同时存在 .exe 和 .msi
+          # 拷贝产物
           cp target/wix/*.msi build_dist/
 
       - name: 上传构建产物
