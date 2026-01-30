@@ -5,8 +5,13 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+env:
+  PROJECT_NAME: bevy_card_battler
+  DISPLAY_NAME: 九界：渡劫
+
 jobs:
   build:
+    name: Build for ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -33,7 +38,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: 安装 Linux 依赖 (仅 Ubuntu)
-        if: runner.os == 'Linux'
+        if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y g++ pkg-config libx11-dev libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
@@ -41,51 +46,51 @@ jobs:
       - name: 执行 Release 编译
         run: cargo build --release
 
-      - name: 准备打包目录
+      - name: 准备打包目录 (macOS Bundle)
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          mkdir -p "build_dist/${{ env.DISPLAY_NAME }}.app/Contents/MacOS"
+          mkdir -p "build_dist/${{ env.DISPLAY_NAME }}.app/Contents/Resources"
+          cp target/release/${{ env.PROJECT_NAME }} "build_dist/${{ env.DISPLAY_NAME }}.app/Contents/MacOS/"
+          cp -r assets "build_dist/${{ env.DISPLAY_NAME }}.app/Contents/Resources/"
+          [ -f assets/icons/icon.icns ] && cp assets/icons/icon.icns "build_dist/${{ env.DISPLAY_NAME }}.app/Contents/Resources/AppIcon.icns"
+          
+          cat > "build_dist/${{ env.DISPLAY_NAME }}.app/Contents/Info.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>${{ env.PROJECT_NAME }}</string>
+              <key>CFBundleIconFile</key>
+              <string>AppIcon.icns</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.peterfei.bevy-card-battler</string>
+              <key>CFBundleName</key>
+              <string>${{ env.DISPLAY_NAME }}</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>10.12</string>
+          </dict>
+          </plist>
+          EOF
+
+      - name: 准备打包目录 (Windows/Linux)
+        if: matrix.os != 'macos-latest'
         shell: bash
         run: |
           mkdir -p build_dist
-          if [ "${{ matrix.os }}" == "macos-latest" ]; then
-            # macOS App Bundle 逻辑
-            APP_NAME="九界：渡劫"
-            mkdir -p "build_dist/${APP_NAME}.app/Contents/MacOS"
-            mkdir -p "build_dist/${APP_NAME}.app/Contents/Resources"
-            cp target/release/bevy_card_battler "build_dist/${APP_NAME}.app/Contents/MacOS/"
-            cp -r assets "build_dist/${APP_NAME}.app/Contents/Resources/"
-            [ -f assets/icons/icon.icns ] && cp assets/icons/icon.icns "build_dist/${APP_NAME}.app/Contents/Resources/AppIcon.icns"
-            
-            cat > "build_dist/${APP_NAME}.app/Contents/Info.plist" <<EOF
-            <?xml version="1.0" encoding="UTF-8"?>
-            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-            <plist version="1.0">
-            <dict>
-                <key>CFBundleExecutable</key>
-                <string>bevy_card_battler</string>
-                <key>CFBundleIconFile</key>
-                <string>AppIcon.icns</string>
-                <key>CFBundleIdentifier</key>
-                <string>com.peterfei.bevy-card-battler</string>
-                <key>CFBundleName</key>
-                <string>九界：渡劫</string>
-                <key>CFBundlePackageType</key>
-                <string>APPL</string>
-                <key>LSMinimumSystemVersion</key>
-                <string>10.12</string>
-            </dict>
-            </plist>
-            EOF
-          else
-            # Windows / Linux 绿色包逻辑
-            cp ${{ matrix.binary_path }} build_dist/
-            cp -r assets build_dist/
-          fi
+          cp ${{ matrix.binary_path }} build_dist/
+          cp -r assets build_dist/
 
       - name: 构建 Windows MSI 安装包 (仅限 Windows)
         if: matrix.os == 'windows-latest'
         shell: bash
         run: |
           cargo install cargo-wix --version 0.3.10
-          # 动态初始化并打包
+          # 初始化并针对当前 Release 产物打包
           cargo wix init
           cargo wix --no-build
           cp target/wix/*.msi build_dist/
