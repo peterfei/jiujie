@@ -12,6 +12,7 @@ use bevy::render::RenderPlugin;
 use bevy::render::settings::{WgpuSettings, PowerPreference};
 use bevy::winit::WinitWindows;
 use winit::window::Icon;
+use image::GenericImageView;
 
 // ============================================================================
 // 主函数
