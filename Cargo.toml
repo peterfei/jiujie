@@ -8,35 +8,10 @@ repository = "https://github.com/peterfei/bevy_card_battler"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-# Bevy 0.15.x - 移除默认特性，精准控制以避免跨平台链接错误
-bevy = { version = "0.15", default-features = false, features = [
-    "animation",
-    "bevy_asset",
-    "bevy_audio",
-    "bevy_color",
-    "bevy_core_pipeline",
-    "bevy_gilrs",
-    "bevy_gizmos",
-    "bevy_gltf",
-    "bevy_render",
-    "bevy_scene",
-    "bevy_sprite",
-    "bevy_text",
-    "bevy_ui",
-    "bevy_winit",
-    "multi_threaded",
-    "png",
-    "hdr",
-    "vorbis", # 统一使用 ogg vorbis
-    "mp3",
-    "x11",
-    "tonemapping_luts",
-    "default_font",
-    "bevy_pbr",
-    "bevy_picking",
-    "bevy_state"
-] }
+# Bevy 0.15.x - 移除 x11，恢复跨平台自动适配
+bevy = { version = "0.15", features = ["mp3", "vorbis"] }
 
+# 图像处理
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 rand = "0.8"
 rand_core = "0.6"

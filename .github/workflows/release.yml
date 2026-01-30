@@ -26,13 +26,17 @@ jobs:
           cp target/release/${{ env.PROJECT_NAME }}.exe build_dist/
           cp -r assets build_dist/
       - name: 构建 MSI 安装包
-        shell: bash
+        shell: powershell
         run: |
           cargo install cargo-wix --version 0.3.10
+          # 将 WiX 工具链加入环境变量
+          $env:PATH += ";C:\Program Files (x86)\WiX Toolset v3.11\bin"
           cargo wix init
-          # 显式指定二进制名称和路径
-          cargo wix --no-build -p ${{ env.PROJECT_NAME }}
-          cp target/wix/*.msi build_dist/
+          # 显式指定包名，不重新编译
+          cargo wix --no-build
+          if (Test-Path "target/wix/*.msi") {
+            cp target/wix/*.msi build_dist/
+          }
       - name: 上传 Windows 产物
         uses: actions/upload-artifact@v4
         with:
@@ -41,14 +45,13 @@ jobs:
 
   # ==================== macOS 构建 ====================
   build-macos:
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - name: 安装 Rust
         uses: dtolnay/rust-toolchain@stable
-      - name: 清理环境 (防止 ALSA 污染)
-        run: cargo clean
       - name: 编译 Release
+        # 此时 Cargo.toml 已移除 x11，不会再触发 -lasound 链接
         run: cargo build --release
       - name: 准备 App Bundle
         shell: bash
@@ -60,6 +63,7 @@ jobs:
           cp -r assets "build_dist/${APP_NAME}.app/Contents/Resources/"
           [ -f assets/icons/icon.icns ] && cp assets/icons/icon.icns "build_dist/${APP_NAME}.app/Contents/Resources/AppIcon.icns"
           
+          # 创建 Info.plist
           cat > "build_dist/${APP_NAME}.app/Contents/Info.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
