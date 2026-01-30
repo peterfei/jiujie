@@ -17,8 +17,6 @@ jobs:
       - uses: actions/checkout@v4
       - name: 安装 Rust
         uses: dtolnay/rust-toolchain@stable
-      - name: 缓存依赖
-        uses: Swatinem/rust-cache@v2
       - name: 编译 Release
         run: cargo build --release
       - name: 准备打包目录
@@ -31,9 +29,9 @@ jobs:
         shell: bash
         run: |
           cargo install cargo-wix --version 0.3.10
-          # 初始化并指定二进制路径，确保 wix 能找到文件
           cargo wix init
-          cargo wix --no-build
+          # 显式指定二进制名称和路径
+          cargo wix --no-build -p ${{ env.PROJECT_NAME }}
           cp target/wix/*.msi build_dist/
       - name: 上传 Windows 产物
         uses: actions/upload-artifact@v4
@@ -43,15 +41,14 @@ jobs:
 
   # ==================== macOS 构建 ====================
   build-macos:
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - name: 安装 Rust
         uses: dtolnay/rust-toolchain@stable
-      - name: 缓存依赖
-        uses: Swatinem/rust-cache@v2
+      - name: 清理环境 (防止 ALSA 污染)
+        run: cargo clean
       - name: 编译 Release
-        # 显式禁止 ALSA 链接，确保 macOS 纯净编译
         run: cargo build --release
       - name: 准备 App Bundle
         shell: bash
@@ -96,8 +93,6 @@ jobs:
       - uses: actions/checkout@v4
       - name: 安装 Rust
         uses: dtolnay/rust-toolchain@stable
-      - name: 缓存依赖
-        uses: Swatinem/rust-cache@v2
       - name: 安装依赖
         run: |
           sudo apt-get update
