@@ -11,15 +11,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             artifact_name: bevy_card_battler_linux
-            binary_name: bevy_card_battler
+            binary_path: target/release/bevy_card_battler
           - os: windows-latest
             artifact_name: bevy_card_battler_windows
-            binary_name: bevy_card_battler.exe
+            binary_path: target/release/bevy_card_battler.exe
           - os: macos-latest
             artifact_name: bevy_card_battler_macos
-            binary_name: bevy_card_battler
+            binary_path: target/release/bevy_card_battler
 
     runs-on: ${{ matrix.os }}
 
@@ -33,7 +33,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: 安装 Linux 依赖 (仅 Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y g++ pkg-config libx11-dev libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
@@ -76,7 +76,7 @@ jobs:
             EOF
           else
             # Windows / Linux 绿色包逻辑
-            cp target/release/${{ matrix.binary_name }} build_dist/
+            cp ${{ matrix.binary_path }} build_dist/
             cp -r assets build_dist/
           fi
 
@@ -85,7 +85,7 @@ jobs:
         shell: bash
         run: |
           cargo install cargo-wix --version 0.3.10
-          # 动态初始化并打包，不使用硬编码路径
+          # 动态初始化并打包
           cargo wix init
           cargo wix --no-build
           cp target/wix/*.msi build_dist/
