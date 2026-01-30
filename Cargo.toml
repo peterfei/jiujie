@@ -61,4 +61,7 @@ strip = true
 inherits = "release"
 
 [build-dependencies]
+# 通用构建依赖（如有）
+
+[target.'cfg(windows)'.build-dependencies]
 winres = "0.1"

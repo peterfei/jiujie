@@ -55,13 +55,8 @@ fn handle_sfx_events(
             _ => {}
         }
 
-        // --- [安全门禁] 物理文件存在性检查 ---
+        // 获取音效文件路径
         let sound_path = event.sfx_type.file_path();
-        let full_path = format!("assets/{}", sound_path);
-        if !std::path::Path::new(&full_path).exists() {
-            warn!("【音效】文件缺失，跳过播放: {}", full_path);
-            continue;
-        }
 
         // 计算实际音量
         let base_volume = event.get_volume();

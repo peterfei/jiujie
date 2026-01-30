@@ -480,7 +480,7 @@ fn sync_2d_to_3d_render(
                 })
             };
 
-            let home_pos = Vec3::new(x_3d, 0.2, z_3d + 0.1);
+            let home_pos = Vec3::new(x_3d, 0.8, z_3d + 0.1);
             let mut entity_cmd = commands.entity(entity);
             entity_cmd.insert((
                 Combatant3d { facing_right: true },
@@ -623,6 +623,9 @@ pub fn spawn_character_sprite(
         Transform::from_translation(position),
         CharacterSprite::new(texture, size), 
         SpriteMarker,
+        Visibility::default(),
+        InheritedVisibility::default(),
+        ViewVisibility::default(),
     ));
 
     match character_type {
