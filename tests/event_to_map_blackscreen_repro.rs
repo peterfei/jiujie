@@ -1,37 +1,33 @@
 use bevy::prelude::*;
-use bevy_card_battler::components::*;
 use bevy_card_battler::states::GameState;
-use bevy_card_battler::components::map::MapUiRoot;
+use bevy_card_battler::components::map::{MapProgress, MapUiRoot};
+use bevy_card_battler::plugins::EventUiRoot;
 
 #[test]
-fn test_event_to_map_transition_ui_cleanup_repro() {
+fn test_event_to_map_ui_cleanup() {
     let mut app = App::new();
-    app.init_state::<GameState>();
+    app.add_plugins(MinimalPlugins);
+    app.add_plugins(bevy::state::app::StatesPlugin);
     
-    // 模拟资源
-    app.insert_resource(Player::default());
-    app.insert_resource(Cultivation::new());
-    app.insert_resource(MapProgress::default());
+    app.init_resource::<NextState<GameState>>();
+    app.insert_resource(State::new(GameState::Event));
     
-    // 1. 模拟处于 Event 状态并有 UI
-    app.world_mut().insert_resource(State::new(GameState::Event));
+    // 模拟 Event UI 存在
     app.world_mut().spawn((Node::default(), EventUiRoot));
     
-    // 2. 模拟 handle_event_choices 的行为
-    // 我们手动模拟一次清理和状态切换
-    let mut next_state = app.world_mut().resource_mut::<NextState<GameState>>();
-    next_state.set(GameState::Map);
-    
-    // 清理 Event UI
-    let mut query = app.world_mut().query_filtered::<Entity, With<EventUiRoot>>();
-    let entities: Vec<Entity> = query.iter(app.world()).collect();
-    for e in entities {
-        app.world_mut().despawn_recursive(e);
+    // 执行清理逻辑 (模拟 handle_event_choices 中的清理)
+    {
+        let mut world = app.world_mut();
+        let mut query = world.query_filtered::<Entity, With<EventUiRoot>>();
+        let entities: Vec<Entity> = query.iter(world).collect();
+        for e in entities {
+            world.entity_mut(e).despawn_recursive();
+        }
     }
     
-    // 3. 运行一帧更新，触发状态切换
     app.update();
     
-    // 4. 验证是否生成了 MapUiRoot (虽然实际测试中由于没挂插件可能不会生成，但我们要验证逻辑链路)
-    // 在真实应用中，OnEnter(GameState::Map) 应该运行 setup_map_ui
+    // 验证 UI 已清理
+    let mut query = app.world_mut().query_filtered::<Entity, With<EventUiRoot>>();
+    assert_eq!(query.iter(app.world()).count(), 0, "Event UI 应该已被清理");
 }

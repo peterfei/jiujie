@@ -75,9 +75,11 @@ fn test_spider_attack_triggers_web_effects() {
     println!("✓ 设置敌人行动队列: processing=true, 1个敌人");
 
     // 6. 运行足够帧数以确保计时器完成
-    println!("开始运行 {} 帧...", 10);
-    advance_frames(&mut app, 10);
-    println!("✓ 完成 10 帧更新");
+    println!("开始运行 30 帧以确保特效触发...");
+    for _ in 0..30 {
+        app.update();
+    }
+    println!("✓ 完成更新");
 
     // 检查队列状态
     let queue = app.world().get_resource::<EnemyActionQueue>();

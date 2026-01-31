@@ -5,9 +5,18 @@ use bevy_card_battler::states::GameState;
 
 #[test]
 fn test_integration_victory_gold_reward_flow() {
-    let mut app = App::new();
-    app.add_plugins(MinimalPlugins);
-    app.add_plugins(bevy::state::app::StatesPlugin); // 关键：增加状态插件
+        let mut app = App::new();
+            app.add_plugins(MinimalPlugins);
+            app.add_plugins(bevy::asset::AssetPlugin::default());
+            app.add_plugins(bevy::render::texture::ImagePlugin::default()); // 必须添加
+                app.add_plugins(bevy::text::TextPlugin::default());
+                app.init_asset::<TextureAtlasLayout>(); // 必须添加
+                app.add_plugins(bevy::state::app::StatesPlugin);
+            
+            
+            app.add_event::<bevy_card_battler::components::audio::PlaySfxEvent>();
+        
+     // 关键：增加状态插件
     app.init_state::<GameState>();
     app.add_event::<VictoryEvent>();
     app.insert_resource(VictoryDelay::new(1.0));

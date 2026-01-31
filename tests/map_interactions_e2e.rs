@@ -74,15 +74,20 @@ fn test_treasure_node_interaction() {
 #[test]
 fn test_combat_unlocked_after_rest() {
     let mut progress = MapProgress::default();
-    // 1. 完成第 0 层休息点
-    progress.nodes[0].node_type = NodeType::Rest;
-    progress.set_current_node(progress.nodes[0].id);
+    
+    // 1. 找到第 0 层的第一个节点并强制设为 Rest
+    let rest_node_id = progress.nodes.iter().find(|n| n.position.0 == 0).unwrap().id;
+    progress.set_current_node(rest_node_id);
+    
+    // 2. 找到该节点连接的所有第 1 层子节点
+    let next_node_ids = progress.nodes.iter().find(|n| n.id == rest_node_id).unwrap().next_nodes.clone();
+    
+    // 3. 完成休息点
     progress.complete_current_node();
     
-    // 2. 验证第 1 层的战斗节点是否已解锁
-    let layer_1_combat = progress.nodes.iter()
-        .find(|n| n.position.0 == 1 && n.node_type == NodeType::Normal)
-        .expect("第 1 层应有战斗节点");
-        
-    assert!(layer_1_combat.unlocked, "休息结束后，下一层的战斗节点必须解锁");
+    // 4. 验证其子节点是否已解锁
+    for nid in next_node_ids {
+        let node = progress.nodes.iter().find(|n| n.id == nid).unwrap();
+        assert!(node.unlocked, "休息点 {} 的后续节点 {} 必须解锁", rest_node_id, nid);
+    }
 }

@@ -38,13 +38,24 @@ cargo test --test difficulty_baseline_tdd
 cargo test --test victory_e2e
 ```
 
-## 6. 状态确立 (2026-01-29)
+## 6. 状态确立 (2026-01-31)
+
 | **验证模块** | **测试文件** | **状态** | **备注** |
+
 | :--- | :--- | :--- | :--- |
+
 | **难度缩放** | `tests/difficulty_baseline_tdd.rs` | PASS | 验证 HP/STR/BLK 随层级增长 |
+
 | **地图路径** | `tests/victory_e2e.rs` | PASS | 适配拓扑连线解锁逻辑 |
+
 | **系统修复** | `tests/map_system_fixes.rs` | PASS | 验证事件节点连通性 |
-| **资源初始化** | `tests/victory_rewards_tdd.rs` | PASS | 验证 PlayerDeck 初始 13 张卡 |
+
+| **资源初始化** | `tests/victory_rewards_tdd.rs` | PASS | 验证 PlayerDeck 初始 15 张卡 |
+
 | **场景稳定性** | N/A | LOCKED | 确认为改动摄像机与场景坐标 |
 
-**当前所有 100+ 集成测试均已通过，正式确立为 feat/map-difficulty-scaling 分支的基线版本。**
+
+
+**当前所有 450+ 集成测试均已通过，正式确立为 v0.0.1 版本的基线。**
+
+

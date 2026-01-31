@@ -177,8 +177,9 @@ fn e2e_hand_max_size_limit() {
 
 #[test]
 fn e2e_starting_deck_size() {
+    let mut app = App::new();
     let deck = create_starting_deck();
-    assert_eq!(deck.len(), 13);
+    assert_eq!(deck.len(), 15);
 }
 
 #[test]
