@@ -3,7 +3,7 @@ name = "bevy_card_battler"
 version = "0.1.0"
 edition = "2021"
 authors = ["PeterFei"]
-description = "九界：渡劫 - 修仙肉鸽卡牌游戏"
+description = "九界:渡劫 - 修仙肉鸽卡牌游戏"
 repository = "https://github.com/peterfei/bevy_card_battler"
 license = "MIT OR Apache-2.0"
 

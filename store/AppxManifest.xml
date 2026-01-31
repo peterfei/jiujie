@@ -12,7 +12,7 @@
     ProcessorArchitecture="x64" />
 
   <Properties>
-    <DisplayName>九界：渡劫</DisplayName>
+    <DisplayName>九界:渡劫</DisplayName>
     <PublisherDisplayName>peterfei</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
@@ -30,7 +30,7 @@
       Executable="jiujie.exe"
       EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
-        DisplayName="九界：渡劫"
+        DisplayName="九界:渡劫"
         Description="修仙肉鸽卡牌游戏"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
