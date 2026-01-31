@@ -51,6 +51,7 @@
             <ComponentRef Id='binary0'/>
             <ComponentRef Id='License'/>
             <ComponentRef Id='ApplicationShortcut'/>
+            <ComponentGroupRef Id='AssetsComponentGroup'/>
         </Feature>
 
         <SetProperty Id='ARPINSTALLLOCATION' Value='[APPLICATIONFOLDER]' After='CostFinalize'/>

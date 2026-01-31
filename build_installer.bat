@@ -15,23 +15,24 @@ echo [INFO] MSI Output: %MSI_NAME%
 
 :: ================= 检查并设置环境变量 =================
 echo [INFO] Checking WiX Toolset...
-:: 尝试自动添加 cargo-wix 可能的安装路径
 set "PATH=%PATH%;%USERPROFILE%\.cargo\wix\bin"
 
 where /q candle.exe
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] candle.exe not found!
-    echo [TIP] Please ensure WiX Toolset is in your PATH.
-    echo [TIP] Default cargo-wix path: %USERPROFILE%\.cargo\wix\bin
-    pause
+    exit /b 1
+)
+:: 检查 heat.exe (用于自动收集文件)
+where /q heat.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] heat.exe not found!
     exit /b 1
 )
 echo [INFO] WiX Toolset found.
 
 :: ================= 第一步：编译 Rust 项目 =================
 echo.
-
-echo [1/4] Building Rust Project (Release)...
+echo [1/5] Building Rust Project (Release)...
 cargo build --release --target %TARGET_ARCH%
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Cargo build failed!
@@ -41,33 +42,42 @@ if %ERRORLEVEL% NEQ 0 (
 
 :: ================= 第二步：准备构建目录 =================
 echo.
-
-echo [2/4] Preparing WiX directories...
+echo [2/5] Preparing WiX directories...
 if not exist "%WIX_OBJ_DIR%" mkdir "%WIX_OBJ_DIR%"
 if exist "%MSI_NAME%" del "%MSI_NAME%"
 
-:: ================= 第三步：编译 WiX 源码 (Candle) =================
+:: ================= 第三步：收集资源文件 (Heat) =================
 echo.
-
-echo [3/4] Compiling installer definition...
-echo [CMD] candle.exe -dVersion="%VERSION%" -dCargoTargetBinDir="%TARGET_DIR%" -arch x64 -ext WixUIExtension -out "%WIX_OBJ_DIR%\%APP_NAME%.wixobj" wix\%APP_NAME%.wxs
-
-candle.exe -dVersion="%VERSION%" -dCargoTargetBinDir="%TARGET_DIR%" -arch x64 -ext WixUIExtension -out "%WIX_OBJ_DIR%\%APP_NAME%.wixobj" wix\%APP_NAME%.wxs
-
+echo [3/5] Harvesting assets folder...
+:: -dr: 指定目标安装目录 ID (APPLICATIONFOLDER)
+:: -cg: 定义组件组 ID (AssetsComponentGroup)
+:: -var: 定义预处理器变量 (var.AssetsDir)
+:: -srd: 禁止收集根目录本身，只收集内容
+:: -gg: 自动生成 GUID
+heat.exe dir "assets" -dr APPLICATIONFOLDER -cg AssetsComponentGroup -var var.AssetsDir -gg -ke -srd -sfrag -template fragment -out "%WIX_OBJ_DIR%\assets.wxs"
 if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] WiX compilation failed!
+    echo [ERROR] Assets harvesting failed!
     pause
     exit /b %ERRORLEVEL%
 )
 
-:: ================= 第四步：链接生成 MSI (Light) =================
+:: ================= 第四步：编译 WiX 源码 (Candle) =================
 echo.
+echo [4/5] Compiling installer definition...
+:: 编译主文件
+candle.exe -dVersion="%VERSION%" -dCargoTargetBinDir="%TARGET_DIR%" -dAssetsDir="assets" -arch x64 -ext WixUIExtension -out "%WIX_OBJ_DIR%\%APP_NAME%.wixobj" wix\%APP_NAME%.wxs
+if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 
-echo [4/4] Linking MSI package...
-echo [CMD] light.exe -ext WixUIExtension -cultures:zh-CN -loc wix\main.wxl -out "%MSI_NAME%" "%WIX_OBJ_DIR%\%APP_NAME%.wixobj" -sice:ICE61
+:: 编译自动生成的资源文件
+candle.exe -dVersion="%VERSION%" -dCargoTargetBinDir="%TARGET_DIR%" -dAssetsDir="assets" -arch x64 -ext WixUIExtension -out "%WIX_OBJ_DIR%\assets.wixobj" "%WIX_OBJ_DIR%\assets.wxs"
+if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 
-light.exe -ext WixUIExtension -cultures:zh-CN -loc wix\main.wxl -out "%MSI_NAME%" "%WIX_OBJ_DIR%\%APP_NAME%.wixobj" -sice:ICE61
 
+:: ================= 第五步：链接生成 MSI (Light) =================
+echo.
+echo [5/5] Linking MSI package...
+:: 注意：链接时需要包含两个 .wixobj 文件
+light.exe -ext WixUIExtension -cultures:zh-CN -loc wix\main.wxl -out "%MSI_NAME%" "%WIX_OBJ_DIR%\%APP_NAME%.wixobj" "%WIX_OBJ_DIR%\assets.wixobj" -sice:ICE61
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] WiX linking failed!
     pause
