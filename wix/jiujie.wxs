@@ -34,7 +34,7 @@
             
             <!-- 开始菜单快捷方式目录 -->
             <Directory Id="ProgramMenuFolder">
-                <Directory Id="ApplicationProgramsFolder" Name="!(loc.ProductName)"/>
+                <Directory Id="ApplicationProgramsFolder" Name="!(loc.ShortcutFolderName)"/>
             </Directory>
 
             <!-- 桌面目录 -->
@@ -45,7 +45,7 @@
         <DirectoryRef Id="ApplicationProgramsFolder">
             <Component Id="ApplicationShortcut" Guid="*">
                 <Shortcut Id="ApplicationStartMenuShortcut" 
-                          Name="!(loc.ShortcutName)" 
+                          Name="!(loc.ShortcutFolderName)" 
                           Description="!(loc.ShortcutDescription)"
                           Target="[APPLICATIONFOLDER]jiujie.exe"
                           WorkingDirectory="APPLICATIONFOLDER"/>
@@ -58,7 +58,7 @@
         <DirectoryRef Id="DesktopFolder">
             <Component Id="DesktopShortcut" Guid="*">
                 <Shortcut Id="ApplicationDesktopShortcut"
-                          Name="!(loc.ShortcutName)"
+                          Name="!(loc.ShortcutFolderName)"
                           Description="!(loc.ShortcutDescription)"
                           Target="[APPLICATIONFOLDER]jiujie.exe"
                           WorkingDirectory="APPLICATIONFOLDER"/>

@@ -1,6 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <WixLocalization Culture='zh-CN' Codepage='936' xmlns='http://schemas.microsoft.com/wix/2006/localization'>
     <String Id='ProductName'>九界:渡劫</String>
+    <String Id='ShortcutFolderName'>九界 渡劫</String>
     <String Id='Manufacturer'>CN=BFB76822-8992-4D24-B38C-71F0C2BABD49</String>
     <String Id='PublisherDisplayName'>peterfei</String>
     <String Id='PackageIdentityName'>peterfei.212526B6F806E</String>
