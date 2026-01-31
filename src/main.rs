@@ -82,17 +82,13 @@ fn init_logging() -> Option<tracing_appender::non_blocking::WorkerGuard> {
     use tracing_appender::rolling::{RollingFileAppender, Rotation};
 
     // 获取标准的用户数据目录 (跨平台)
-    // Windows: C:\Users\Alice\AppData\Roaming\PeterFei\Jiujie\logs
-    // macOS:   /Users/Alice/Library/Application Support/com.PeterFei.Jiujie/logs
-    // Linux:   /home/alice/.config/jiujie/logs
     let log_dir = if let Some(proj_dirs) = ProjectDirs::from("com", "PeterFei", "Jiujie") {
         proj_dirs.data_dir().join("logs")
     } else {
-        // 回退方案：当前目录 (在安装目录下可能因权限失败，但好过没有)
         std::path::PathBuf::from("logs")
     };
 
-    // 1. 文件输出层 (jiujie.log.YYYY-MM-DD)
+    // 1. 文件输出层
     let file_appender = RollingFileAppender::new(Rotation::DAILY, &log_dir, "jiujie.log");
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
     
@@ -102,12 +98,12 @@ fn init_logging() -> Option<tracing_appender::non_blocking::WorkerGuard> {
         .with_target(false)
         .with_thread_names(true);
 
-    // 2. 控制台输出层 (仅在 Debug 模式或非 Windows 子系统下启用)
+    // 2. 控制台输出层
     let stdout_layer = fmt::layer()
         .with_ansi(true)
         .pretty();
 
-    // 3. 过滤器 (EnvFilter)
+    // 3. 过滤器
     let filter_layer = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| "wgpu=error,bevy=info,jiujie=debug".into());
 
@@ -117,16 +113,12 @@ fn init_logging() -> Option<tracing_appender::non_blocking::WorkerGuard> {
         .with(file_layer)
         .init();
 
-    // 记录启动信息，方便定位日志位置
     info!("日志系统初始化完成。日志路径: {:?}", log_dir);
 
     Some(guard)
 }
 
-
-
 fn set_window_icon(
-    // 确保我们只执行一次，无论成功与否
     mut is_set: Local<bool>,
     windows: Query<(Entity, &Window), With<bevy::window::PrimaryWindow>>,
     winit_windows: NonSend<WinitWindows>,
@@ -136,7 +128,6 @@ fn set_window_icon(
     }
 
     for (entity, _) in windows.iter() {
-        // 标记为已尝试，防止下一帧重复执行
         *is_set = true;
 
         if let Some(winit_window) = winit_windows.get_window(entity) {
@@ -154,8 +145,7 @@ fn set_window_icon(
                     info!("【图标】窗口图标已设置");
                 }
                 Err(e) => {
-                    // 仅在开发环境警告，发布环境如果缺失通常由exe资源处理
-                    warn!("【图标】无法加载图标文件 (路径: {}): {:?}。如果是开发环境 cargo run，请确保工作目录正确。", icon_path, e);
+                    warn!("【图标】无法加载图标文件: {:?}。", e);
                 }
             }
         }
