@@ -5,10 +5,10 @@
 -->
 
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
-    <Product Id='*' Name='九界：渡劫' UpgradeCode='F50F4705-932B-4FF5-A3E6-34285FC6E6BD' Manufacturer='PeterFei' Language='2052' Codepage='936' Version='0.1.0'>
-        <Package Id='*' Keywords='Installer' Description='九界：渡劫 - 修仙肉鸽卡牌游戏' Manufacturer='PeterFei' InstallerVersion='450' Languages='2052' Compressed='yes' InstallScope='perMachine' SummaryCodepage='936' Platform='x64'/>
+    <Product Id='*' Name='!(loc.ProductName)' UpgradeCode='F50F4705-932B-4FF5-A3E6-34285FC6E6BD' Manufacturer='!(loc.Manufacturer)' Language='2052' Codepage='936' Version='0.1.0'>
+        <Package Id='*' Keywords='!(loc.Keywords)' Description='!(loc.Description)' Manufacturer='!(loc.Manufacturer)' InstallerVersion='450' Languages='2052' Compressed='yes' InstallScope='perMachine' SummaryCodepage='936' Platform='x64'/>
 
-        <MajorUpgrade Schedule='afterInstallInitialize' DowngradeErrorMessage='已安装更高版本的 [ProductName]。安装程序将退出。'/>
+        <MajorUpgrade Schedule='afterInstallInitialize' DowngradeErrorMessage='!(loc.DowngradeErrorMessage)'/>
 
         <Media Id='1' Cabinet='media1.cab' EmbedCab='yes' DiskPrompt='光盘 #1'/>
         <Property Id='DiskPrompt' Value='九界：渡劫 安装程序 [1]'/>
@@ -31,15 +31,15 @@
             
             <!-- 开始菜单快捷方式 -->
             <Directory Id="ProgramMenuFolder">
-                <Directory Id="ApplicationProgramsFolder" Name="九界：渡劫"/>
+                <Directory Id="ApplicationProgramsFolder" Name="!(loc.ProductName)"/>
             </Directory>
         </Directory>
 
         <DirectoryRef Id="ApplicationProgramsFolder">
             <Component Id="ApplicationShortcut" Guid="*">
                 <Shortcut Id="ApplicationStartMenuShortcut" 
-                          Name="九界：渡劫" 
-                          Description="开始修行《九界：渡劫》"
+                          Name="!(loc.ShortcutName)" 
+                          Description="!(loc.ShortcutDescription)"
                           Target="[APPLICATIONFOLDER]jiujie.exe"
                           WorkingDirectory="APPLICATIONFOLDER"/>
                 <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
@@ -47,7 +47,7 @@
             </Component>
         </DirectoryRef>
 
-        <Feature Id='MainProgram' Title='九界：渡劫' Description='安装游戏主程序' Level='1' ConfigurableDirectory='APPLICATIONFOLDER' AllowAdvertise='no' Display='expand' Absent='disallow'>
+        <Feature Id='MainProgram' Title='!(loc.MainProgramTitle)' Description='!(loc.MainProgramDescription)' Level='1' ConfigurableDirectory='APPLICATIONFOLDER' AllowAdvertise='no' Display='expand' Absent='disallow'>
             <ComponentRef Id='binary0'/>
             <ComponentRef Id='License'/>
             <ComponentRef Id='ApplicationShortcut'/>
