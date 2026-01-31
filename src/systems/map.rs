@@ -71,15 +71,20 @@ pub fn setup_map_ui(
                 current_map_layer: progress.current_layer,
             };
             
-            // [关键优化] 使用 commands.queue 将磁盘 IO 移出主逻辑系统
-            // 这能防止同步 IO 阻塞导致的音频/状态机死锁
-            commands.queue(move |_world: &mut World| {
+            // [核心修复] 使用线程池进行真正的异步磁盘 IO
+            // 彻底解决阻塞主线程导致的卡死问题
+            use bevy::tasks::AsyncComputeTaskPool;
+            let thread_pool = AsyncComputeTaskPool::get();
+            thread_pool.spawn(async move {
                 if let Err(e) = save.save_to_disk() {
                     error!("【存档失败】无法持久化识海进度: {}", e);
                 } else {
-                    info!("【自动存档】进入寻仙觅缘，进度已同步至识海");
+                    // 注意：在异步线程中直接使用 info! 是安全的，日志宏通常是线程安全的
+                    // 但不要在里面操作 World
                 }
-            });
+            }).detach();
+            
+            info!("【自动存档】正在同步进度至识海...");
         }
     }
 

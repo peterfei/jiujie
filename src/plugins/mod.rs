@@ -903,6 +903,7 @@ fn create_event_button(parent: &mut ChildBuilder, label: &str, choice: EventChoi
 /// 处理机缘事件选择
 fn handle_event_choices(
     mut commands: Commands,
+    current_state: Res<State<GameState>>,
     mut next_state: ResMut<NextState<GameState>>,
     mut player_query: Query<(&mut Player, &crate::components::Cultivation)>,
     mut map_progress: ResMut<MapProgress>,
@@ -911,8 +912,16 @@ fn handle_event_choices(
     button_query: Query<(&Interaction, &EventChoiceButton), Changed<Interaction>>,
     ui_query: Query<Entity, With<EventUiRoot>>,
 ) {
+    // 仅在当前确实是 Event 状态且没有待处理转换时运行逻辑
+    if *current_state.get() != GameState::Event {
+        return;
+    }
+
     for (interaction, choice) in button_query.iter() {
         if *interaction == Interaction::Pressed {
+            // 防止单帧内多次设置状态
+            if next_state.is_changed() { continue; }
+
             let mut player_modified = false;
             if let Ok((mut player, _)) = player_query.get_single_mut() {
                 match choice {
