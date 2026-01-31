@@ -439,7 +439,19 @@ fn spawn_real_lightning(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh
         let p1 = points[i]; let p2 = points[i+1];
         let dir = p2 - p1; let length = dir.length();
         if length < 0.01 { continue; }
-        commands.spawn((Mesh3d(meshes.add(Cylinder::new(1.0, 1.0))), MeshMaterial3d(materials.add(StandardMaterial { base_color: Color::srgba(1.5, 1.5, 2.5, 1.0), emissive: LinearRgba::new(10.0, 10.0, 20.0, 1.0), ..default() })), Transform::from_translation(p1 + dir * 0.5).looking_at(p2, Vec3::Y).with_scale(Vec3::new(0.05, 0.05, length)), LightningBolt::new(points.clone(), 0.2, true), crate::components::CombatUiRoot));
+        commands.spawn((
+            Mesh3d(meshes.add(Cylinder::new(1.0, 1.0))), 
+            MeshMaterial3d(materials.add(StandardMaterial { 
+                base_color: Color::srgba(1.5, 1.5, 2.5, 1.0), 
+                emissive: LinearRgba::new(10.0, 10.0, 20.0, 1.0), 
+                ..default() 
+            })), 
+            Transform::from_translation(p1 + dir * 0.5).looking_at(p2, Vec3::Y).with_scale(Vec3::new(0.05, 0.05, length)), 
+            Visibility::Visible,
+            InheritedVisibility::VISIBLE,
+            LightningBolt::new(points.clone(), 0.2, true), 
+            crate::components::particle::ParticleMarker
+        ));
     }
 }
 

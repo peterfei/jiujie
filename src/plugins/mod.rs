@@ -1526,9 +1526,10 @@ pub fn process_heavenly_strike_cinematic(
             });
             sfx_events.send(PlaySfxEvent::with_volume(SfxType::LightningStrike, 1.0));
 
-            // 2. [关键修复] 在所有存活敌人位置降下真实折线闪电
+            // 2. [关键修复] 在所有存活敌人位置降下真实折线闪电 (落地 Y=0.0)
             for (_, _, transform) in enemy_sprite_query.iter() {
-                effect_events.send(SpawnEffectEvent::new(EffectType::Lightning, transform.translation));
+                let target_pos = Vec3::new(transform.translation.x, 0.0, transform.translation.z);
+                effect_events.send(SpawnEffectEvent::new(EffectType::Lightning, target_pos));
             }
 
             // 3. 只有最后一次闪击 (2.8s) 执行最终伤害与环境切换
@@ -1793,8 +1794,9 @@ pub fn process_enemy_turn_queue(
                                         crate::components::sprite::AnimationState::SpiritAttack
                                     },
                                     EnemyType::GreatDemon => {
-                                        // 首领攻击增加雷光
-                                        effect_events.send(SpawnEffectEvent::new(EffectType::Lightning, transform.translation).burst(15));
+                                        // 首领攻击增加雷光 (落地 Y=0.0)
+                                        let target_pos = Vec3::new(transform.translation.x, 0.0, transform.translation.z);
+                                        effect_events.send(SpawnEffectEvent::new(EffectType::Lightning, target_pos).burst(15));
                                         crate::components::sprite::AnimationState::DemonCast
                                     },
                                     _ => crate::components::sprite::AnimationState::DemonAttack,
