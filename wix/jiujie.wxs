@@ -29,12 +29,16 @@
                 </Directory>
             </Directory>
             
-            <!-- 开始菜单快捷方式 -->
+            <!-- 开始菜单快捷方式目录 -->
             <Directory Id="ProgramMenuFolder">
                 <Directory Id="ApplicationProgramsFolder" Name="!(loc.ProductName)"/>
             </Directory>
+
+            <!-- 桌面目录 -->
+            <Directory Id="DesktopFolder" Name="Desktop" />
         </Directory>
 
+        <!-- 开始菜单快捷方式组件 -->
         <DirectoryRef Id="ApplicationProgramsFolder">
             <Component Id="ApplicationShortcut" Guid="*">
                 <Shortcut Id="ApplicationStartMenuShortcut" 
@@ -47,11 +51,29 @@
             </Component>
         </DirectoryRef>
 
+        <!-- 桌面快捷方式组件 -->
+        <DirectoryRef Id="DesktopFolder">
+            <Component Id="DesktopShortcut" Guid="*">
+                <Shortcut Id="ApplicationDesktopShortcut"
+                          Name="!(loc.ShortcutName)"
+                          Description="!(loc.ShortcutDescription)"
+                          Target="[APPLICATIONFOLDER]jiujie.exe"
+                          WorkingDirectory="APPLICATIONFOLDER"/>
+                <RegistryValue Root="HKCU" Key="Software\PeterFei\Jiujie" Name="desktop_shortcut" Type="integer" Value="1" KeyPath="yes"/>
+            </Component>
+        </DirectoryRef>
+
+        <!-- 核心功能（主程序 + 资源 + 许可 + 开始菜单） -->
         <Feature Id='MainProgram' Title='!(loc.MainProgramTitle)' Description='!(loc.MainProgramDescription)' Level='1' ConfigurableDirectory='APPLICATIONFOLDER' AllowAdvertise='no' Display='expand' Absent='disallow'>
             <ComponentRef Id='binary0'/>
             <ComponentRef Id='License'/>
             <ComponentRef Id='ApplicationShortcut'/>
             <ComponentGroupRef Id='AssetsComponentGroup'/>
+        </Feature>
+
+        <!-- 可选功能（桌面快捷方式） -->
+        <Feature Id='DesktopShortcutFeature' Title='创建桌面快捷方式' Description='在桌面添加游戏启动图标' Level='1' AllowAdvertise='no'>
+            <ComponentRef Id='DesktopShortcut'/>
         </Feature>
 
         <SetProperty Id='ARPINSTALLLOCATION' Value='[APPLICATIONFOLDER]' After='CostFinalize'/>
@@ -60,9 +82,8 @@
         <Icon Id='ProductICO' SourceFile='assets\icons\favicon.ico'/>
         <Property Id='ARPPRODUCTICON' Value='ProductICO' />
 
-        <!-- UI -->
-        <UIRef Id='WixUI_InstallDir'/>
-        <Property Id='WIXUI_INSTALLDIR' Value='APPLICATIONFOLDER'/>
+        <!-- UI (切换为 FeatureTree 以支持功能选择) -->
+        <UIRef Id='WixUI_FeatureTree'/>
         <WixVariable Id='WixUILicenseRtf' Value='wix\License.rtf'/>
 
     </Product>
