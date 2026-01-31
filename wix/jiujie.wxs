@@ -26,6 +26,9 @@
                     <Component Id='License' Guid='635CC59F-86E8-423B-9176-FF483E104B64' Win64='yes'>
                         <File Id='LicenseFile' Name='License.rtf' DiskId='1' Source='wix\License.rtf' KeyPath='yes'/>
                     </Component>
+
+                    <!-- 资源目录 (新增) -->
+                    <Directory Id='AssetsFolder' Name='assets' />
                 </Directory>
             </Directory>
             

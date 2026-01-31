@@ -56,7 +56,7 @@ set ASSETS_DIR=%CD%\assets
 :: -var: 预处理器变量
 :: -srd: 禁止收集根目录本身
 :: -gg: 生成 GUID
-heat.exe dir "%ASSETS_DIR%" -dr APPLICATIONFOLDER -cg AssetsComponentGroup -var var.AssetsDir -gg -ke -srd -sfrag -template fragment -out "%WIX_OBJ_DIR%\assets.wxs"
+heat.exe dir "%ASSETS_DIR%" -dr AssetsFolder -cg AssetsComponentGroup -var var.AssetsDir -gg -ke -srd -sfrag -template fragment -out "%WIX_OBJ_DIR%\assets.wxs"
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Assets harvesting failed!
     pause
