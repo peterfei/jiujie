@@ -5,6 +5,9 @@
 //! 2. 注册所有插件
 //! 3. 启动游戏循环
 
+// 在 Release 构建中隐藏控制台窗口 (Windows)
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use bevy_card_battler::plugins::{CorePlugin, MenuPlugin, GamePlugin};
 use bevy_card_battler::systems::{RelicPlugin, RelicUiPlugin, ShopPlugin, RestPlugin};
 use bevy::prelude::*;
@@ -13,16 +16,24 @@ use bevy::render::settings::{WgpuSettings, PowerPreference};
 use bevy::winit::WinitWindows;
 use winit::window::Icon;
 use image::GenericImageView;
+use bevy::log::LogPlugin;
 
 // ============================================================================
 // 主函数
 // ============================================================================
 
 fn main() {
+    // 初始化日志系统 (支持文件输出)
+    // 注意：_guard 必须保留在 main 作用域内，否则非阻塞写入器会被提前释放
+    let _guard = init_logging();
+
     // 创建应用并运行
     App::new()
         // 添加默认插件（渲染、输入、音频等）
-        .add_plugins(DefaultPlugins.set(
+        .add_plugins(DefaultPlugins
+            // 禁用默认 LogPlugin，因为我们已经手动初始化了 tracing
+            .build().disable::<LogPlugin>()
+            .set(
             WindowPlugin {
                 primary_window: Some(Window {
                     title: format!("{} v{}", bevy_card_battler::GAME_NAME, bevy_card_battler::VERSION),
@@ -54,6 +65,43 @@ fn main() {
         // 运行应用
         .run();
 }
+
+/// 初始化日志系统
+/// 返回 worker guard，必须保持存活直到程序结束
+fn init_logging() -> Option<tracing_appender::non_blocking::WorkerGuard> {
+    use tracing_subscriber::prelude::*;
+    use tracing_subscriber::fmt;
+    use tracing_appender::rolling::{RollingFileAppender, Rotation};
+
+    // 1. 文件输出层 (logs/jiujie.log.YYYY-MM-DD)
+    let file_appender = RollingFileAppender::new(Rotation::DAILY, "logs", "jiujie.log");
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    
+    let file_layer = fmt::layer()
+        .with_ansi(false)
+        .with_writer(non_blocking)
+        .with_target(false)
+        .with_thread_names(true);
+
+    // 2. 控制台输出层 (仅在 Debug 模式或非 Windows 子系统下启用)
+    // 为了简单起见，我们始终添加标准输出层，但在 Release 且无控制台时它实际上没地方去
+    let stdout_layer = fmt::layer()
+        .with_ansi(true)
+        .pretty();
+
+    // 3. 过滤器 (EnvFilter)
+    let filter_layer = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "wgpu=error,bevy=info,jiujie=debug".into());
+
+    tracing_subscriber::registry()
+        .with(filter_layer)
+        .with(stdout_layer)
+        .with(file_layer)
+        .init();
+
+    Some(guard)
+}
+
 
 fn set_window_icon(
     // 确保我们只执行一次，无论成功与否
