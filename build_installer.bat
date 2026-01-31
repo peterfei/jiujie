@@ -22,7 +22,6 @@ if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] candle.exe not found!
     exit /b 1
 )
-:: 检查 heat.exe (用于自动收集文件)
 where /q heat.exe
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] heat.exe not found!
@@ -49,12 +48,15 @@ if exist "%MSI_NAME%" del "%MSI_NAME%"
 :: ================= 第三步：收集资源文件 (Heat) =================
 echo.
 echo [3/5] Harvesting assets folder...
-:: -dr: 指定目标安装目录 ID (APPLICATIONFOLDER)
-:: -cg: 定义组件组 ID (AssetsComponentGroup)
-:: -var: 定义预处理器变量 (var.AssetsDir)
-:: -srd: 禁止收集根目录本身，只收集内容
-:: -gg: 自动生成 GUID
-heat.exe dir "assets" -dr APPLICATIONFOLDER -cg AssetsComponentGroup -var var.AssetsDir -gg -ke -srd -sfrag -template fragment -out "%WIX_OBJ_DIR%\assets.wxs"
+:: 使用绝对路径确保 Source 解析正确
+set ASSETS_DIR=%CD%\assets
+
+:: -dr: 目标目录 ID
+:: -cg: 组件组 ID
+:: -var: 预处理器变量
+:: -srd: 禁止收集根目录本身
+:: -gg: 生成 GUID
+heat.exe dir "%ASSETS_DIR%" -dr APPLICATIONFOLDER -cg AssetsComponentGroup -var var.AssetsDir -gg -ke -srd -sfrag -template fragment -out "%WIX_OBJ_DIR%\assets.wxs"
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Assets harvesting failed!
     pause
@@ -65,19 +67,20 @@ if %ERRORLEVEL% NEQ 0 (
 echo.
 echo [4/5] Compiling installer definition...
 :: 编译主文件
-candle.exe -dVersion="%VERSION%" -dCargoTargetBinDir="%TARGET_DIR%" -dAssetsDir="assets" -arch x64 -ext WixUIExtension -out "%WIX_OBJ_DIR%\%APP_NAME%.wixobj" wix\%APP_NAME%.wxs
+candle.exe -dVersion="%VERSION%" -dCargoTargetBinDir="%TARGET_DIR%" -dAssetsDir="%ASSETS_DIR%" -arch x64 -ext WixUIExtension -out "%WIX_OBJ_DIR%\%APP_NAME%.wixobj" wix\%APP_NAME%.wxs
 if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 
-:: 编译自动生成的资源文件
-candle.exe -dVersion="%VERSION%" -dCargoTargetBinDir="%TARGET_DIR%" -dAssetsDir="assets" -arch x64 -ext WixUIExtension -out "%WIX_OBJ_DIR%\assets.wixobj" "%WIX_OBJ_DIR%\assets.wxs"
+:: 编译资源文件
+:: 关键：传入 AssetsDir 变量，让 wxs 中的 $(var.AssetsDir) 能解析
+candle.exe -dVersion="%VERSION%" -dCargoTargetBinDir="%TARGET_DIR%" -dAssetsDir="%ASSETS_DIR%" -arch x64 -ext WixUIExtension -out "%WIX_OBJ_DIR%\assets.wixobj" "%WIX_OBJ_DIR%\assets.wxs"
 if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 
 
 :: ================= 第五步：链接生成 MSI (Light) =================
 echo.
 echo [5/5] Linking MSI package...
-:: 注意：链接时需要包含两个 .wixobj 文件
-light.exe -ext WixUIExtension -cultures:zh-CN -loc wix\main.wxl -out "%MSI_NAME%" "%WIX_OBJ_DIR%\%APP_NAME%.wixobj" "%WIX_OBJ_DIR%\assets.wixobj" -sice:ICE61
+:: 增加 -v 详细输出
+light.exe -v -ext WixUIExtension -cultures:zh-CN -loc wix\main.wxl -out "%MSI_NAME%" "%WIX_OBJ_DIR%\%APP_NAME%.wixobj" "%WIX_OBJ_DIR%\assets.wixobj" -sice:ICE61
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] WiX linking failed!
     pause
