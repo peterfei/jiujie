@@ -5,6 +5,10 @@ use crate::components::background_music::{BgmType, PlayBgmEvent};
 
 pub struct OpeningPlugin;
 
+/// 用于启动预热的第一帧资源
+#[derive(Resource)]
+pub struct FirstFrameResource(pub Handle<Image>);
+
 impl Plugin for OpeningPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(OnEnter(GameState::OpeningVideo), setup_opening_video);
@@ -36,44 +40,38 @@ struct SkipOpening(bool);
 
 fn setup_opening_video(
     mut commands: Commands,
-    mut next_state: ResMut<NextState<GameState>>,
     asset_server: Res<AssetServer>,
     mut bgm_events: EventWriter<PlayBgmEvent>,
+    first_frame_res: Res<FirstFrameResource>,
     mut global_lock: Local<bool>,
 ) {
+    // 1. 物理拦截
     if *global_lock {
-        next_state.set(GameState::MainMenu);
         return;
     }
-    
-    if GameStateSave::exists() {
-        *global_lock = true;
-        next_state.set(GameState::MainMenu);
-        return;
-    }
-
     *global_lock = true;
+
     println!("【Opening】初始化播放器...");
 
-    // 1. 预加载 120 帧 (修正为实际帧数)
+    // 使用预热好的第一帧
+    let first_frame_handle = first_frame_res.0.clone();
+
+    // 2. 预加载其他帧
     let total_frames = 120;
     let mut handles = Vec::with_capacity(total_frames);
     for i in 1..=total_frames {
         handles.push(asset_server.load(format!("video/frames/frame_{:03}.jpg", i)));
     }
 
-    // 2. 单独获取第一帧句柄用于 UI 初始化 (完全独立的 Handle，不涉及 handles 的借用)
-    let first_frame_handle: Handle<Image> = asset_server.load("video/frames/frame_001.jpg");
-
     commands.init_resource::<SkipOpening>();
     commands.insert_resource(VideoController {
         frame_timer: Timer::from_seconds(1.0 / 15.0, TimerMode::Repeating),
         current_index: 0,
-        handles, // 所有权转移
+        handles,
         is_playing: false,
     });
 
-    // 3. 构建 UI
+    // 3. 构建 UI (由于资源已就绪，这里会瞬间显示图像)
     commands.spawn((
         Node {
             width: Val::Vw(100.0),

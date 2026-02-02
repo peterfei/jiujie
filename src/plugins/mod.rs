@@ -36,6 +36,8 @@ use crate::components::{
 use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, PlayerSpriteMarker, MagicSealMarker, CharacterSprite};
 use crate::systems::sprite::{spawn_character_sprite};
 
+use crate::plugins::opening::FirstFrameResource;
+
 /// 核心游戏插件
 pub struct CorePlugin;
 
@@ -44,7 +46,8 @@ impl Plugin for CorePlugin {
         app.add_plugins(opening::OpeningPlugin);
         app.register_type::<GameState>();
         // 应用启动时设置相机与资产预热
-        app.add_systems(Startup, (setup_camera, preload_assets, initial_state_redirection));
+        app.add_systems(Startup, (setup_camera, preload_assets, start_loading_first_frame));
+        app.add_systems(Update, initial_state_redirection.run_if(in_state(GameState::Booting)));
         // 初始化胜利延迟计时器
         app.insert_resource(VictoryDelay::new(1.5)); // 延迟1.5秒让粒子特效播放
 
@@ -326,12 +329,27 @@ fn stop_bgm(mut bgm_events: EventWriter<StopBgmEvent>) {
 use bevy::core_pipeline::tonemapping::Tonemapping;
 
 /// 相机设置
+fn start_loading_first_frame(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let handle = asset_server.load("video/frames/frame_001.jpg");
+    commands.insert_resource(FirstFrameResource(handle));
+}
+
 fn initial_state_redirection(
     mut next_state: ResMut<NextState<GameState>>,
+    asset_server: Res<AssetServer>,
+    first_frame: Option<Res<FirstFrameResource>>,
 ) {
+    // 如果还没存过档，我们需要展示开场视频
     if !crate::resources::save::GameStateSave::exists() {
-        info!("【启动重定向】未检测到存档，进入开场动画");
-        next_state.set(GameState::OpeningVideo);
+        // 等待第一帧资源加载完成
+        if let Some(ff) = first_frame {
+            if matches!(asset_server.get_load_state(ff.0.id()), Some(bevy::asset::LoadState::Loaded)) {
+                info!("【启动重定向】第一帧已就绪，进入开场动画");
+                next_state.set(GameState::OpeningVideo);
+            } else {
+                // 继续等待，不设置状态（保持 Booting，即黑屏）
+            }
+        }
     } else {
         info!("【启动重定向】检测到存档，直接进入主菜单");
         next_state.set(GameState::MainMenu);
