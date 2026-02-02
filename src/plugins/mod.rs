@@ -490,13 +490,6 @@ fn setup_combat_environment(
         color: Color::srgb(0.1, 0.1, 0.1), 
         brightness: 20.0, // 降低到极低，主要靠点光源和自发光
     });
-
-    // 4. 环境灵气粒子
-    commands.spawn((
-        ParticleEmitter::new(5.0, EffectType::AmbientSpirit.config()).with_type(EffectType::AmbientSpirit),
-        Transform::from_xyz(0.0, 0.0, 0.0),
-        CombatUiRoot,
-    ));
 }
 
 // ============================================================================

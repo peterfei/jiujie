@@ -11,6 +11,8 @@ pub struct CameraShake {
     pub decay: f32,
     /// 当前位移偏移量
     pub offset: Vec2,
+    /// 冲击力位移 (具有方向感)
+    pub impulse: Vec2,
     /// 初始相机位置 (用于 3D 相对震动与还原)
     pub base_translation: Option<Vec3>,
 }
@@ -21,8 +23,14 @@ impl CameraShake {
             trauma: trauma.clamp(0.0, 1.0),
             decay: 0.8,
             offset: Vec2::ZERO,
+            impulse: Vec2::ZERO,
             base_translation: None,
         }
+    }
+
+    pub fn with_impulse(mut self, impulse: Vec2) -> Self {
+        self.impulse = impulse;
+        self
     }
 
     pub fn with_decay(mut self, decay: f32) -> Self {
@@ -69,6 +77,11 @@ pub enum ScreenEffectEvent {
         trauma: f32,
         decay: f32,
     },
+    /// 物理冲击 (具有方向性的位移)
+    Impact {
+        impulse: Vec2,
+        duration: f32,
+    },
     /// 屏幕闪光
     Flash {
         color: Color,
@@ -79,6 +92,10 @@ pub enum ScreenEffectEvent {
 impl ScreenEffectEvent {
     pub fn shake(trauma: f32) -> Self {
         Self::Shake { trauma, decay: 0.8 }
+    }
+
+    pub fn impact(impulse: Vec2, duration: f32) -> Self {
+        Self::Impact { impulse, duration }
     }
 
     pub fn light_shake() -> Self {

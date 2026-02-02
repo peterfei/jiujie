@@ -3,9 +3,11 @@
 use bevy::prelude::*;
 use crate::components::particle::{
     Particle, ParticleEmitter, EmitterConfig, EffectType,
-    SpawnEffectEvent, ParticleMarker, EmitterMarker, LightningBolt
+    SpawnEffectEvent, ParticleMarker, EmitterMarker, LightningBolt, Decal
 };
+use crate::components::screen_effect::ScreenEffectEvent;
 use crate::components::combat::CombatUiRoot;
+use crate::components::sprite::EnemySpriteMarker;
 use crate::states::GameState;
 
 use std::collections::HashMap;
@@ -138,6 +140,7 @@ pub fn handle_effect_events(
     for event in events.read() {
         if event.effect_type == EffectType::Lightning {
             spawn_real_lightning(&mut commands, &mut meshes, &mut materials, event.position, &assets);
+            // 关键：雷击现在完全由程序化 3D 闪电和残痕负责，不再生成通用粒子点
             continue;
         }
 
@@ -314,14 +317,7 @@ pub fn update_emitters(
         }
 
     }
-
 }
-
-
-
-use crate::components::screen_effect::ScreenEffectEvent;
-use crate::components::sprite::EnemySpriteMarker;
-use bevy::core_pipeline::core_3d::Camera3d;
 
 pub fn update_particles(
     mut commands: Commands,
@@ -345,10 +341,15 @@ pub fn update_particles(
             if !p.position.x.is_finite() || !p.position.y.is_finite() { p.position = Vec2::new(-350.0, -80.0); }
             if !p.start_pos.x.is_finite() || !p.start_pos.y.is_finite() { p.start_pos = Vec2::new(-350.0, -80.0); }
 
-            if local_prog < 0.2 { phase_one_the_call(&mut p, local_prog, hub_pos, &mut screen_events); }
-            else if local_prog < 0.45 { phase_two_celestial_mandala(&mut p, local_prog, hub_pos); }
-            else if local_prog < 0.55 { phase_three_ominous_pause(&mut p, local_prog, &mut screen_events, &enemy_query); }
-            else { phase_four_mach_piercing(&mut p, local_prog, &mut events, &mut screen_events, &enemy_query, &enemy_impact_query, &camera_query); }
+            if local_prog < 0.2 { 
+                phase_one_the_call(&mut p, local_prog, hub_pos, &mut screen_events); 
+            } else if local_prog < 0.45 { 
+                phase_two_celestial_mandala(&mut p, local_prog, hub_pos); 
+            } else if local_prog < 0.55 { 
+                phase_three_ominous_pause(&mut p, local_prog, &mut screen_events, &enemy_query); 
+            } else {
+                phase_four_mach_piercing(&mut p, local_prog, &mut events, &mut screen_events, &enemy_query, &enemy_impact_query, &camera_query, &mut commands);
+            }
         } else {
             // 修复借用冲突
             let move_delta = p.velocity * delta;
@@ -372,7 +373,8 @@ pub fn update_particles(
             _node.height = Val::Px(h);
             
             transform.scale = Vec3::ONE; // 缩放已由 Node 处理
-            transform.translation = Vec3::ZERO;
+            // 关键修复：不要放在 ZERO，防止在 3D 空间中心产生亮点残留
+            transform.translation = Vec3::new(-5000.0, -5000.0, -10.0); 
         } else {
             let ui_x = 640.0 + p.position.x;
             let ui_y = 360.0 - p.position.y;
@@ -439,7 +441,16 @@ fn phase_three_ominous_pause(p: &mut Particle, local_prog: f32, screen_events: &
     }
 }
 
-fn phase_four_mach_piercing(p: &mut Particle, local_prog: f32, events: &mut EventWriter<SpawnEffectEvent>, _screen_events: &mut EventWriter<ScreenEffectEvent>, _enemy_query: &Query<(Entity, &Transform), With<EnemySpriteMarker>>, enemy_impact_query: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &crate::components::sprite::PhysicalImpact), With<EnemySpriteMarker>>, camera_query: &Query<(&Camera, &GlobalTransform), With<Camera3d>>) {
+fn phase_four_mach_piercing(
+    p: &mut Particle, 
+    local_prog: f32, 
+    events: &mut EventWriter<SpawnEffectEvent>, 
+    _screen_events: &mut EventWriter<ScreenEffectEvent>, 
+    _enemy_query: &Query<(Entity, &Transform), With<EnemySpriteMarker>>, 
+    enemy_impact_query: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &crate::components::sprite::PhysicalImpact), With<EnemySpriteMarker>>, 
+    camera_query: &Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    commands: &mut Commands,
+) {
     let strike_t = (local_prog - 0.55) / 0.45;
     if let Some(target_entity) = p.target_entity {
         let (camera, camera_transform) = match camera_query.get_single() { Ok(c) => c, Err(_) => return };
@@ -459,7 +470,12 @@ fn phase_four_mach_piercing(p: &mut Particle, local_prog: f32, events: &mut Even
         p.position = lock_pos * inv_t.powi(3) + (lock_pos + side_dir * (p.seed - 0.5) * 150.0) * 3.0 * inv_t.powi(2) * strike_t + (target - base_dir * 50.0 + side_dir * (p.seed - 0.5) * 30.0) * 3.0 * inv_t * strike_t.powi(2) + target * strike_t.powi(3);
         let move_dir = (target - p.position).normalize();
         p.rotation = (-move_dir.y).atan2(move_dir.x);
-        if strike_t > 0.95 && p.seed < 0.2 { events.send(SpawnEffectEvent::new(EffectType::ImpactSpark, target.extend(0.0)).burst(5)); }
+        if strike_t > 0.95 && p.seed < 0.2 { 
+            events.send(SpawnEffectEvent::new(EffectType::ImpactSpark, target.extend(0.0)).burst(5)); 
+            // 产生微弱的屏幕冲量
+            let impulse_dir = (target - p.position).normalize_or(Vec2::ZERO);
+            commands.trigger(ScreenEffectEvent::impact(impulse_dir * 1.5, 0.1));
+        }
     }
 }
 
@@ -473,6 +489,9 @@ fn spawn_real_lightning(
     target_pos: Vec3,
     assets: &ParticleAssets,
 ) {
+    // 发送物理冲击事件：雷击向下冲击
+    commands.trigger(ScreenEffectEvent::impact(Vec2::new(0.0, -10.0), 0.3));
+
     let mut rng = rand::thread_rng();
     let start_pos = Vec3::new(target_pos.x + rng.gen_range(-1.0..1.0), 10.0, target_pos.z);
     let segments = 8;

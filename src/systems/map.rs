@@ -623,7 +623,13 @@ fn setup_breakthrough_button(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     cultivation_query: Query<&Cultivation>,
+    existing_button: Query<Entity, With<BreakthroughButtonMarker>>,
 ) {
+    // 关键修复：如果按钮已经存在，直接返回，防止死循环
+    if !existing_button.is_empty() {
+        return;
+    }
+
     if let Ok(cultivation) = cultivation_query.get_single() {
         if cultivation.can_breakthrough() {
             info!("【UI】检测到可突破，创建引动雷劫按钮");
