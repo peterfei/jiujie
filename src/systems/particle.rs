@@ -5,6 +5,7 @@ use crate::components::particle::{
     Particle, ParticleEmitter, EmitterConfig, EffectType,
     SpawnEffectEvent, ParticleMarker, EmitterMarker, LightningBolt
 };
+use crate::components::combat::CombatUiRoot;
 use crate::states::GameState;
 
 use std::collections::HashMap;
@@ -450,7 +451,8 @@ fn spawn_real_lightning(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh
             Visibility::Visible,
             InheritedVisibility::VISIBLE,
             LightningBolt::new(points.clone(), 0.2, true), 
-            crate::components::particle::ParticleMarker
+            crate::components::particle::ParticleMarker,
+            CombatUiRoot
         ));
     }
 }
