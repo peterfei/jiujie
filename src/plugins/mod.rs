@@ -1,5 +1,6 @@
 //! 游戏插件定义
 pub mod hand_ui_v2;
+pub mod opening;
 use bevy::prelude::*;
 use crate::states::GameState;
 use crate::components::background_music::{BgmType, PlayBgmEvent, StopBgmEvent};
@@ -40,9 +41,10 @@ pub struct CorePlugin;
 
 impl Plugin for CorePlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins(opening::OpeningPlugin);
         app.register_type::<GameState>();
         // 应用启动时设置相机与资产预热
-        app.add_systems(Startup, (setup_camera, preload_assets));
+        app.add_systems(Startup, (setup_camera, preload_assets, initial_state_redirection));
         // 初始化胜利延迟计时器
         app.insert_resource(VictoryDelay::new(1.5)); // 延迟1.5秒让粒子特效播放
 
@@ -324,6 +326,18 @@ fn stop_bgm(mut bgm_events: EventWriter<StopBgmEvent>) {
 use bevy::core_pipeline::tonemapping::Tonemapping;
 
 /// 相机设置
+fn initial_state_redirection(
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    if !crate::resources::save::GameStateSave::exists() {
+        info!("【启动重定向】未检测到存档，进入开场动画");
+        next_state.set(GameState::OpeningVideo);
+    } else {
+        info!("【启动重定向】检测到存档，直接进入主菜单");
+        next_state.set(GameState::MainMenu);
+    }
+}
+
 fn setup_camera(mut commands: Commands) {
     // 2D 相机 (用于 UI 渲染)
     commands.spawn((

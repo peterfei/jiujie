@@ -43,6 +43,8 @@ pub enum BgmType {
     Rest,
     /// 胜利曲目 - 「众妖伏诛」
     Victory,
+    /// 开场动画 - 「仙途开启」
+    Opening,
 }
 
 impl BgmType {
@@ -57,6 +59,7 @@ impl BgmType {
             BgmType::Shop => "music/shop_theme.ogg",
             BgmType::Rest => "music/rest_theme.ogg",
             BgmType::Victory => "music/victory_theme.ogg",
+            BgmType::Opening => "music/opening.mp3",
         }
     }
 
@@ -71,6 +74,7 @@ impl BgmType {
             BgmType::Shop => "shop_theme",
             BgmType::Rest => "rest_theme",
             BgmType::Victory => "victory_theme",
+            BgmType::Opening => "opening",
         }
     }
 
@@ -85,6 +89,7 @@ impl BgmType {
             BgmType::Shop => "坊市繁华",
             BgmType::Rest => "修炼打坐",
             BgmType::Victory => "众妖伏诛",
+            BgmType::Opening => "仙途开启",
         }
     }
 
@@ -99,6 +104,7 @@ impl BgmType {
             BgmType::Shop => 0.65,
             BgmType::Rest => 0.5,
             BgmType::Victory => 0.75,
+            BgmType::Opening => 1.0,
         }
     }
 }

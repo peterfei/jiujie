@@ -61,6 +61,8 @@ fn main() {
         }))
         // 注册图标设置系统 (监听窗口创建，确保句柄已就绪)
         .add_systems(Update, set_window_icon.run_if(any_with_component::<Window>))
+        // 设置默认清屏颜色为黑色
+        .insert_resource(ClearColor(Color::BLACK))
         // 注册核心插件（包含状态注册）
         .add_plugins(CorePlugin)
         // ... (其他插件保持不变)

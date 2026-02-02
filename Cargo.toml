@@ -26,10 +26,10 @@ bevy = { version = "0.15", default-features = false, features = [
     "bevy_winit",
     "multi_threaded",
     "png",
+    "jpeg",
     "hdr",
     "vorbis", # 统一使用 ogg vorbis
     "mp3",
-    "x11",
     "tonemapping_luts",
     "default_font",
     "bevy_pbr",

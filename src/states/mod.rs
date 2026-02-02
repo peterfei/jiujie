@@ -6,6 +6,8 @@ use bevy::prelude::*;
 #[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Reflect)]
 pub enum GameState {
     #[default]
+    Booting,
+    OpeningVideo,
     MainMenu,
     /// 序章：交代背景
     Prologue,
