@@ -29,11 +29,8 @@ impl Plugin for ParticlePlugin {
                 update_emitters,
                 update_particles,
                 update_lightning_bolts,
-            ).run_if(in_state(GameState::Combat)
-                .or(in_state(GameState::Reward))
-                .or(in_state(GameState::Tribulation))
-                .or(in_state(GameState::MainMenu)) // 增加主菜单支持
-            )
+                update_decals,
+            ).run_if(in_state(GameState::Combat).or(in_state(GameState::MainMenu))),
         );
     }
 }
@@ -83,6 +80,50 @@ fn setup_particle_texture(mut commands: Commands, asset_server: Res<AssetServer>
     );
     textures.insert(EffectType::CloudMist, images.add(cloud_image));
 
+    // --- [3.0 终极进化] 程序化生成“灵气烧灼”贴图 ---
+    let center = width as f32 / 2.0;
+    let mut scorch_data = vec![0; width * height * 4];
+    for y in 0..height {
+        for x in 0..width {
+            let dx = (x as f32 - center) / center;
+            let dy = (y as f32 - center) / center;
+            let dist = (dx * dx + dy * dy).sqrt();
+            
+            let angle = dy.atan2(dx);
+            // 叠加多层频率的噪声，模拟不规则的雷击分叉和炭化边缘
+            let noise = (angle * 5.0).sin() * 0.15 
+                      + (angle * 13.0).cos() * 0.07 
+                      + (angle * 27.0).sin() * 0.03;
+            let distorted_dist = dist + noise;
+            
+            let i = (y * width + x) * 4;
+            // 提高对比度：中心更实，边缘更碎
+            let intensity = (1.0 - distorted_dist).powf(1.2).max(0.0);
+            
+            if intensity > 0.0 {
+                // 中心核心呈深紫黑色，向外扩散为烟熏感
+                scorch_data[i] = (intensity.powf(2.5) * 40.0) as u8; 
+                scorch_data[i+1] = (intensity.powf(3.0) * 15.0) as u8; 
+                scorch_data[i+2] = (intensity.powf(1.8) * 70.0) as u8; 
+                scorch_data[i+3] = (intensity.powf(0.6) * 230.0) as u8; 
+            } else {
+                scorch_data[i+3] = 0;
+            }
+        }
+    }
+    let scorch_image = Image::new(
+        Extent3d { 
+            width: width as u32, 
+            height: height as u32, 
+            depth_or_array_layers: 1 
+        },
+        TextureDimension::D2,
+        scorch_data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::default(),
+    );
+    textures.insert(EffectType::Lightning, images.add(scorch_image)); // 将雷击类型的贴图关联为焦痕
+
     let default_texture = images.add(Image::default());
     commands.insert_resource(ParticleAssets { textures, default_texture });
 }
@@ -96,7 +137,7 @@ pub fn handle_effect_events(
 ) {
     for event in events.read() {
         if event.effect_type == EffectType::Lightning {
-            spawn_real_lightning(&mut commands, &mut meshes, &mut materials, event.position);
+            spawn_real_lightning(&mut commands, &mut meshes, &mut materials, event.position, &assets);
             continue;
         }
 
@@ -425,7 +466,13 @@ fn phase_four_mach_piercing(p: &mut Particle, local_prog: f32, events: &mut Even
 // === 真实闪电系统 ===
 use rand::Rng;
 
-fn spawn_real_lightning(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, target_pos: Vec3) {
+fn spawn_real_lightning(
+    commands: &mut Commands, 
+    meshes: &mut ResMut<Assets<Mesh>>, 
+    materials: &mut ResMut<Assets<StandardMaterial>>, 
+    target_pos: Vec3,
+    assets: &ParticleAssets,
+) {
     let mut rng = rand::thread_rng();
     let start_pos = Vec3::new(target_pos.x + rng.gen_range(-1.0..1.0), 10.0, target_pos.z);
     let segments = 8;
@@ -440,6 +487,64 @@ fn spawn_real_lightning(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh
         let p1 = points[i]; let p2 = points[i+1];
         let dir = p2 - p1; let length = dir.length();
         if length < 0.01 { continue; }
+        
+        // 为每段闪电添加一个点光源（或者在中心点添加一个大光源）
+        // 这里选择在闪电的中段位置注入光源
+        if i == segments / 2 {
+            commands.spawn((
+                PointLight {
+                    color: Color::srgba(0.8, 0.8, 1.0, 1.0),
+                    intensity: 500_000.0, // 高亮度瞬时闪光
+                    range: 10.0,
+                    shadows_enabled: false, // 性能优化：动态闪电不开启阴影
+                    ..default()
+                },
+                Transform::from_translation(p1 + dir * 0.5),
+                CombatUiRoot, // 确保随战斗结束清理
+                LightningBolt::new(points.clone(), 0.1, false), // 借用 LightningBolt 逻辑进行自动销毁
+            ));
+
+            // 在击地点生成复合式残痕 (底层晕染 + 顶层焦核)
+            let scorch_handle = assets.textures.get(&EffectType::Lightning).cloned().unwrap_or(assets.default_texture.clone());
+            let random_rotation = rand::random::<f32>() * std::f32::consts::TAU;
+            let random_scale = 1.5 + rand::random::<f32>() * 1.5;
+
+            // 1. 底层能量场 (大而淡，使用纹理遮罩)
+            commands.spawn((
+                Mesh3d(meshes.add(Plane3d::default().mesh().size(1.0, 1.0))),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color: Color::srgba(0.3, 0.1, 0.6, 0.25), // 更暗、更透明的紫色
+                    base_color_texture: Some(scorch_handle.clone()), // 关键：使用同样的炸裂形状
+                    alpha_mode: AlphaMode::Blend,
+                    unlit: true,
+                    ..default()
+                })),
+                Transform::from_translation(target_pos + Vec3::new(0.0, 0.005, 0.0))
+                    .with_rotation(Quat::from_rotation_y(random_rotation + 0.5)) // 稍微错开角度增加层次
+                    .with_scale(Vec3::splat(random_scale * 1.6)),
+                crate::components::particle::Decal::new(3.5),
+                crate::components::particle::ParticleMarker,
+                CombatUiRoot,
+            ));
+
+            // 2. 顶层核心焦痕 (小而深)
+            commands.spawn((
+                Mesh3d(meshes.add(Plane3d::default().mesh().size(1.0, 1.0))),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color_texture: Some(scorch_handle),
+                    emissive: LinearRgba::new(0.5, 0.2, 1.0, 1.0) * 0.1,
+                    alpha_mode: AlphaMode::Blend,
+                    ..default()
+                })),
+                Transform::from_translation(target_pos + Vec3::new(0.0, 0.01, 0.0)) // 稍微高一点
+                    .with_rotation(Quat::from_rotation_y(random_rotation))
+                    .with_scale(Vec3::splat(random_scale)),
+                crate::components::particle::Decal::new(4.5), 
+                crate::components::particle::ParticleMarker,
+                CombatUiRoot,
+            ));
+        }
+
         commands.spawn((
             Mesh3d(meshes.add(Cylinder::new(1.0, 1.0))), 
             MeshMaterial3d(materials.add(StandardMaterial { 
@@ -457,17 +562,53 @@ fn spawn_real_lightning(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh
     }
 }
 
-fn update_lightning_bolts(mut commands: Commands, time: Res<Time>, mut query: Query<(Entity, &mut LightningBolt, &MeshMaterial3d<StandardMaterial>, &mut Transform)>, mut materials: ResMut<Assets<StandardMaterial>>) {
+fn update_lightning_bolts(
+    mut commands: Commands, 
+    time: Res<Time>, 
+    mut query: Query<(Entity, &mut LightningBolt, Option<&MeshMaterial3d<StandardMaterial>>, &mut Transform, Option<&mut PointLight>)>, 
+    mut materials: ResMut<Assets<StandardMaterial>>
+) {
     let mut rng = rand::thread_rng();
-    for (entity, mut bolt, mat_handle, mut transform) in query.iter_mut() {
+    for (entity, mut bolt, mat_handle, mut transform, mut light) in query.iter_mut() {
         bolt.ttl -= time.delta_secs();
         if bolt.ttl <= 0.0 { commands.entity(entity).despawn_recursive(); continue; }
+        
         if rng.gen_bool(0.3) { bolt.alpha = (bolt.ttl / bolt.max_ttl) * 0.5; } else { bolt.alpha = bolt.ttl / bolt.max_ttl; }
         transform.scale.x *= 0.85; transform.scale.y *= 0.85;
+        
+        // 同步材质透明度和发光
+        if let Some(handle) = mat_handle {
+            if let Some(mat) = materials.get_mut(handle) {
+                mat.base_color.set_alpha(bolt.alpha);
+                let e = 10.0 * (bolt.ttl / bolt.max_ttl);
+                mat.emissive = LinearRgba::new(e, e, e * 2.0, 1.0);
+            }
+        }
+
+        // 同步光源强度
+        if let Some(mut pl) = light {
+            pl.intensity = 500_000.0 * (bolt.ttl / bolt.max_ttl);
+        }
+    }
+}
+
+pub fn update_decals(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut query: Query<(Entity, &mut crate::components::particle::Decal, &MeshMaterial3d<StandardMaterial>)>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for (entity, mut decal, mat_handle) in query.iter_mut() {
+        decal.ttl -= time.delta_secs();
+        if decal.ttl <= 0.0 {
+            commands.entity(entity).despawn_recursive();
+            continue;
+        }
+
+        // 随时间淡出
         if let Some(mat) = materials.get_mut(mat_handle) {
-            mat.base_color.set_alpha(bolt.alpha);
-            let e = 10.0 * (bolt.ttl / bolt.max_ttl);
-            mat.emissive = LinearRgba::new(e, e, e * 2.0, 1.0);
+            let alpha = (decal.ttl / decal.max_ttl).min(1.0);
+            mat.base_color.set_alpha(alpha * 0.8);
         }
     }
 }

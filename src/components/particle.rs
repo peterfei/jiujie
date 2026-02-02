@@ -380,23 +380,31 @@ impl EnemyDeathAnimation { pub fn new(duration: f32) -> Self { Self { progress: 
 #[derive(Event, Debug)]
 pub struct VictoryEvent;
 
-/// 真实闪电组件
+/// 闪电分段组件
 #[derive(Component)]
 pub struct LightningBolt {
-    /// 闪电的所有节点位置 (3D)
     pub points: Vec<Vec3>,
-    /// 剩余存在时间
     pub ttl: f32,
-    /// 初始总时间
     pub max_ttl: f32,
-    /// 当前透明度
     pub alpha: f32,
-    /// 是否为主干
-    pub is_main: bool,
+    pub is_light: bool, // 是否是光源实体
+}
+
+/// 环境残痕组件
+#[derive(Component)]
+pub struct Decal {
+    pub ttl: f32,
+    pub max_ttl: f32,
+}
+
+impl Decal {
+    pub fn new(duration: f32) -> Self {
+        Self { ttl: duration, max_ttl: duration }
+    }
 }
 
 impl LightningBolt {
-    pub fn new(points: Vec<Vec3>, ttl: f32, is_main: bool) -> Self {
-        Self { points, ttl, max_ttl: ttl, alpha: 1.0, is_main }
+    pub fn new(points: Vec<Vec3>, ttl: f32, is_light: bool) -> Self {
+        Self { points, ttl, max_ttl: ttl, alpha: 1.0, is_light }
     }
 }
