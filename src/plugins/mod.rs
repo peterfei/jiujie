@@ -35,6 +35,7 @@ use crate::components::{
 };
 use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, PlayerSpriteMarker, MagicSealMarker, CharacterSprite};
 use crate::systems::sprite::{spawn_character_sprite};
+use crate::systems::enemy_gen::EnemyGenerator;
 
 use crate::plugins::opening::FirstFrameResource;
 
@@ -1021,49 +1022,30 @@ fn setup_combat_ui(
             PickingBehavior::IGNORE, CombatUiRoot,
         )).id();
 
-    // --- 多敌人生成 ---
+    // --- 多敌人生成 (v0.2.0 生成式系统) ---
     if enemy_query.is_empty() {
         use rand::Rng;
         let mut rng = rand::thread_rng();
         
         let current_layer = map_progress.current_layer;
-        let hp_scaling = 1.0 + (current_layer as f32 * 0.15);
-        let extra_strength = (current_layer / 3) as i32;
 
         // 如果是 Boss 节点，固定生成 1 个 BOSS；否则随机生成 1~3 个小怪
         let num_enemies = if is_boss_node { 1 } else { rng.gen_range(1..=3) };
 
         for i in 0..num_enemies {
             let enemy_id = i as u32;
-            let (name, base_hp, e_type) = if is_boss_node {
-                ("幽冥白虎", 150, EnemyType::GreatDemon)
+            
+            // 使用 EnemyGenerator 生成敌人
+            let enemy = if is_boss_node {
+                EnemyGenerator::generate_boss(current_layer, enemy_id)
             } else {
-                match rng.gen_range(0..3) {
-                    0 => ("嗜血妖狼", 30, EnemyType::DemonicWolf),
-                    1 => ("剧毒蛛", 20, EnemyType::PoisonSpider),
-                    _ => ("怨灵", 40, EnemyType::CursedSpirit),
-                }
+                EnemyGenerator::generate_enemy(current_layer, enemy_id)
             };
 
-            let scaled_hp = (base_hp as f32 * hp_scaling) as i32;
-            let mut enemy = Enemy::with_type(enemy_id, name, scaled_hp, e_type);
-            
-            // 随着层级提升增加初始力量和护甲
-            enemy.strength = extra_strength;
-            enemy.block = (current_layer / 2) as i32 * 2; // 每2层增加2点初始护甲
-            
-            // 动态调整 AI 动作强度范围
-            enemy.ai_pattern.damage_range.0 += extra_strength;
-            enemy.ai_pattern.damage_range.1 += extra_strength;
-            enemy.ai_pattern.block_range.0 += (current_layer / 2) as i32;
-            enemy.ai_pattern.block_range.1 += (current_layer / 2) as i32;
-
-            if is_boss_node {
-                enemy.strength += 2; // Boss 额外强度
-                enemy.block += 5;    // Boss 额外护甲
-                enemy.ai_pattern.damage_range.0 += 5;
-                enemy.ai_pattern.damage_range.1 += 5;
-            }
+            // 提取关键信息用于后续渲染
+            let e_type = enemy.enemy_type;
+            let name = enemy.name.clone();
+            let scaled_hp = enemy.hp; // 保持变量名兼容
 
             let x_world = 250.0 + (i as f32 - (num_enemies as f32 - 1.0) / 2.0) * 220.0;
             let enemy_entity = commands.spawn(enemy).id();

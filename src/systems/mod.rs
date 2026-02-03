@@ -11,6 +11,7 @@ pub mod audio;
 pub mod background_music;
 pub mod ui;
 pub mod map;
+pub mod enemy_gen;
 
 pub use animation::AnimationPlugin;
 pub use sprite::SpritePlugin;

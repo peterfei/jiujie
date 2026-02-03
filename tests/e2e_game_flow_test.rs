@@ -49,8 +49,12 @@ fn get_enemy_count(world: &mut World) -> usize {
 
 #[test]
 fn e2e_state_transitions_work() {
-    // GIVEN: 创建应用，初始状态为MainMenu
+    // GIVEN: 创建应用，初始状态为Booting
     let mut app = create_test_app();
+
+    // 手动切换到 MainMenu 以开始测试流程
+    app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::MainMenu);
+    app.update();
 
     // 验证初始状态
     let state = app.world_mut().resource::<State<GameState>>();
@@ -284,6 +288,10 @@ fn e2e_map_nodes_created() {
 fn e2e_full_game_flow() {
     // GIVEN: 从主菜单开始
     let mut app = create_test_app();
+
+    // 手动切换到 MainMenu
+    app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::MainMenu);
+    app.update();
 
     // 验证初始状态
     let state = app.world_mut().resource::<State<GameState>>();
