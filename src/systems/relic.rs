@@ -58,7 +58,7 @@ fn initialize_starting_relics(mut relic_collection: ResMut<RelicCollection>) {
 
     // 添加燃烧之血作为初始遗物（方便测试和游戏体验）
     let burning_blood = Relic::burning_blood();
-    relic_collection.add_relic(burning_blood);
+    relic_collection.add_relic_forced(burning_blood);
 
     info!("【遗物系统】已添加初始遗物: 燃烧之血（战斗开始时对所有敌人造成3点伤害）");
     info!("【遗物系统】当前遗物数量: {}", relic_collection.count());

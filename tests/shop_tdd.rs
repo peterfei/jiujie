@@ -272,7 +272,7 @@ fn test_buy_relic_adds_to_collection() {
 
     // 模拟购买
     player.gold -= price;
-    collection.add_relic(relic);
+    collection.add_relic_forced(relic);
 
     assert_eq!(player.gold, initial_gold - price, "金币应减少");
     assert_eq!(collection.count(), initial_count + 1, "遗物收藏应增加1个");

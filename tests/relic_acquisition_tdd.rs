@@ -98,7 +98,7 @@ fn test_add_relic_to_collection() {
 
     // 直接修改资源（模拟事件处理）
     let mut collection = app.world_mut().get_resource_mut::<RelicCollection>().unwrap();
-    let added = collection.add_relic(relic);
+    let added = collection.add_relic_forced(relic);
     drop(collection);
 
     assert!(added, "第一次添加遗物应该成功");
@@ -120,14 +120,14 @@ fn test_relic_deduplication() {
     let relic1 = Relic::burning_blood();
     {
         let mut collection = app.world_mut().get_resource_mut::<RelicCollection>().unwrap();
-        collection.add_relic(relic1);
+        collection.add_relic_forced(relic1);
     }
 
     // 尝试添加相同遗物
     let relic2 = Relic::burning_blood();
     {
         let mut collection = app.world_mut().get_resource_mut::<RelicCollection>().unwrap();
-        let added = collection.add_relic(relic2);
+        let added = collection.add_relic_forced(relic2);
         assert!(!added, "添加相同遗物应该失败");
     }
 
@@ -154,7 +154,7 @@ fn test_multiple_relics_coexist() {
     {
         let mut collection = app.world_mut().get_resource_mut::<RelicCollection>().unwrap();
         for relic in relics {
-            collection.add_relic(relic);
+            collection.add_relic_forced(relic);
         }
     }
 
@@ -218,7 +218,7 @@ fn test_relic_persists_across_combats() {
     // 第一场战斗，获取遗物
     {
         let mut collection = app.world_mut().get_resource_mut::<RelicCollection>().unwrap();
-        collection.add_relic(Relic::burning_blood());
+        collection.add_relic_forced(Relic::burning_blood());
     }
 
     // 切换到奖励界面
@@ -314,7 +314,7 @@ fn test_no_relic_limit() {
     {
         let mut collection = app.world_mut().get_resource_mut::<RelicCollection>().unwrap();
         for relic in all_relics {
-            collection.add_relic(relic);
+            collection.add_relic_forced(relic);
         }
     }
 
@@ -336,7 +336,7 @@ fn test_relic_effects_active_immediately() {
     // 获取遗物
     {
         let mut collection = app.world_mut().get_resource_mut::<RelicCollection>().unwrap();
-        collection.add_relic(Relic::burning_blood());
+        collection.add_relic_forced(Relic::burning_blood());
     }
 
     // 进入战斗

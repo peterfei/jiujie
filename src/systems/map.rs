@@ -135,27 +135,16 @@ pub fn setup_map_ui(
         use crate::components::cultivation::Realm;
 
         let vision_range = if let Some((_, cultivation)) = player_info {
-
             match cultivation.realm {
-
-                Realm::QiRefining => 1,
-
-                Realm::FoundationEstablishment => 2,
-
-                Realm::GoldenCore => 3,
-
+                Realm::QiRefining => 2, // 提升至 2 层
+                Realm::FoundationEstablishment => 3,
+                Realm::GoldenCore => 4,
                 _ => 99,
-
             }
-
         } else {
-
             // 关键修复：如果 Player 实体还没出生，但我们已有进度，
-
             // 赋予一个足够大的临时视野，确保读档进来的那一帧不是黑屏。
-
-            if current_layer > 0 { 2 } else { 1 }
-
+            if current_layer > 0 { 2 } else { 2 }
         };
 
     

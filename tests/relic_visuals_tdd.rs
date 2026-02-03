@@ -13,7 +13,7 @@ fn test_relic_3d_spawning_logic() {
         effects: vec![RelicEffect::OnTurnEnd { keep_cards: 1 }],
     };
     
-    collection.add_relic(relic);
+    collection.add_relic_forced(relic);
     
     // 逻辑验证
     assert!(!collection.relic.is_empty());

@@ -16,7 +16,8 @@ pub struct ShopPlugin;
 impl Plugin for ShopPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CurrentShopItems>()
-            .init_resource::<SelectedCardForRemoval>();
+            .init_resource::<SelectedCardForRemoval>()
+            .add_event::<ShopItemPurchased>();
 
         app.add_systems(OnEnter(GameState::Shop), setup_shop_ui)
             .add_systems(Update, (
@@ -54,7 +55,10 @@ pub fn setup_shop_ui(
         100
     };
 
-    current_items.items = generate_shop_items(&player_deck, &relic_collection);
+    if current_items.items.is_empty() {
+        current_items.items = generate_shop_items(&player_deck, &relic_collection);
+    }
+    
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
 
     commands
@@ -87,49 +91,78 @@ pub fn setup_shop_ui(
             parent.spawn((Node { width: Val::Percent(90.0), height: Val::Percent(60.0), flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, justify_content: JustifyContent::Center, align_items: AlignItems::Center, column_gap: Val::Px(25.0), row_gap: Val::Px(25.0), ..default() },))
             .with_children(|items_parent| {
                 for (index, item) in current_items.items.iter().enumerate() {
+                    let is_sold_out = matches!(item, ShopItem::SoldOut { .. });
+                    
+                    let border_color = match item {
+                        ShopItem::Relic(relic) => relic.rarity.color(),
+                        ShopItem::SoldOut { .. } => Color::srgb(0.2, 0.2, 0.2),
+                        _ => Color::srgb(0.3, 0.4, 0.3),
+                    };
+
+                    let bg_color = if is_sold_out {
+                        Color::srgba(0.02, 0.02, 0.02, 0.95)
+                    } else {
+                        Color::srgba(0.05, 0.1, 0.05, 0.9)
+                    };
+
                     items_parent.spawn((
                         Node { width: Val::Px(190.0), height: Val::Px(260.0), flex_direction: FlexDirection::Column, justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, padding: UiRect::all(Val::Px(15.0)), border: UiRect::all(Val::Px(1.0)), ..default() },
-                        BackgroundColor(Color::srgba(0.05, 0.1, 0.05, 0.9)),
-                        BorderColor(Color::srgb(0.3, 0.4, 0.3)),
+                        BackgroundColor(bg_color),
+                        BorderColor(border_color),
                         BorderRadius::all(Val::Px(12.0)),
                     ))
                     .with_children(|item_parent| {
-                        item_parent.spawn((Text::new(item.get_name()), TextFont { font_size: 22.0, font: chinese_font.clone(), ..default() }, TextColor(Color::WHITE)));
+                        let name_color = if is_sold_out { Color::srgb(0.4, 0.4, 0.4) } else { Color::WHITE };
+                        item_parent.spawn((Text::new(item.get_name()), TextFont { font_size: 22.0, font: chinese_font.clone(), ..default() }, TextColor(name_color)));
+                        
                         if let ShopItem::Card(card) = item {
                             item_parent.spawn((ImageNode::new(asset_server.load(card.image_path.clone())), Node { width: Val::Px(120.0), height: Val::Px(140.0), ..default() }));
+                        } else if let ShopItem::Relic(_) = item {
+                            // 法宝占位图 (后续可根据 ID 换)
+                            item_parent.spawn((ImageNode::new(asset_server.load("textures/relics/default.png")), Node { width: Val::Px(80.0), height: Val::Px(80.0), ..default() }));
                         }
-                        item_parent.spawn((Text::new(item.get_description()), TextFont { font_size: 13.0, font: chinese_font.clone(), ..default() }, TextColor(Color::srgb(0.6, 0.6, 0.6)), Node { max_width: Val::Px(160.0), ..default() }));
-                        item_parent.spawn((Text::new(format!("{} 灵石", item.get_price())), TextFont { font_size: 18.0, font: chinese_font.clone(), ..default() }, TextColor(COLOR_GOLD)));
+
+                        let desc_color = if is_sold_out { Color::srgb(0.3, 0.3, 0.3) } else { Color::srgb(0.6, 0.6, 0.6) };
+                        item_parent.spawn((Text::new(item.get_description()), TextFont { font_size: 13.0, font: chinese_font.clone(), ..default() }, TextColor(desc_color), Node { max_width: Val::Px(160.0), ..default() }));
+                        
+                        if !is_sold_out {
+                            item_parent.spawn((Text::new(format!("{} 灵石", item.get_price())), TextFont { font_size: 18.0, font: chinese_font.clone(), ..default() }, TextColor(COLOR_GOLD)));
+                        }
                         
                         let action_text = match item {
                             ShopItem::Card(_) => "参悟",
                             ShopItem::Relic(_) => "求取",
                             ShopItem::Elixir { .. } => "服下",
                             ShopItem::ForgetTechnique => "了断",
+                            ShopItem::SoldOut { .. } => "已换取",
                         };
 
+                        let btn_bg = if is_sold_out { Color::srgb(0.1, 0.1, 0.1) } else { Color::srgb(0.2, 0.4, 0.2) };
                         let mut btn_cmd = item_parent.spawn((
                             Button,
                             Node { width: Val::Px(90.0), height: Val::Px(35.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
-                            BackgroundColor(Color::srgb(0.2, 0.4, 0.2)),
+                            BackgroundColor(btn_bg),
                             BorderRadius::all(Val::Px(6.0)),
                         ));
 
-                        // 根据类型挂载正确的标记组件
-                        match item {
-                            ShopItem::Card(_) | ShopItem::Elixir { .. } => {
-                                btn_cmd.insert(ShopCardButton { item_index: index });
-                            }
-                            ShopItem::Relic(_) => {
-                                btn_cmd.insert(ShopRelicButton { item_index: index });
-                            }
-                            ShopItem::ForgetTechnique => {
-                                btn_cmd.insert(ShopRemoveCardButton);
+                        if !is_sold_out {
+                            // 根据类型挂载正确的标记组件
+                            match item {
+                                ShopItem::Card(_) | ShopItem::Elixir { .. } => {
+                                    btn_cmd.insert(ShopCardButton { item_index: index });
+                                }
+                                ShopItem::Relic(_) => {
+                                    btn_cmd.insert(ShopRelicButton { item_index: index });
+                                }
+                                ShopItem::ForgetTechnique => {
+                                    btn_cmd.insert(ShopRemoveCardButton);
+                                }
+                                _ => {}
                             }
                         }
 
                         btn_cmd.with_children(|btn| {
-                            btn.spawn((Text::new(action_text), TextFont { font_size: 16.0, font: chinese_font.clone(), ..default() }, TextColor(Color::WHITE)));
+                            btn.spawn((Text::new(action_text), TextFont { font_size: 16.0, font: chinese_font.clone(), ..default() }, TextColor(if is_sold_out { Color::srgb(0.4, 0.4, 0.4) } else { Color::WHITE })));
                         });
                     });
                 }
@@ -141,18 +174,19 @@ pub fn setup_shop_ui(
 }
 
 /// 生成商店商品
-fn generate_shop_items(_player_deck: &PlayerDeck, _relic_collection: &RelicCollection) -> Vec<ShopItem> {
+fn generate_shop_items(_player_deck: &PlayerDeck, relic_collection: &RelicCollection) -> Vec<ShopItem> {
     let all_cards = crate::components::cards::CardPool::all_cards();
     let mut items = vec![];
     use rand::seq::SliceRandom;
+    use rand::Rng;
     let mut rng = rand::thread_rng();
 
+    // 1. 功法生成 (3张)
     // --- 测试专用：强制加入万剑归宗 ---
     if let Some(wan_jian) = all_cards.iter().find(|c| c.name == "万剑归宗") {
         items.push(ShopItem::Card(wan_jian.clone()));
     }
 
-    // 随机选择另外 2 张卡牌
     let remaining_cards: Vec<_> = all_cards.iter()
         .filter(|c| c.name != "万剑归宗")
         .cloned()
@@ -161,11 +195,47 @@ fn generate_shop_items(_player_deck: &PlayerDeck, _relic_collection: &RelicColle
         items.push(ShopItem::Card(card.clone())); 
     }
 
+    // 2. 法宝生成 (1-2个)
+    let num_relics = rng.gen_range(1..=2);
+    let mut generated_relic_ids = std::collections::HashSet::new();
+    
+    for _ in 0..num_relics {
+        // 概率：70% 常见, 25% 罕见, 5% 稀有
+        let roll = rng.gen::<f32>();
+        let rarity = if roll < 0.7 {
+            crate::components::relic::RelicRarity::Common
+        } else if roll < 0.95 {
+            crate::components::relic::RelicRarity::Uncommon
+        } else {
+            crate::components::relic::RelicRarity::Rare
+        };
+
+        let mut available_relics = crate::components::relic::Relic::by_rarity(rarity);
+        // 过滤掉玩家已有的和本次已经生成的
+        available_relics.retain(|r| !relic_collection.has(r.id) && !generated_relic_ids.contains(&r.id));
+
+        if let Some(relic) = available_relics.choose(&mut rng) {
+            generated_relic_ids.insert(relic.id);
+            items.push(ShopItem::Relic(relic.clone()));
+        } else if rarity != crate::components::relic::RelicRarity::Common {
+            // 如果高稀有度没货了，尝试降级生成
+            let mut common_relics = crate::components::relic::Relic::by_rarity(crate::components::relic::RelicRarity::Common);
+            common_relics.retain(|r| !relic_collection.has(r.id) && !generated_relic_ids.contains(&r.id));
+            if let Some(common) = common_relics.choose(&mut rng) {
+                generated_relic_ids.insert(common.id);
+                items.push(ShopItem::Relic(common.clone()));
+            }
+        }
+    }
+
+    // 3. 灵丹生成 (1个)
     let elixirs = vec![
         ShopItem::Elixir { name: "洗髓丹".to_string(), hp_restore: 20, price: 40, description: "洗筋伐髓，恢复 20 点道行".to_string() },
         ShopItem::Elixir { name: "九转还魂丹".to_string(), hp_restore: 50, price: 90, description: "生死肉骨，恢复 50 点道行".to_string() },
     ];
     if let Some(elixir) = elixirs.choose(&mut rng) { items.push(elixir.clone()); }
+
+    // 4. 服务项目
     items.push(ShopItem::ForgetTechnique);
     items
 }
@@ -174,7 +244,7 @@ fn generate_shop_items(_player_deck: &PlayerDeck, _relic_collection: &RelicColle
 pub fn handle_shop_interactions(
     mut next_state: ResMut<NextState<GameState>>,
     mut player_query: Query<(&mut Player, &crate::components::Cultivation)>,
-    current_items: Res<CurrentShopItems>,
+    mut current_items: ResMut<CurrentShopItems>,
     mut deck: ResMut<PlayerDeck>,
     mut relic_collection: ResMut<RelicCollection>,
     mut map_progress: ResMut<MapProgress>,
@@ -184,8 +254,6 @@ pub fn handle_shop_interactions(
     exit_buttons: Query<(&Interaction, &ShopExitButton), Changed<Interaction>>,
     mut sfx_events: EventWriter<PlaySfxEvent>,
 ) {
-    let mut should_save = false;
-
     // 1. 处理离开 (优先级最高)
     for (interaction, _) in exit_buttons.iter() {
         if matches!(interaction, Interaction::Pressed) {
@@ -193,20 +261,18 @@ pub fn handle_shop_interactions(
             info!("【仙家坊市】告辞离开");
             map_progress.complete_current_node();
             next_state.set(GameState::Map);
-            return; // 立即返回，防止在同一帧处理购买逻辑
+            return; 
         }
     }
 
     // 2. 处理卡牌/灵丹
+    let mut purchased_index = None;
     for (interaction, shop_btn) in card_buttons.iter() {
         if matches!(interaction, Interaction::Pressed) {
-            // 安全检查：索引必须有效
-            if shop_btn.item_index >= current_items.items.len() {
-                warn!("【商店逻辑】非法物品索引: {}", shop_btn.item_index);
-                continue;
-            }
+            let index = shop_btn.item_index;
+            if index >= current_items.items.len() { continue; }
 
-            let item = &current_items.items[shop_btn.item_index];
+            let item = &current_items.items[index];
             let price = item.get_price();
             if let Ok((mut player, _)) = player_query.get_single_mut() {
                 if player.gold >= price {
@@ -216,14 +282,14 @@ pub fn handle_shop_interactions(
                             deck.add_card(card.clone());
                             sfx_events.send(PlaySfxEvent::new(SfxType::GoldGain));
                             info!("【仙家坊市】换取功法: {}", card.name);
-                            should_save = true;
+                            purchased_index = Some(index);
                         }
                         ShopItem::Elixir { name, hp_restore, .. } => {
                             player.gold -= price;
                             player.hp = (player.hp + hp_restore).min(player.max_hp);
                             sfx_events.send(PlaySfxEvent::new(SfxType::Heal));
                             info!("【仙家坊市】服下 {}", name);
-                            should_save = true;
+                            purchased_index = Some(index);
                         }
                         _ => {}
                     }
@@ -233,19 +299,26 @@ pub fn handle_shop_interactions(
     }
 
     // 3. 处理遗物
-    for (interaction, shop_btn) in relic_buttons.iter() {
-        if matches!(interaction, Interaction::Pressed) {
-            if shop_btn.item_index >= current_items.items.len() { continue; }
-
-            let item = &current_items.items[shop_btn.item_index];
-            if let Ok((mut player, _)) = player_query.get_single_mut() {
-                let price = item.get_price();
-                if player.gold >= price {
-                    if let ShopItem::Relic(relic) = item {
-                        player.gold -= price;
-                        relic_collection.add_relic(relic.clone());
-                        info!("【仙家坊市】购得法宝: {}", relic.name);
-                        should_save = true;
+    if purchased_index.is_none() {
+        for (interaction, shop_btn) in relic_buttons.iter() {
+            if matches!(interaction, Interaction::Pressed) {
+                let index = shop_btn.item_index;
+                if index >= current_items.items.len() { continue; }
+                
+                let item = &current_items.items[index];
+                if let Ok((mut player, cultivation)) = player_query.get_single_mut() {
+                    let price = item.get_price();
+                    if player.gold >= price {
+                        if let ShopItem::Relic(relic) = item {
+                            if relic_collection.add_relic(relic.clone(), cultivation) {
+                                player.gold -= price;
+                                sfx_events.send(PlaySfxEvent::new(SfxType::GoldGain));
+                                info!("【仙家坊市】购得法宝: {}", relic.name);
+                                purchased_index = Some(index);
+                            } else {
+                                warn!("【仙家坊市】法宝位已满或已拥有该法宝，无法求取");
+                            }
+                        }
                     }
                 }
             }
@@ -253,21 +326,29 @@ pub fn handle_shop_interactions(
     }
 
     // 4. 处理移除卡牌 (了断因果)
-    for interaction in remove_buttons.iter() {
-        if matches!(interaction, Interaction::Pressed) {
-            if let Ok((player, _)) = player_query.get_single() {
-                if player.gold >= 50 {
-                    sfx_events.send(PlaySfxEvent::new(SfxType::UiClick));
-                    info!("【仙家坊市】准备遗忘功法，进入识海...");
-                    next_state.set(GameState::CardRemoval);
-                } else {
-                    warn!("【仙家坊市】灵石不足，无法了断因果 (需要 50)");
+    if purchased_index.is_none() {
+        for interaction in remove_buttons.iter() {
+            if matches!(interaction, Interaction::Pressed) {
+                if let Ok((player, _)) = player_query.get_single() {
+                    if player.gold >= 50 {
+                        sfx_events.send(PlaySfxEvent::new(SfxType::UiClick));
+                        info!("【仙家坊市】准备遗忘功法，进入识海...");
+                        next_state.set(GameState::CardRemoval);
+                    } else {
+                        warn!("【仙家坊市】灵石不足，无法了断因果 (需要 50)");
+                    }
                 }
             }
         }
     }
 
-    // [优化] 移除此处同步存档，依赖状态机在 Map 状态下的自动处理，消除 IO 卡死风险
+    // 如果发生了购买，标记为售罄并刷新 UI
+    if let Some(index) = purchased_index {
+        let original_name = current_items.items[index].get_name().to_string();
+        current_items.items[index] = ShopItem::SoldOut { original_name };
+        // 强制刷新 UI：重新进入商店状态
+        next_state.set(GameState::Shop);
+    }
 }
 
 /// 更新金币显示
@@ -283,8 +364,13 @@ pub fn update_gold_display(
 }
 
 /// 清理商店UI
-pub fn cleanup_shop_ui(mut commands: Commands, ui_query: Query<Entity, With<ShopUiRoot>>) {
+pub fn cleanup_shop_ui(
+    mut commands: Commands, 
+    ui_query: Query<Entity, With<ShopUiRoot>>,
+    mut current_items: ResMut<CurrentShopItems>,
+) {
     for entity in ui_query.iter() { commands.entity(entity).despawn_recursive(); }
+    current_items.items.clear();
 }
 
 // ============================================================================

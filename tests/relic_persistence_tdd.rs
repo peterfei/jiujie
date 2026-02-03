@@ -6,13 +6,13 @@ fn test_relic_accumulation_persistence() {
     let mut app = App::new();
     // 1. 模拟初始状态：拥有 1 个法宝
     let mut collection = RelicCollection::default();
-    collection.add_relic(Relic::burning_blood());
+    collection.add_relic_forced(Relic::burning_blood());
     app.insert_resource(collection);
     
     // 2. 模拟在奖励界面点击获取了第二个法宝
     {
         let mut relics = app.world_mut().resource_mut::<RelicCollection>();
-        relics.add_relic(Relic {
+        relics.add_relic_forced(Relic {
             id: RelicId::Anchor,
             name: "定风珠".to_string(),
             description: "测试".to_string(),

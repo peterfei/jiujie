@@ -70,14 +70,29 @@ pub struct RelicCollection {
 }
 
 impl RelicCollection {
-    /// 添加遗物（去重）
-    pub fn add_relic(&mut self, relic: Relic) -> bool {
-        // 检查是否已拥有同名遗物
+    /// 添加遗物（去重并检查槽位上限）
+    pub fn add_relic(&mut self, relic: Relic, cultivation: &crate::components::Cultivation) -> bool {
+        // 1. 检查是否已拥有同名遗物
         if self.relic.iter().any(|r| r.id == relic.id) {
             return false; // 已拥有，不重复添加
         }
+
+        // 2. 检查槽位上限 (根据当前境界)
+        let max_slots = cultivation.get_relic_slots();
+        if self.relic.len() >= max_slots {
+            warn!("【法宝】法宝位已满 (当前上限: {}), 无法继续吸纳 {}", max_slots, relic.name);
+            return false;
+        }
+
         self.relic.push(relic);
         true
+    }
+
+    /// 强制添加遗物（用于初始赠送或特殊剧情，忽略槽位限制）
+    pub fn add_relic_forced(&mut self, relic: Relic) {
+        if !self.relic.iter().any(|r| r.id == relic.id) {
+            self.relic.push(relic);
+        }
     }
 
     /// 检查是否拥有某个遗物

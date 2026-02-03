@@ -84,9 +84,29 @@ impl Cultivation {
     pub fn get_hp_bonus(&self) -> i32 {
         match self.realm {
             Realm::QiRefining => 0,
-            Realm::FoundationEstablishment => 20,
-            Realm::GoldenCore => 50,
-            Realm::NascentSoul => 120,
+            Realm::FoundationEstablishment => 50,
+            Realm::GoldenCore => 150,
+            Realm::NascentSoul => 300,
+        }
+    }
+
+    /// 获取境界带来的初始能量加成
+    pub fn get_energy_bonus(&self) -> i32 {
+        match self.realm {
+            Realm::QiRefining => 0,
+            Realm::FoundationEstablishment => 1, // 筑基期 +1 能量
+            Realm::GoldenCore => 2,
+            Realm::NascentSoul => 3,
+        }
+    }
+
+    /// 获取境界允许的法宝槽位数量
+    pub fn get_relic_slots(&self) -> usize {
+        match self.realm {
+            Realm::QiRefining => 1,
+            Realm::FoundationEstablishment => 2, // 筑基期可携带 2 个法宝
+            Realm::GoldenCore => 3,
+            Realm::NascentSoul => 5,
         }
     }
 }

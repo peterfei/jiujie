@@ -17,7 +17,7 @@ fn test_relic_collection_management() {
     assert!(collection.is_empty());
 
     let relic = Relic::burning_blood();
-    collection.add_relic(relic);
+    collection.add_relic_forced(relic);
     assert_eq!(collection.count(), 1);
     assert!(collection.has(RelicId::BurningBlood));
 }

@@ -105,7 +105,7 @@ fn test_multiple_relics_stack_effects() {
         rarity: RelicRarity::Common,
         effects: vec![RelicEffect::OnCombatStart { damage: 0, block: 5, draw_cards: 0 }],
     };
-    relic_collection.add_relic(stone_shield);
+    relic_collection.add_relic_forced(stone_shield);
     info!("遗物数量: {}", relic_collection.count());
 
     // 重置标志

@@ -30,7 +30,7 @@ fn test_relic_multi_trigger_logic() {
         ],
     };
     
-    app.world_mut().resource_mut::<RelicCollection>().add_relic(custom_relic);
+    app.world_mut().resource_mut::<RelicCollection>().add_relic_forced(custom_relic);
 
     // 4. 模拟进入战斗状态并运行系统
     app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::Combat);

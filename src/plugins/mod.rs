@@ -1955,14 +1955,15 @@ fn update_combat_ui(
 // ============================================================================
 
 /// 战斗开始时重置玩家状态
-fn reset_player_on_combat_start(mut player_query: Query<&mut Player>) {
+fn reset_player_on_combat_start(mut player_query: Query<(&mut Player, &crate::components::Cultivation)>) {
     info!("reset_player_on_combat_start 被调用");
-    if let Ok(mut player) = player_query.get_single_mut() {
+    if let Ok((mut player, cultivation)) = player_query.get_single_mut() {
+        player.max_energy = 3 + cultivation.get_energy_bonus();
         player.energy = player.max_energy; // 重置能量
         player.block = 0; // 清除护甲
         player.turn = 1; // 重置回合数
-        info!("战斗开始：重置玩家状态 - 能量: {}/{}, 护甲: {}, 回合: {}",
-              player.energy, player.max_energy, player.block, player.turn);
+        info!("战斗开始：重置玩家状态 - 能量: {}/{}, 护甲: {}, 回合: {}, 境界: {:?}",
+              player.energy, player.max_energy, player.block, player.turn, cultivation.realm);
     } else {
         info!("警告：战斗开始时找不到玩家实体");
     }
@@ -3339,7 +3340,8 @@ fn create_relic_reward_option(parent: &mut ChildBuilder, relic: Relic, asset_ser
                        player_deck: Res<PlayerDeck>,
                        player_query: Query<(&Player, &crate::components::Cultivation)>| {
             info!("获得了法宝: {}", relic.name);
-            let added = relic_collection.add_relic(relic.clone());
+            let cultivation = player_query.get_single().map(|(_, c)| c).cloned().unwrap_or_else(|_| crate::components::Cultivation::new());
+            let added = relic_collection.add_relic(relic.clone(), &cultivation);
             if added {
                 info!("法宝已加入收藏");
             }
@@ -3383,7 +3385,7 @@ fn handle_game_over_clicks(
 
             deck.reset(); 
             relics.relic.clear();
-            relics.add_relic(crate::components::relic::Relic::burning_blood());
+            relics.add_relic_forced(crate::components::relic::Relic::burning_blood());
             map_progress.reset();
 
             next_state.set(GameState::Prologue);
@@ -3506,7 +3508,7 @@ fn cleanup_prologue(
 
 
 #[derive(Component)]
-struct TribulationUiMarker;
+pub struct TribulationUiMarker;
 
 fn setup_tribulation(
     mut commands: Commands,
@@ -3650,13 +3652,29 @@ fn update_tribulation(
     }
 }
 
+pub fn teardown_tribulation_wrapper(
+    commands: Commands,
+    asset_server: Res<AssetServer>,
+    ui_query: Query<Entity, With<TribulationUiMarker>>,
+    player_query: Query<(&mut Player, &mut crate::components::Cultivation)>,
+    deck: ResMut<PlayerDeck>,
+    map_progress: ResMut<MapProgress>,
+    effect_events: EventWriter<SpawnEffectEvent>,
+    screen_events: EventWriter<ScreenEffectEvent>,
+    sfx_events: EventWriter<PlaySfxEvent>,
+) {
+    teardown_tribulation(commands, asset_server, ui_query, player_query, deck, map_progress, effect_events, screen_events, sfx_events);
+}
+
 fn teardown_tribulation(
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
     ui_query: Query<Entity, With<TribulationUiMarker>>,
     mut player_query: Query<(&mut Player, &mut crate::components::Cultivation)>,
     mut deck: ResMut<PlayerDeck>,
     mut map_progress: ResMut<MapProgress>,
     mut effect_events: EventWriter<SpawnEffectEvent>,
+    mut screen_events: EventWriter<ScreenEffectEvent>, // 补全此参数
     mut sfx_events: EventWriter<PlaySfxEvent>,
 ) {
     // 清理渡劫专用UI
@@ -3665,9 +3683,11 @@ fn teardown_tribulation(
     }
 
     if let Ok((mut player, mut cultivation)) = player_query.get_single_mut() {
+        info!("【渡劫清理】找到玩家实体: HP={}, 境界={:?}, 感悟={}", player.hp, cultivation.realm, cultivation.insight);
         // 只有在没死的情况下才处理突破（避免 GameOver 状态逻辑冲突）
         if player.hp > 0 {
             if cultivation.breakthrough() {
+                info!("【渡劫清理】突破逻辑执行成功！新境界: {:?}", cultivation.realm);
                 // 1. 属性质变
                 let (hp_bonus, stone_bonus) = match cultivation.realm {
                     crate::components::cultivation::Realm::FoundationEstablishment => (50, 100),
@@ -3708,6 +3728,53 @@ fn teardown_tribulation(
                 // 3. 视听反馈
                 sfx_events.send(PlaySfxEvent::new(SfxType::BreakthroughSuccess));
                 effect_events.send(SpawnEffectEvent::new(EffectType::Victory, Vec3::new(0.0, 0.0, 999.0)).burst(100));
+
+                // --- 4. [新增] 境界突破视觉横幅 (大作级包装) ---
+                let banner_text = match cultivation.realm {
+                    crate::components::cultivation::Realm::FoundationEstablishment => "筑 基 大 成",
+                    crate::components::cultivation::Realm::GoldenCore => "金 丹 已 成",
+                    crate::components::cultivation::Realm::NascentSoul => "元 婴 出 世",
+                    _ => "破 境 成 功",
+                };
+
+                let chinese_font = asset_server.load("fonts/Arial Unicode.ttf");
+                commands.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        width: Val::Percent(100.0),
+                        height: Val::Px(200.0),
+                        top: Val::Percent(35.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.8)),
+                    ZIndex(1000), 
+                    MapUiRoot, // 随地图 UI 一起清理
+                    EntranceAnimation::new(0.6),
+                )).with_children(|banner| {
+                    banner.spawn((
+                        Text::new(banner_text),
+                        TextFont {
+                            font: chinese_font,
+                            font_size: 120.0,
+                            ..default()
+                        },
+                        TextColor(Color::srgb(1.0, 0.9, 0.3)), // 华丽金
+                        EntranceAnimation::new(0.8),
+                    ));
+                });
+
+                // 瞬间白闪效果
+                screen_events.send(ScreenEffectEvent::Flash { 
+                    color: Color::srgba(1.5, 1.5, 2.0, 0.95), 
+                    duration: 0.5 
+                });
+                // 剧烈屏幕震动，体现破境时的力量爆发
+                screen_events.send(ScreenEffectEvent::Shake { 
+                    trauma: 1.0, 
+                    decay: 2.0 
+                });
             }
         }
     }
