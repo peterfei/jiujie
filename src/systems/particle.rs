@@ -81,6 +81,14 @@ fn setup_particle_texture(mut commands: Commands, asset_server: Res<AssetServer>
         RenderAssetUsages::default(),
     );
     textures.insert(EffectType::CloudMist, images.add(cloud_image));
+    
+    // 复用云雾贴图给元素特效，利用粒子颜色进行区分
+    let cloud_handle = textures.get(&EffectType::CloudMist).cloned();
+    if let Some(handle) = cloud_handle {
+        textures.insert(EffectType::Fire, handle.clone());
+        textures.insert(EffectType::Ice, handle.clone());
+        textures.insert(EffectType::Poison, handle);
+    }
 
     // --- [3.0 终极进化] 程序化生成“灵气烧灼”贴图 ---
     let center = width as f32 / 2.0;

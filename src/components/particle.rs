@@ -151,6 +151,15 @@ impl EmitterConfig {
         }
     }
 
+    pub fn poison() -> Self {
+        Self {
+            lifetime: (0.8, 1.5), size: (10.0, 25.0), start_color: Color::srgb(0.2, 0.8, 0.2),
+            end_color: Color::srgba(0.1, 0.4, 0.1, 0.0), speed: (20.0, 50.0),
+            angle: (0.0, std::f32::consts::PI * 2.0), gravity: Vec2::new(0.0, 10.0),
+            rotation_speed: (-2.0, 2.0), shape: ParticleShape::Circle,
+        }
+    }
+
     pub fn lightning() -> Self {
         Self {
             lifetime: (0.1, 0.3), size: (3.0, 8.0), start_color: Color::srgb(0.8, 0.8, 1.0),
@@ -317,13 +326,14 @@ impl EmitterConfig {
 pub enum ParticleShape { Circle, Square, Line, Triangle, Star }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum EffectType { Fire, Ice, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit, SwordEnergy, DemonAura, WebShot, WanJian, ImpactSpark, Slash, Shield, CloudMist }
+pub enum EffectType { Fire, Ice, Poison, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit, SwordEnergy, DemonAura, WebShot, WanJian, ImpactSpark, Slash, Shield, CloudMist }
 
 impl EffectType {
     pub fn config(&self) -> EmitterConfig {
         match self {
             EffectType::Fire => EmitterConfig::fire(),
             EffectType::Ice => EmitterConfig::ice(),
+            EffectType::Poison => EmitterConfig::poison(),
             EffectType::Lightning => EmitterConfig::lightning(),
             EffectType::Heal => EmitterConfig::heal(),
             EffectType::Hit => EmitterConfig::hit(),

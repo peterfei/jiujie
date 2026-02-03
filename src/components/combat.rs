@@ -37,6 +37,8 @@ pub struct Player {
     pub turn: u32,
     /// 中毒层数 (每回合开始扣血)
     pub poison: i32,
+    /// 灼烧层数 (每回合开始扣血，并随时间递减)
+    pub burn: i32,
     /// 虚弱层数 (攻击力降低)
     pub weakness: i32,
     /// 易伤层数 (受创增加)
@@ -49,7 +51,7 @@ impl Default for Player {
             hp: 80, max_hp: 80,
             energy: 3, max_energy: 3,
             block: 0, gold: 100, turn: 1,
-            poison: 0, weakness: 0, vulnerable: 0,
+            poison: 0, burn: 0, weakness: 0, vulnerable: 0,
         }
     }
 }
@@ -319,6 +321,12 @@ pub enum EnemyAffix {
     Tank,
     /// 迅捷: 闪避率提升（暂未实现逻辑，仅视觉），青色
     Swift,
+    /// 火焰: 攻击施加灼烧，红色
+    Fire,
+    /// 剧毒: 攻击施加中毒，绿色
+    Poison,
+    /// 寒冰: 攻击施加虚弱，蓝色
+    Ice,
 }
 
 /// 敌人意图
@@ -664,6 +672,18 @@ impl Enemy {
         self.block = 0;
         // 选择新的意图
         self.choose_new_intent();
+    }
+
+    /// 应用攻击附带的词缀效果
+    pub fn apply_attack_affixes(&self, player: &mut Player) {
+        for affix in &self.affixes {
+            match affix {
+                EnemyAffix::Fire => player.burn += 3, // 每次攻击施加3层灼烧
+                EnemyAffix::Poison => player.poison += 2, // 每次攻击施加2层中毒
+                EnemyAffix::Ice => player.weakness += 1, // 每次攻击施加1层虚弱
+                _ => {} // 其他词缀无攻击特效
+            }
+        }
     }
 }
 

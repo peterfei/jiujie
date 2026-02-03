@@ -6,7 +6,7 @@ use crate::states::GameState;
 use crate::components::background_music::{BgmType, PlayBgmEvent, StopBgmEvent};
 
 use crate::components::{
-    Player, Enemy, EnemyType, EnemyIntent, Card, CardType, CardEffect, CardRarity, Hand, DrawPile, DiscardPile,
+    Player, Enemy, EnemyType, EnemyIntent, EnemyAffix, Card, CardType, CardEffect, CardRarity, Hand, DrawPile, DiscardPile,
     CombatState, TurnPhase, NodeType, Realm, Cultivation, MapNode, MapProgress, PlayerDeck, DeckConfig, CardPool,
     MapUiRoot, MapNodeButton, RippleEffect, // 新增导入
     CharacterType, EnemyAttackEvent,
@@ -909,6 +909,7 @@ fn setup_combat_ui(
             let name = gen_enemy.enemy.name.clone();
             let hp = gen_enemy.enemy.hp;
             let max_hp = gen_enemy.enemy.max_hp;
+            let affixes = gen_enemy.enemy.affixes.clone(); // 克隆词缀供后续使用
 
             let x_world = 250.0 + (i as f32 - (num_enemies as f32 - 1.0) / 2.0) * 220.0;
             let enemy_entity = commands.spawn(gen_enemy.enemy).id();
@@ -933,6 +934,26 @@ fn setup_combat_ui(
                 Some(enemy_id),
                 Some(gen_enemy.visual_color)
             );
+
+            // 挂载词缀特效 (元素光环)
+            for affix in &affixes {
+                let effect_type = match affix {
+                    EnemyAffix::Fire => Some(EffectType::Fire),
+                    EnemyAffix::Poison => Some(EffectType::Poison),
+                    EnemyAffix::Ice => Some(EffectType::Ice),
+                    _ => None,
+                };
+
+                if let Some(effect) = effect_type {
+                    commands.spawn((
+                        ParticleEmitter::new(15.0, effect.config()).with_type(effect),
+                        // 挂载在怪物脚下/身后，营造光环感
+                        Transform::from_xyz(x_world, 0.2, 0.05),
+                        EmitterMarker,
+                        CombatUiRoot,
+                    ));
+                }
+            }
 
             let ui_left = 640.0 + x_world - 80.0;
             commands.entity(root_entity).with_children(|root| {
@@ -1725,6 +1746,10 @@ pub fn process_enemy_turn_queue(
                         let final_damage = enemy.calculate_outgoing_damage_with_env(damage, env.as_ref().map(|r| r.as_ref()));
                         if let Ok((mut player, _)) = player_query.get_single_mut() {
                             player.take_damage_with_env(final_damage, env.as_ref().map(|r| r.as_ref()));
+                            
+                            // 应用攻击附带的词缀效果 (灼烧/中毒/虚弱)
+                            enemy.apply_attack_affixes(&mut player);
+
                             attack_events.send(EnemyAttackEvent::new(final_damage, false));
                             sfx_events.send(PlaySfxEvent::new(SfxType::PlayerHit));
                             screen_events.send(ScreenEffectEvent::Shake { trauma: 0.6, decay: 6.0 });

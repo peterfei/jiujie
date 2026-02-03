@@ -86,6 +86,17 @@ impl EnemyGenerator {
                 EnemyAffix::Swift => {
                     visual_color = Color::srgba(0.4, 1.0, 0.8, 1.0); // 青色
                 }
+                EnemyAffix::Fire => {
+                    visual_color = Color::srgba(1.0, 0.3, 0.0, 1.0); // 橘红
+                    enemy.strength += 1;
+                }
+                EnemyAffix::Poison => {
+                    visual_color = Color::srgba(0.2, 0.8, 0.2, 1.0); // 毒绿
+                }
+                EnemyAffix::Ice => {
+                    visual_color = Color::srgba(0.4, 0.8, 1.0, 1.0); // 冰蓝
+                    enemy.block += 3;
+                }
             }
         }
         
@@ -183,6 +194,9 @@ impl EnemyGenerator {
                 EnemyAffix::Berserk => "嗜血",
                 EnemyAffix::Tank => "铁甲",
                 EnemyAffix::Swift => "疾风",
+                EnemyAffix::Fire => "烈焰",
+                EnemyAffix::Poison => "剧毒",
+                EnemyAffix::Ice => "寒冰",
             }
         } else {
             ""
