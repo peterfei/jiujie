@@ -328,6 +328,8 @@ fn stop_bgm(mut bgm_events: EventWriter<StopBgmEvent>) {
 // 核心系统
 // ============================================================================
 
+use bevy::core_pipeline::tonemapping::Tonemapping;
+
 /// 第一帧资源加载
 fn start_loading_first_frame(mut commands: Commands, asset_server: Res<AssetServer>) {
     let handle = asset_server.load("video/frames/frame_001.jpg");
