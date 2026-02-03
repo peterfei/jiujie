@@ -1,132 +1,201 @@
 use bevy::prelude::*;
 use rand::Rng;
-use crate::components::combat::{Enemy, EnemyType, EnemyIntent, AiPattern};
+use crate::components::combat::{Enemy, EnemyType, EnemyIntent, AiPattern, EnemyAffix};
+
+/// 生成的敌人结果，包含组件数据和视觉配置
+pub struct GeneratedEnemy {
+    /// 敌人核心组件
+    pub enemy: Enemy,
+    /// 视觉缩放比例 (相对于默认尺寸)
+    pub visual_scale: Vec2,
+    /// 视觉染色
+    pub visual_color: Color,
+}
 
 /// 敌人生成器资源
 #[derive(Resource)]
 pub struct EnemyGenerator;
 
 impl EnemyGenerator {
-    /// 根据深度生成一个敌人实体 Bundle
-    /// 
-    /// # 参数
-    /// * `depth` - 当前地图深度（层数），决定怪物强度
-    /// * `id` - 敌人的唯一ID
-    pub fn generate_enemy(depth: u32, id: u32) -> Enemy {
+    /// 根据深度生成一个敌人
+    pub fn generate_enemy(depth: u32, id: u32) -> GeneratedEnemy {
         let mut rng = rand::thread_rng();
 
-        // 1. 根据深度选择原型
+        // 1. 选择原型
         let archetype = Self::pick_archetype(depth, &mut rng);
 
-        // 2. 根据深度计算等级/境界
-        // 简单模型：每层增加一点强度系数
+        // 2. 基础数值计算
         let scaling_factor = 1.0 + (depth as f32 * 0.1); 
-
-        // 3. 生成基础数值
         let base_hp = (archetype.base_hp_range.0 as f32 * scaling_factor) as i32;
-        // 确保HP在合理范围内波动
         let hp_variance = rng.gen_range(0.9..=1.1);
-        let final_hp = (base_hp as f32 * hp_variance) as i32;
+        let mut final_hp = (base_hp as f32 * hp_variance) as i32;
 
-        // 4. 构建 Enemy 组件
-        // 注意：目前 AI Pattern 是硬编码在 EnemyType 里的，后续可以解耦
-        // 这里暂时复用 Enemy::with_type，但数值是计算出来的
+        // 3. 构建 Enemy 组件
         let mut enemy = Enemy::with_type(
             id,
-            Self::generate_name(&archetype, depth),
+            "".to_string(), // 稍后生成名字
             final_hp,
             archetype.enemy_type
         );
         
-        // 5. 应用额外的数值修正（如果需要）
-        // 例如：随深度增加攻击力 (strength)
+        // 随深度增加基础攻击力
         if depth > 5 {
             enemy.strength = ((depth - 5) as f32 * 0.5) as i32;
         }
 
-        enemy
+        // 4. 随机生成词缀
+        let affixes = Self::roll_affixes(depth, &mut rng);
+        enemy.affixes = affixes.clone();
+
+        // 5. 应用词缀数值修正
+        let mut visual_scale = Vec2::ONE;
+        let mut visual_color = Color::WHITE;
+
+        for affix in &affixes {
+            match affix {
+                EnemyAffix::Elite => {
+                    final_hp = (final_hp as f32 * 1.5) as i32;
+                    enemy.strength += 2;
+                    enemy.block += 5;
+                    visual_scale *= 1.3;
+                    visual_color = Color::srgba(1.0, 0.9, 0.6, 1.0); // 金色
+                }
+                EnemyAffix::Weak => {
+                    final_hp = (final_hp as f32 * 0.7) as i32;
+                    enemy.strength = (enemy.strength - 1).max(0);
+                    visual_scale *= 0.8;
+                    visual_color = Color::srgba(0.8, 0.8, 0.8, 1.0); // 灰色
+                }
+                EnemyAffix::Berserk => {
+                    enemy.strength += (depth as i32 / 3).max(3); // 攻击大幅提升
+                    final_hp = (final_hp as f32 * 0.8) as i32;   // 血量稍减
+                    visual_color = Color::srgba(1.0, 0.4, 0.4, 1.0); // 红色
+                    // 修改 AI: 极高攻击概率
+                    enemy.ai_pattern.attack_chance = 0.9;
+                    enemy.ai_pattern.defend_chance = 0.0;
+                }
+                EnemyAffix::Tank => {
+                    final_hp = (final_hp as f32 * 1.3) as i32;
+                    enemy.block += 10;
+                    visual_scale *= 1.1;
+                    visual_color = Color::srgba(0.4, 0.6, 1.0, 1.0); // 蓝色
+                    // 修改 AI: 高防御概率
+                    enemy.ai_pattern.defend_chance += 0.3;
+                    enemy.ai_pattern.attack_chance -= 0.2;
+                }
+                EnemyAffix::Swift => {
+                    visual_color = Color::srgba(0.4, 1.0, 0.8, 1.0); // 青色
+                }
+            }
+        }
+        
+        enemy.hp = final_hp;
+        enemy.max_hp = final_hp;
+
+        // 6. 生成最终名称
+        enemy.name = Self::generate_name(&archetype, depth, &affixes);
+
+        GeneratedEnemy {
+            enemy,
+            visual_scale,
+            visual_color,
+        }
     }
 
     /// 生成指定深度的 Boss
-    pub fn generate_boss(depth: u32, id: u32) -> Enemy {
+    pub fn generate_boss(depth: u32, id: u32) -> GeneratedEnemy {
         let mut rng = rand::thread_rng();
-        // Boss 固定为筑基大妖（或者根据深度选择更强的 Boss）
         let archetype = EnemyArchetypeData::great_demon();
         
-        let scaling_factor = 1.2 + (depth as f32 * 0.2); // Boss 成长系数更高
+        let scaling_factor = 1.2 + (depth as f32 * 0.2); 
         let base_hp = (archetype.base_hp_range.0 as f32 * scaling_factor) as i32;
-        let hp_variance = rng.gen_range(0.95..=1.05); // Boss 波动较小
+        let hp_variance = rng.gen_range(0.95..=1.05); 
         let final_hp = (base_hp as f32 * hp_variance) as i32;
 
         let mut enemy = Enemy::with_type(
             id,
-            // Boss 名字更霸气
             format!("【镇守】{}", archetype.name),
             final_hp,
             archetype.enemy_type
         );
 
-        // Boss 属性修正
         enemy.strength = (depth / 2) as i32 + 2;
         enemy.block = (depth / 2) as i32 + 5;
         
-        // 修正 AI 数值范围
         enemy.ai_pattern.damage_range.0 += enemy.strength;
         enemy.ai_pattern.damage_range.1 += enemy.strength;
 
-        enemy
-    }
-
-    fn pick_archetype(depth: u32, rng: &mut impl Rng) -> EnemyArchetypeData {
-        // 简单的权重选择逻辑
-        // 浅层多是狼和蜘蛛，深层出现怨灵和恶魔
-        let roll: f32 = rng.gen();
+        // Boss 默认自带精英属性的视觉效果，但不加 Elite 词缀以免数值膨胀过度
+        // 或者我们可以给 Boss 加一些特殊词缀
         
-        if depth < 3 {
-            if roll < 0.6 {
-                EnemyArchetypeData::demonic_wolf()
-            } else {
-                EnemyArchetypeData::poison_spider()
-            }
-        } else if depth < 7 {
-            if roll < 0.4 {
-                EnemyArchetypeData::demonic_wolf()
-            } else if roll < 0.7 {
-                EnemyArchetypeData::poison_spider()
-            } else {
-                EnemyArchetypeData::cursed_spirit()
-            }
-        } else {
-            // 深层混合
-            if roll < 0.3 {
-                EnemyArchetypeData::demonic_wolf() // 即使是狼也是高等级的狼
-            } else if roll < 0.5 {
-                EnemyArchetypeData::poison_spider()
-            } else if roll < 0.8 {
-                EnemyArchetypeData::cursed_spirit()
-            } else {
-                EnemyArchetypeData::great_demon()
-            }
+        GeneratedEnemy {
+            enemy,
+            visual_scale: Vec2::splat(1.5), // Boss 默认巨大
+            visual_color: Color::WHITE,
         }
     }
 
-    fn generate_name(archetype: &EnemyArchetypeData, depth: u32) -> String {
-        // 简单的前缀生成
-        let prefix = if depth <= 2 {
-            "幼年"
-        } else if depth <= 5 {
-            "成年"
-        } else if depth <= 8 {
-            "狂暴"
+    fn roll_affixes(depth: u32, rng: &mut impl Rng) -> Vec<EnemyAffix> {
+        let mut affixes = Vec::new();
+        let roll: f32 = rng.gen();
+
+        // 词缀生成概率随深度增加
+        let affix_chance = (0.1 + depth as f32 * 0.05).min(0.8);
+
+        if roll < affix_chance {
+            // 随机选择一个词缀
+            let affix_pool = [
+                EnemyAffix::Elite,
+                EnemyAffix::Berserk,
+                EnemyAffix::Tank,
+                EnemyAffix::Swift,
+            ];
+            // 深度较低时也有可能出现 Weak
+            if depth < 3 && rng.gen_bool(0.2) {
+                affixes.push(EnemyAffix::Weak);
+            } else {
+                let choice = affix_pool[rng.gen_range(0..affix_pool.len())];
+                affixes.push(choice);
+            }
+        }
+
+        affixes
+    }
+
+    fn pick_archetype(depth: u32, rng: &mut impl Rng) -> EnemyArchetypeData {
+        let roll: f32 = rng.gen();
+        if depth < 3 {
+            if roll < 0.6 { EnemyArchetypeData::demonic_wolf() } else { EnemyArchetypeData::poison_spider() }
+        } else if depth < 7 {
+            if roll < 0.4 { EnemyArchetypeData::demonic_wolf() } else if roll < 0.7 { EnemyArchetypeData::poison_spider() } else { EnemyArchetypeData::cursed_spirit() }
         } else {
-            "千年"
-        };
+            if roll < 0.3 { EnemyArchetypeData::demonic_wolf() } else if roll < 0.5 { EnemyArchetypeData::poison_spider() } else if roll < 0.8 { EnemyArchetypeData::cursed_spirit() } else { EnemyArchetypeData::great_demon() }
+        }
+    }
+
+    fn generate_name(archetype: &EnemyArchetypeData, depth: u32, affixes: &[EnemyAffix]) -> String {
+        let age_prefix = if depth <= 2 { "幼年" } else if depth <= 5 { "成年" } else if depth <= 8 { "狂暴" } else { "千年" };
         
-        format!("{}{}", prefix, archetype.name)
+        let affix_prefix = if let Some(affix) = affixes.first() {
+            match affix {
+                EnemyAffix::Elite => "精英",
+                EnemyAffix::Weak => "虚弱的",
+                EnemyAffix::Berserk => "嗜血",
+                EnemyAffix::Tank => "铁甲",
+                EnemyAffix::Swift => "疾风",
+            }
+        } else {
+            ""
+        };
+
+        if affix_prefix.is_empty() {
+            format!("{}{}", age_prefix, archetype.name)
+        } else {
+            format!("{} {}{}", affix_prefix, age_prefix, archetype.name)
+        }
     }
 }
 
-/// 内部使用的原型数据结构
 struct EnemyArchetypeData {
     enemy_type: EnemyType,
     name: &'static str,
@@ -134,35 +203,8 @@ struct EnemyArchetypeData {
 }
 
 impl EnemyArchetypeData {
-    fn demonic_wolf() -> Self {
-        Self {
-            enemy_type: EnemyType::DemonicWolf,
-            name: "嗜血妖狼",
-            base_hp_range: (25, 35),
-        }
-    }
-
-    fn poison_spider() -> Self {
-        Self {
-            enemy_type: EnemyType::PoisonSpider,
-            name: "剧毒魔蛛",
-            base_hp_range: (40, 50),
-        }
-    }
-
-    fn cursed_spirit() -> Self {
-        Self {
-            enemy_type: EnemyType::CursedSpirit,
-            name: "怨灵",
-            base_hp_range: (60, 80),
-        }
-    }
-
-    fn great_demon() -> Self {
-        Self {
-            enemy_type: EnemyType::GreatDemon,
-            name: "筑基大妖",
-            base_hp_range: (150, 200),
-        }
-    }
+    fn demonic_wolf() -> Self { Self { enemy_type: EnemyType::DemonicWolf, name: "妖狼", base_hp_range: (25, 35) } }
+    fn poison_spider() -> Self { Self { enemy_type: EnemyType::PoisonSpider, name: "毒蛛", base_hp_range: (40, 50) } }
+    fn cursed_spirit() -> Self { Self { enemy_type: EnemyType::CursedSpirit, name: "怨灵", base_hp_range: (60, 80) } }
+    fn great_demon() -> Self { Self { enemy_type: EnemyType::GreatDemon, name: "大妖", base_hp_range: (150, 200) } }
 }

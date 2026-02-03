@@ -1036,28 +1036,41 @@ fn setup_combat_ui(
             let enemy_id = i as u32;
             
             // 使用 EnemyGenerator 生成敌人
-            let enemy = if is_boss_node {
+            let gen_enemy = if is_boss_node {
                 EnemyGenerator::generate_boss(current_layer, enemy_id)
             } else {
                 EnemyGenerator::generate_enemy(current_layer, enemy_id)
             };
 
             // 提取关键信息用于后续渲染
-            let e_type = enemy.enemy_type;
-            let name = enemy.name.clone();
-            let scaled_hp = enemy.hp; // 保持变量名兼容
+            let e_type = gen_enemy.enemy.enemy_type;
+            let name = gen_enemy.enemy.name.clone();
+            let hp = gen_enemy.enemy.hp;
+            let max_hp = gen_enemy.enemy.max_hp;
 
             let x_world = 250.0 + (i as f32 - (num_enemies as f32 - 1.0) / 2.0) * 220.0;
-            let enemy_entity = commands.spawn(enemy).id();
+            let enemy_entity = commands.spawn(gen_enemy.enemy).id();
 
             // 根据妖兽类型选择渲染类型与尺寸 (大作级体型压制)
-            let (char_type, size) = match e_type {
+            let (char_type, base_size) = match e_type {
                 EnemyType::DemonicWolf => (CharacterType::DemonicWolf, Vec2::new(100.0, 120.0)),
                 EnemyType::PoisonSpider => (CharacterType::PoisonSpider, Vec2::new(100.0, 120.0)),
                 EnemyType::CursedSpirit => (CharacterType::CursedSpirit, Vec2::new(120.0, 160.0)),
                 EnemyType::GreatDemon => (CharacterType::GreatDemon, Vec2::new(180.0, 240.0)),
             };
-            spawn_character_sprite(&mut commands, &character_assets, char_type, Vec3::new(x_world, 50.0, 10.0), size, Some(enemy_id));
+            
+            // 应用词缀带来的体型变化
+            let final_size = base_size * gen_enemy.visual_scale;
+
+            spawn_character_sprite(
+                &mut commands, 
+                &character_assets, 
+                char_type, 
+                Vec3::new(x_world, 50.0, 10.0), 
+                final_size, 
+                Some(enemy_id),
+                Some(gen_enemy.visual_color)
+            );
 
             let ui_left = 640.0 + x_world - 80.0;
             commands.entity(root_entity).with_children(|root| {
@@ -1076,7 +1089,7 @@ fn setup_combat_ui(
                         ..default()
                     }).with_children(|row| {
                         row.spawn((
-                            Text::new(format!("{}/{}", scaled_hp, scaled_hp)),
+                            Text::new(format!("{}/{}", hp, max_hp)),
                             TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() },
                             TextColor(Color::WHITE),
                             EnemyHpText { owner: enemy_entity },
@@ -1171,7 +1184,15 @@ fn setup_combat_ui(
                 EnemyType::CursedSpirit => CharacterType::CursedSpirit,
                 EnemyType::GreatDemon => CharacterType::GreatDemon,
             };
-            spawn_character_sprite(&mut commands, &character_assets, char_type, Vec3::new(x_world, 50.0, 10.0), Vec2::new(100.0, 120.0), Some(enemy.id));
+            spawn_character_sprite(
+                &mut commands, 
+                &character_assets, 
+                char_type, 
+                Vec3::new(x_world, 50.0, 10.0), 
+                Vec2::new(100.0, 120.0), 
+                Some(enemy.id),
+                None // 无染色
+            );
 
             commands.entity(root_entity).with_children(|root| {
                 root.spawn((
@@ -1274,7 +1295,15 @@ fn setup_combat_ui(
         }
     }
 
-    spawn_character_sprite(&mut commands, &character_assets, CharacterType::Player, Vec3::new(-350.0, -80.0, 10.0), Vec2::new(120.0, 140.0), None);
+    spawn_character_sprite(
+        &mut commands, 
+        &character_assets, 
+        CharacterType::Player, 
+        Vec3::new(-350.0, -80.0, 10.0), 
+        Vec2::new(120.0, 140.0), 
+        None,
+        None // 玩家无染色
+    );
 
     // --- 法宝 3D 视觉生成 ---
     for (i, relic) in relic_collection.relic.iter().enumerate() {

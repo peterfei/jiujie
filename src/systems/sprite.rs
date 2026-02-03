@@ -458,9 +458,9 @@ fn sync_2d_to_3d_render(
             // 法宝使用更轻盈的青蓝色自发光材质
             let material = if is_relic {
                 materials.add(StandardMaterial {
-                    base_color: Color::srgba(0.8, 0.9, 1.0, 0.8),
+                    base_color: char_sprite.tint.with_alpha(0.8), // 使用 tint
                     base_color_texture: Some(char_sprite.texture.clone()),
-                    emissive: LinearRgba::new(0.0, 0.5, 1.0, 1.0), 
+                    emissive: LinearRgba::from(char_sprite.tint).with_alpha(1.0), 
                     emissive_texture: Some(char_sprite.texture.clone()),
                     alpha_mode: AlphaMode::Blend,
                     cull_mode: None,
@@ -469,7 +469,7 @@ fn sync_2d_to_3d_render(
                 })
             } else {
                 materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
+                    base_color: char_sprite.tint, // 使用 tint
                     base_color_texture: Some(char_sprite.texture.clone()),
                     // 移除强制白光发光，改用 unlit 确保在所有显卡上亮度一致
                     unlit: true,
@@ -610,6 +610,7 @@ pub fn spawn_character_sprite(
     position: Vec3,
     size: Vec2,
     enemy_id: Option<u32>,
+    tint: Option<Color>, // 新增参数
 ) -> Entity {
     let texture = match character_type {
         CharacterType::Player => character_assets.player_idle.clone(),
@@ -619,9 +620,14 @@ pub fn spawn_character_sprite(
         CharacterType::GreatDemon => character_assets.boss.clone(),
     };
 
+    let mut sprite = CharacterSprite::new(texture, size);
+    if let Some(c) = tint {
+        sprite = sprite.with_tint(c);
+    }
+
     let mut entity_cmd = commands.spawn((
         Transform::from_translation(position),
-        CharacterSprite::new(texture, size), 
+        sprite, 
         SpriteMarker,
         Visibility::default(),
         InheritedVisibility::default(),

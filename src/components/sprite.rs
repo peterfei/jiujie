@@ -16,6 +16,8 @@ pub struct CharacterSprite {
     pub elapsed: f32,
     pub state: AnimationState,
     pub looping: bool,
+    /// 视觉染色 (覆盖默认白色)
+    pub tint: Color,
 }
 
 impl CharacterSprite {
@@ -23,7 +25,13 @@ impl CharacterSprite {
         Self {
             texture, size, current_frame: 0, total_frames: 1,
             frame_duration: 0.1, elapsed: 0.0, state: AnimationState::Idle, looping: true,
+            tint: Color::WHITE,
         }
+    }
+
+    pub fn with_tint(mut self, color: Color) -> Self {
+        self.tint = color;
+        self
     }
 
     pub fn set_idle(&mut self) {

@@ -302,6 +302,23 @@ pub struct Enemy {
     pub vulnerable: i32,
     /// 中毒层数
     pub poison: i32,
+    /// 敌人词缀列表
+    pub affixes: Vec<EnemyAffix>,
+}
+
+/// 敌人词缀
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EnemyAffix {
+    /// 精英: 全属性提升，体型变大，金色
+    Elite,
+    /// 虚弱: 属性降低，体型变小，灰色
+    Weak,
+    /// 狂暴: 攻击力大幅提升，防御降低，红色
+    Berserk,
+    /// 坚韧: 护甲提升，蓝色
+    Tank,
+    /// 迅捷: 闪避率提升（暂未实现逻辑，仅视觉），青色
+    Swift,
 }
 
 /// 敌人意图
@@ -458,6 +475,7 @@ impl Enemy {
             weakness: 0,
             vulnerable: 0,
             poison: 0,
+            affixes: Vec::new(),
         }
     }
 
@@ -478,6 +496,7 @@ impl Enemy {
             weakness: 0,
             vulnerable: 0,
             poison: 0,
+            affixes: Vec::new(),
         }
     }
 
