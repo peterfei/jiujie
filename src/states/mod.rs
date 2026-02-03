@@ -23,6 +23,8 @@ pub enum GameState {
     Tribulation,
     /// 机缘事件状态
     Event,
+    /// 移除卡牌状态 (坊市服务)
+    CardRemoval,
     /// 游戏结束状态
     GameOver,
 }

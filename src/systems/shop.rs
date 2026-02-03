@@ -25,6 +25,14 @@ impl Plugin for ShopPlugin {
             ).run_if(in_state(GameState::Shop)))
             .add_systems(OnExit(GameState::Shop), cleanup_shop_ui);
 
+        // --- 移除卡牌服务系统 ---
+        app.add_systems(OnEnter(GameState::CardRemoval), setup_card_removal_ui)
+            .add_systems(Update, (
+                handle_card_removal_interaction,
+                update_card_removal_scroll,
+            ).run_if(in_state(GameState::CardRemoval)))
+            .add_systems(OnExit(GameState::CardRemoval), cleanup_card_removal_ui);
+
         info!("【商店插件】ShopPlugin 已注册");
     }
 }
@@ -244,10 +252,18 @@ pub fn handle_shop_interactions(
         }
     }
 
-    // 4. 处理移除卡牌 (功能占位，后续可弹出卡组选择界面)
+    // 4. 处理移除卡牌 (了断因果)
     for interaction in remove_buttons.iter() {
         if matches!(interaction, Interaction::Pressed) {
-            info!("【仙家坊市】准备遗忘功法 (暂未实现选择界面)");
+            if let Ok((player, _)) = player_query.get_single() {
+                if player.gold >= 50 {
+                    sfx_events.send(PlaySfxEvent::new(SfxType::UiClick));
+                    info!("【仙家坊市】准备遗忘功法，进入识海...");
+                    next_state.set(GameState::CardRemoval);
+                } else {
+                    warn!("【仙家坊市】灵石不足，无法了断因果 (需要 50)");
+                }
+            }
         }
     }
 
@@ -269,4 +285,210 @@ pub fn update_gold_display(
 /// 清理商店UI
 pub fn cleanup_shop_ui(mut commands: Commands, ui_query: Query<Entity, With<ShopUiRoot>>) {
     for entity in ui_query.iter() { commands.entity(entity).despawn_recursive(); }
+}
+
+// ============================================================================
+// 移除卡牌服务系统 (Card Removal Service)
+// ============================================================================
+
+#[derive(Component)]
+pub struct CardRemovalUiRoot;
+
+#[derive(Component)]
+pub struct CardRemovalScrollGrid;
+
+#[derive(Component)]
+pub struct CardRemovalItem {
+    pub card_index: usize,
+}
+
+#[derive(Component)]
+pub struct CardRemovalCancelButton;
+
+/// 设置移除卡牌UI
+pub fn setup_card_removal_ui(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    player_deck: Res<PlayerDeck>,
+) {
+    info!("【识海了断】展示功法列表");
+    let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
+
+    commands
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                padding: UiRect::all(Val::Px(40.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.01, 0.02, 0.01, 0.95)),
+            CardRemovalUiRoot,
+            ZIndex(400),
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text::new("了 断 因 果"),
+                TextFont { font_size: 48.0, font: chinese_font.clone(), ..default() },
+                TextColor(Color::srgb(0.8, 0.4, 0.4)),
+            ));
+
+            parent.spawn((
+                Text::new("请选择一门要永久遗忘的功法 (花费 50 灵石)"),
+                TextFont { font_size: 20.0, font: chinese_font.clone(), ..default() },
+                TextColor(Color::srgb(0.7, 0.7, 0.7)),
+                Node { margin: UiRect::bottom(Val::Px(30.0)), ..default() },
+            ));
+
+            // 卡牌网格 (支持滚动)
+            parent.spawn((
+                Node {
+                    width: Val::Percent(95.0),
+                    height: Val::Percent(75.0),
+                    flex_direction: FlexDirection::Row,
+                    flex_wrap: FlexWrap::Wrap,
+                    justify_content: JustifyContent::Center,
+                    column_gap: Val::Px(15.0),
+                    row_gap: Val::Px(15.0),
+                    overflow: Overflow::scroll_y(), // 启用纵向滚动
+                    ..default()
+                },
+                ScrollPosition::default(),
+                CardRemovalScrollGrid, // 新增标记组件
+            )).with_children(|grid| {
+                for (index, card) in player_deck.cards.iter().enumerate() {
+                    grid.spawn((
+                        Button,
+                        Node {
+                            width: Val::Px(140.0),
+                            height: Val::Px(200.0),
+                            flex_direction: FlexDirection::Column,
+                            align_items: AlignItems::Center,
+                            justify_content: JustifyContent::SpaceBetween,
+                            padding: UiRect::all(Val::Px(10.0)),
+                            border: UiRect::all(Val::Px(1.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgba(0.1, 0.05, 0.05, 0.8)),
+                        BorderColor(Color::srgb(0.4, 0.2, 0.2)),
+                        CardRemovalItem { card_index: index },
+                    )).with_children(|btn| {
+                        btn.spawn((
+                            Text::new(card.name.clone()),
+                            TextFont { font_size: 18.0, font: chinese_font.clone(), ..default() },
+                            TextColor(Color::WHITE),
+                        ));
+                        btn.spawn((
+                            ImageNode::new(asset_server.load(card.image_path.clone())),
+                            Node { width: Val::Px(100.0), height: Val::Px(120.0), ..default() },
+                        ));
+                        btn.spawn((
+                            Text::new(card.rarity.get_chinese_name()),
+                            TextFont { font_size: 12.0, font: chinese_font.clone(), ..default() },
+                            TextColor(Color::srgb(0.6, 0.6, 0.6)),
+                        ));
+                    });
+                }
+            });
+
+            // 取消按钮
+            parent.spawn((
+                Button,
+                Node {
+                    width: Val::Px(150.0),
+                    height: Val::Px(45.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    margin: UiRect::top(Val::Px(30.0)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
+                CardRemovalCancelButton,
+            )).with_children(|btn| {
+                btn.spawn((
+                    Text::new("暂且保留"),
+                    TextFont { font_size: 20.0, font: chinese_font.clone(), ..default() },
+                    TextColor(Color::WHITE),
+                ));
+            });
+        });
+}
+
+/// 处理移除卡牌交互
+pub fn handle_card_removal_interaction(
+    mut next_state: ResMut<NextState<GameState>>,
+    mut player_query: Query<&mut Player>,
+    mut player_deck: ResMut<PlayerDeck>,
+    item_query: Query<(&Interaction, &CardRemovalItem), Changed<Interaction>>,
+    cancel_query: Query<&Interaction, (With<CardRemovalCancelButton>, Changed<Interaction>)>,
+    mut current_shop: ResMut<CurrentShopItems>,
+    mut sfx_events: EventWriter<PlaySfxEvent>,
+) {
+    // 1. 处理取消
+    for interaction in cancel_query.iter() {
+        if matches!(interaction, Interaction::Pressed) {
+            sfx_events.send(PlaySfxEvent::new(SfxType::UiClick));
+            next_state.set(GameState::Shop);
+            return;
+        }
+    }
+
+    // 2. 处理移除选中卡牌
+    for (interaction, item) in item_query.iter() {
+        if matches!(interaction, Interaction::Pressed) {
+            if let Ok(mut player) = player_query.get_single_mut() {
+                if player.gold >= 50 {
+                    if item.card_index < player_deck.cards.len() {
+                        let removed_card = player_deck.cards.remove(item.card_index);
+                        player.gold -= 50;
+                        sfx_events.send(PlaySfxEvent::new(SfxType::UiClick));
+                        info!("【识海了断】永久遗忘了功法：{}", removed_card.name);
+
+                        // 移除商店中的“移除卡牌”商品 (坊市规则：此类服务一次性)
+                        current_shop.items.retain(|i| !matches!(i, ShopItem::ForgetTechnique));
+
+                        next_state.set(GameState::Shop);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// 清理移除卡牌UI
+pub fn cleanup_card_removal_ui(
+    mut commands: Commands,
+    query: Query<Entity, With<CardRemovalUiRoot>>,
+) {
+    for entity in query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+}
+
+/// 更新移除卡牌界面的滚动位置
+pub fn update_card_removal_scroll(
+    mut mouse_wheel_events: EventReader<bevy::input::mouse::MouseWheel>,
+    mut query: Query<&mut ScrollPosition, With<CardRemovalScrollGrid>>,
+) {
+    use bevy::input::mouse::MouseScrollUnit;
+    for event in mouse_wheel_events.read() {
+        for mut scroll in query.iter_mut() {
+            let dy = match event.unit {
+                MouseScrollUnit::Line => event.y * 30.0, // 每一行移动 30 像素
+                MouseScrollUnit::Pixel => event.y,
+            };
+            
+            // 更新滚动位置
+            scroll.offset_y -= dy;
+            
+            // 限制滚动范围，防止滚出虚空
+            if scroll.offset_y < 0.0 {
+                scroll.offset_y = 0.0;
+            }
+        }
+    }
 }
