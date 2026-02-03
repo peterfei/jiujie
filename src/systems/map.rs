@@ -455,13 +455,16 @@ fn handle_map_button_clicks(
     player_query: Query<(&Player, &Cultivation)>,
     deck: Res<PlayerDeck>,
     relics: Res<RelicCollection>,
-    button_queries: Query<(&Interaction, &MapNodeButton, &Node), Changed<Interaction>>,
+    button_queries: Query<(&Interaction, &MapNodeButton, &Node)>, // 移除 Changed<Interaction>
     mut sfx_events: EventWriter<PlaySfxEvent>,
 ) {
     let Some(mut map_progress) = map_progress_opt else { return; };
     for (interaction, node_btn, node) in button_queries.iter() {
         if matches!(interaction, Interaction::Pressed) {
             // 播放音效
+            sfx_events.send(PlaySfxEvent::new(SfxType::UiClick));
+
+            // 创建波纹特效
             sfx_events.send(PlaySfxEvent::new(SfxType::UiClick));
 
             // 创建波纹特效
