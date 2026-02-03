@@ -15,6 +15,12 @@ impl Plugin for UiPlugin {
             update_block_visuals,
             update_status_indicators,
         ).run_if(in_state(GameState::Combat)));
+
+        // 支持商店中的漂字系统
+        app.add_systems(Update, (
+            spawn_status_popups,
+            update_damage_numbers,
+        ).run_if(in_state(GameState::Shop)));
     }
 }
 
@@ -25,17 +31,21 @@ fn spawn_status_popups(
     enemy_query: Query<&Transform, With<Enemy>>,
 ) {
     for event in events.read() {
-        // 尝试从 Transform 获取 2D 坐标（简单处理）
-        let pos = if let Ok(t) = player_query.get(event.target) {
-            t.translation.truncate()
+        // 尝试从 Transform 获取 2D 坐标
+        let pos_opt = if let Ok(t) = player_query.get(event.target) {
+            Some(t.translation.truncate())
         } else if let Ok(t) = enemy_query.get(event.target) {
-            t.translation.truncate()
+            Some(t.translation.truncate())
         } else {
-            continue;
+            None
         };
 
-        let ui_x = 640.0 + pos.x;
-        let ui_y = 360.0 - pos.y - 40.0; // 稍微偏上
+        let (ui_x, ui_y) = if let Some(pos) = pos_opt {
+            (640.0 + pos.x, 360.0 - pos.y - 40.0)
+        } else {
+            // 兜底位置：屏幕中央偏上 (例如商店场景)
+            (640.0, 200.0)
+        };
 
         commands.spawn((
             Node {
@@ -50,10 +60,10 @@ fn spawn_status_popups(
             DamageNumber {
                 value: 0,
                 timer: 0.0,
-                lifetime: 1.5, // 稍微久一点
+                lifetime: 1.5,
                 velocity: Vec2::new(0.0, 30.0),
             },
-            ZIndex(110),
+            ZIndex(500), // 确保在商店 UI (300) 之上
         ));
     }
 }

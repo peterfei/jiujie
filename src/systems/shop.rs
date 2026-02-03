@@ -38,21 +38,26 @@ impl Plugin for ShopPlugin {
     }
 }
 
-/// 设置商店UI
 pub fn setup_shop_ui(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut current_items: ResMut<CurrentShopItems>,
     player_deck: Res<PlayerDeck>,
     relic_collection: Res<RelicCollection>,
-    player_query: Query<&Player>,
+    player_query: Query<(&Player, &Cultivation)>,
 ) {
     info!("【仙家坊市】设置坊市UI");
 
-    let current_gold = if let Ok(player) = player_query.get_single() {
+    let player_gold = if let Ok((player, _)) = player_query.get_single() {
         player.gold
     } else {
         100
+    };
+
+    let has_relic_slot = if let Ok((_, cultivation)) = player_query.get_single() {
+        relic_collection.count() < cultivation.get_relic_slots()
+    } else {
+        true
     };
 
     if current_items.items.is_empty() {
@@ -85,13 +90,15 @@ pub fn setup_shop_ui(
 
             parent.spawn((Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(10.0), ..default() },)).with_children(|p| {
                 p.spawn((Text::new("所持灵石:"), TextFont { font_size: 24.0, font: chinese_font.clone(), ..default() }, TextColor(Color::srgb(0.7, 0.7, 0.7))));
-                p.spawn((Text::new(format!("{}", current_gold)), TextFont { font_size: 28.0, font: chinese_font.clone(), ..default() }, TextColor(COLOR_GOLD), ShopGoldText));
+                p.spawn((Text::new(format!("{}", player_gold)), TextFont { font_size: 28.0, font: chinese_font.clone(), ..default() }, TextColor(COLOR_GOLD), ShopGoldText));
             });
 
             parent.spawn((Node { width: Val::Percent(90.0), height: Val::Percent(60.0), flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, justify_content: JustifyContent::Center, align_items: AlignItems::Center, column_gap: Val::Px(25.0), row_gap: Val::Px(25.0), ..default() },))
             .with_children(|items_parent| {
                 for (index, item) in current_items.items.iter().enumerate() {
                     let is_sold_out = matches!(item, ShopItem::SoldOut { .. });
+                    let is_relic = matches!(item, ShopItem::Relic(_));
+                    let is_relic_full = is_relic && !has_relic_slot;
                     
                     let border_color = match item {
                         ShopItem::Relic(relic) => relic.rarity.color(),
@@ -99,7 +106,7 @@ pub fn setup_shop_ui(
                         _ => Color::srgb(0.3, 0.4, 0.3),
                     };
 
-                    let bg_color = if is_sold_out {
+                    let bg_color = if is_sold_out || is_relic_full {
                         Color::srgba(0.02, 0.02, 0.02, 0.95)
                     } else {
                         Color::srgba(0.05, 0.1, 0.05, 0.9)
@@ -112,32 +119,31 @@ pub fn setup_shop_ui(
                         BorderRadius::all(Val::Px(12.0)),
                     ))
                     .with_children(|item_parent| {
-                        let name_color = if is_sold_out { Color::srgb(0.4, 0.4, 0.4) } else { Color::WHITE };
+                        let name_color = if is_sold_out || is_relic_full { Color::srgb(0.4, 0.4, 0.4) } else { Color::WHITE };
                         item_parent.spawn((Text::new(item.get_name()), TextFont { font_size: 22.0, font: chinese_font.clone(), ..default() }, TextColor(name_color)));
                         
                         if let ShopItem::Card(card) = item {
                             item_parent.spawn((ImageNode::new(asset_server.load(card.image_path.clone())), Node { width: Val::Px(120.0), height: Val::Px(140.0), ..default() }));
                         } else if let ShopItem::Relic(_) = item {
-                            // 法宝占位图 (后续可根据 ID 换)
                             item_parent.spawn((ImageNode::new(asset_server.load("textures/relics/default.png")), Node { width: Val::Px(80.0), height: Val::Px(80.0), ..default() }));
                         }
 
-                        let desc_color = if is_sold_out { Color::srgb(0.3, 0.3, 0.3) } else { Color::srgb(0.6, 0.6, 0.6) };
+                        let desc_color = if is_sold_out || is_relic_full { Color::srgb(0.3, 0.3, 0.3) } else { Color::srgb(0.6, 0.6, 0.6) };
                         item_parent.spawn((Text::new(item.get_description()), TextFont { font_size: 13.0, font: chinese_font.clone(), ..default() }, TextColor(desc_color), Node { max_width: Val::Px(160.0), ..default() }));
                         
-                        if !is_sold_out {
+                        if !is_sold_out && !is_relic_full {
                             item_parent.spawn((Text::new(format!("{} 灵石", item.get_price())), TextFont { font_size: 18.0, font: chinese_font.clone(), ..default() }, TextColor(COLOR_GOLD)));
                         }
                         
                         let action_text = match item {
                             ShopItem::Card(_) => "参悟",
-                            ShopItem::Relic(_) => "求取",
+                            ShopItem::Relic(_) => if is_relic_full { "位满" } else { "求取" },
                             ShopItem::Elixir { .. } => "服下",
                             ShopItem::ForgetTechnique => "了断",
                             ShopItem::SoldOut { .. } => "已换取",
                         };
 
-                        let btn_bg = if is_sold_out { Color::srgb(0.1, 0.1, 0.1) } else { Color::srgb(0.2, 0.4, 0.2) };
+                        let btn_bg = if is_sold_out || is_relic_full { Color::srgb(0.1, 0.1, 0.1) } else { Color::srgb(0.2, 0.4, 0.2) };
                         let mut btn_cmd = item_parent.spawn((
                             Button,
                             Node { width: Val::Px(90.0), height: Val::Px(35.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
@@ -145,7 +151,11 @@ pub fn setup_shop_ui(
                             BorderRadius::all(Val::Px(6.0)),
                         ));
 
-                        if !is_sold_out {
+                        if !is_sold_out && !is_relic_full {
+                            // ...
+                        }
+
+                        if !is_sold_out && !is_relic_full {
                             // 根据类型挂载正确的标记组件
                             match item {
                                 ShopItem::Card(_) | ShopItem::Elixir { .. } => {
@@ -162,7 +172,7 @@ pub fn setup_shop_ui(
                         }
 
                         btn_cmd.with_children(|btn| {
-                            btn.spawn((Text::new(action_text), TextFont { font_size: 16.0, font: chinese_font.clone(), ..default() }, TextColor(if is_sold_out { Color::srgb(0.4, 0.4, 0.4) } else { Color::WHITE })));
+                            btn.spawn((Text::new(action_text), TextFont { font_size: 16.0, font: chinese_font.clone(), ..default() }, TextColor(if is_sold_out || is_relic_full { Color::srgb(0.4, 0.4, 0.4) } else { Color::WHITE })));
                         });
                     });
                 }
@@ -240,7 +250,6 @@ fn generate_shop_items(_player_deck: &PlayerDeck, relic_collection: &RelicCollec
     items
 }
 
-/// 处理商店交互
 pub fn handle_shop_interactions(
     mut next_state: ResMut<NextState<GameState>>,
     mut player_query: Query<(&mut Player, &crate::components::Cultivation)>,
@@ -253,6 +262,7 @@ pub fn handle_shop_interactions(
     remove_buttons: Query<&Interaction, (With<ShopRemoveCardButton>, Changed<Interaction>)>,
     exit_buttons: Query<(&Interaction, &ShopExitButton), Changed<Interaction>>,
     mut sfx_events: EventWriter<PlaySfxEvent>,
+    mut status_events: EventWriter<StatusEffectEvent>, // 新增漂字事件
 ) {
     // 1. 处理离开 (优先级最高)
     for (interaction, _) in exit_buttons.iter() {
@@ -293,6 +303,14 @@ pub fn handle_shop_interactions(
                         }
                         _ => {}
                     }
+                } else {
+                    // 灵石不足提示
+                    sfx_events.send(PlaySfxEvent::new(SfxType::UiClick));
+                    status_events.send(StatusEffectEvent {
+                        target: Entity::PLACEHOLDER, // 商店中无特定目标，系统会自动处理或我们可以忽略 target
+                        msg: "灵石不足".to_string(),
+                        color: Color::srgb(1.0, 0.2, 0.2),
+                    });
                 }
             }
         }
@@ -316,9 +334,29 @@ pub fn handle_shop_interactions(
                                 info!("【仙家坊市】购得法宝: {}", relic.name);
                                 purchased_index = Some(index);
                             } else {
-                                warn!("【仙家坊市】法宝位已满或已拥有该法宝，无法求取");
+                                // 失败反馈：可能是法宝位满了
+                                sfx_events.send(PlaySfxEvent::new(SfxType::UiClick));
+                                let msg = if relic_collection.has(relic.id) {
+                                    "已有此法宝".to_string()
+                                } else {
+                                    "法宝位已满，需破境".to_string()
+                                };
+                                
+                                status_events.send(StatusEffectEvent {
+                                    target: Entity::PLACEHOLDER,
+                                    msg,
+                                    color: Color::srgb(1.0, 0.5, 0.2),
+                                });
+                                warn!("【仙家坊市】法宝购买失败");
                             }
                         }
+                    } else {
+                        // 灵石不足提示
+                        status_events.send(StatusEffectEvent {
+                            target: Entity::PLACEHOLDER,
+                            msg: "灵石不足".to_string(),
+                            color: Color::srgb(1.0, 0.2, 0.2),
+                        });
                     }
                 }
             }
