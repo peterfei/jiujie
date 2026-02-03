@@ -30,6 +30,7 @@ use crate::components::{
     EnvironmentPanel, EnvironmentText, // 新增导入
     Particle, DamageNumber, DamageEffectEvent, BlockIconMarker, BlockText, StatusIndicator,
     EnemyHpText, EnemyIntentText, EnemyStatusUi, PlayerHpText, PlayerEnergyText, PlayerBlockText,
+    SwordIntentText, // 补全导入
     TopBar, TopBarHpText, TopBarGoldText, EnergyOrb, EndTurnButton, HandArea, CombatUiRoot,
     StatusEffectEvent, Environment, // 补全导入
 };
@@ -1320,13 +1321,26 @@ fn setup_combat_ui(
                     row.spawn((Text::new(format!("{}/{}", player.hp, player.max_hp)), TextFont { font: chinese_font.clone(), font_size: 18.0, ..default() }, TextColor(Color::WHITE), PlayerHpText));
                 });
 
-                // 玩家状态显示行
-                p.spawn((
-                    Text::new(""),
-                    TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() },
-                    TextColor(Color::srgb(0.7, 0.4, 1.0)),
-                    StatusIndicator { owner: player_entity.unwrap_or(Entity::PLACEHOLDER) },
-                )).insert(PlayerUiMarker);
+                // 玩家状态显示行 (包含剑意)
+                p.spawn(Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(15.0),
+                    ..default()
+                }).with_children(|status_row| {
+                    status_row.spawn((
+                        Text::new(""),
+                        TextFont { font: chinese_font.clone(), font_size: 14.0, ..default() },
+                        TextColor(Color::srgb(0.7, 0.4, 1.0)),
+                        StatusIndicator { owner: player_entity.unwrap_or(Entity::PLACEHOLDER) },
+                    ));
+
+                    status_row.spawn((
+                        Text::new("剑意: 0"),
+                        TextFont { font: chinese_font.clone(), font_size: 16.0, ..default() },
+                        TextColor(Color::srgb(0.4, 1.0, 1.0)), // 亮青色
+                        SwordIntentText,
+                    ));
+                }).insert(PlayerUiMarker);
             }
         });
         root.spawn((
@@ -1571,14 +1585,15 @@ pub fn cleanup_combat_ui(
 
 /// 处理战斗界面按钮点击
 fn handle_combat_button_clicks(
-    mut commands: Commands, // 改为 mut
+    mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
     mut combat_state: ResMut<CombatState>,
     mut enemy_query: Query<(Entity, &Enemy)>,
+    mut player_query: Query<&mut Player>, // 新增
     mut queue: ResMut<EnemyActionQueue>,
     mut hand_query: Query<&mut Hand>,
     mut discard_pile_query: Query<&mut DiscardPile>,
-    hand_area_query: Query<Entity, With<HandArea>>, // 引入 UI 查询
+    hand_area_query: Query<Entity, With<HandArea>>,
     mut button_queries: ParamSet<(
         Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<EndTurnButton>)>,
         Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<ReturnToMapButton>)>,
@@ -1587,6 +1602,11 @@ fn handle_combat_button_clicks(
     for (interaction, mut _color) in button_queries.p0().iter_mut() {
         if matches!(interaction, Interaction::Pressed) {
             info!("【战斗】玩家结束回合，队列初始化开始行动");
+
+            // 0. 重置剑意
+            if let Ok(mut player) = player_query.get_single_mut() {
+                player.reset_sword_intent();
+            }
 
             // 1. 立即清空手牌并进入弃牌堆
             if let Ok(mut hand) = hand_query.get_single_mut() {
@@ -1838,6 +1858,7 @@ fn update_combat_ui(
         Query<&mut Text, With<TopBarGoldText>>,
         Query<(&EnemyHpText, &mut Text)>,
         Query<(&EnemyIntentText, &mut Text)>,
+        Query<&mut Text, With<SwordIntentText>>,
     )>,
 ) {
     if let Ok(p) = player_query.get_single() {
@@ -1846,6 +1867,15 @@ fn update_combat_ui(
         if let Ok(mut t) = text_queries.p2().get_single_mut() { t.0 = format!("护甲: {}", p.block); }
         if let Ok(mut t) = text_queries.p3().get_single_mut() { t.0 = format!("道行: {}/{}", p.hp, p.max_hp); }
         if let Ok(mut t) = text_queries.p4().get_single_mut() { t.0 = format!("灵石: {}", p.gold); }
+        if let Ok(mut t) = text_queries.p7().get_single_mut() { 
+            let tier = match p.sword_intent {
+                0..=2 => "平淡",
+                3..=4 => "锋芒",
+                5 => "合一",
+                _ => "未知"
+            };
+            t.0 = format!("剑意: {} [{}]", p.sword_intent, tier); 
+        }
     }
 
     // ... (血条同步逻辑省略)
@@ -2174,6 +2204,39 @@ fn handle_card_play(
                     sfx_events.send(PlaySfxEvent::new(SfxType::CardPlay));
                     if let Ok((mut player, _)) = player_query.get_single_mut() {
                         player.energy -= card.cost;
+                        
+                        // --- [新增] 剑意系统逻辑 ---
+                        if card.card_type == CardType::Attack {
+                            // 如果打出攻击卡时剑意已满 (5层)，触发“人剑合一”爆发
+                            if player.sword_intent >= 5 {
+                                info!("🔥【剑意】人剑合一！触发绝杀爆发！");
+                                
+                                // 1. 强力视觉反馈
+                                screen_events.send(ScreenEffectEvent::Flash { 
+                                    color: Color::srgba(1.0, 0.9, 0.5, 0.8), 
+                                    duration: 0.2 
+                                });
+                                screen_events.send(ScreenEffectEvent::Shake { 
+                                    trauma: 0.8, 
+                                    decay: 3.0 
+                                });
+                                
+                                // 2. 爆发粒子特效
+                                effect_events.send(SpawnEffectEvent::new(EffectType::SwordEnergy, Vec3::new(0.0, 1.0, 0.0)).burst(50));
+                                
+                                // 3. 额外音效
+                                sfx_events.send(PlaySfxEvent::new(SfxType::LightningStrike)); // 借用闪电音效表现爆发感
+                                
+                                // 4. 消耗所有剑意
+                                player.reset_sword_intent();
+                            } else {
+                                player.add_sword_intent(1);
+                                info!("【剑意】积累至 {} 层", player.sword_intent);
+                            }
+                        } else {
+                            player.reset_sword_intent();
+                            info!("【剑意】因动用非攻伐功法而溃散");
+                        }
                     }
 
                         apply_card_effect(

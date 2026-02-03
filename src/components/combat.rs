@@ -35,6 +35,8 @@ pub struct Player {
     pub block: i32,
     pub gold: i32,
     pub turn: u32,
+    /// 剑意值 (0-5)
+    pub sword_intent: i32,
     /// 中毒层数 (每回合开始扣血)
     pub poison: i32,
     /// 灼烧层数 (每回合开始扣血，并随时间递减)
@@ -51,22 +53,46 @@ impl Default for Player {
             hp: 80, max_hp: 80,
             energy: 3, max_energy: 3,
             block: 0, gold: 100, turn: 1,
+            sword_intent: 0,
             poison: 0, burn: 0, weakness: 0, vulnerable: 0,
         }
     }
 }
 
 impl Player {
-    /// 计算实际造成的伤害 (考虑虚弱)
+    /// 积累剑意
+    pub fn add_sword_intent(&mut self, amount: i32) {
+        self.sword_intent = (self.sword_intent + amount).min(5);
+    }
+
+    /// 重置剑意
+    pub fn reset_sword_intent(&mut self) {
+        self.sword_intent = 0;
+    }
+
+    /// 获取当前剑意带来的额外伤害加成
+    pub fn get_intent_damage_bonus(&self) -> i32 {
+        match self.sword_intent {
+            0..=2 => 0,
+            3..=4 => 2,
+            5 => 5, // 人剑合一
+            _ => 0,
+        }
+    }
+
+    /// 计算实际造成的伤害 (考虑虚弱和剑意)
     pub fn calculate_outgoing_damage(&self, base_amount: i32) -> i32 {
         self.calculate_outgoing_damage_with_env(base_amount, None)
     }
 
     pub fn calculate_outgoing_damage_with_env(&self, base_amount: i32, environment: Option<&Environment>) -> i32 {
+        // 先应用基础伤害 + 剑意加成
+        let total_base = base_amount + self.get_intent_damage_bonus();
+        
         let damage = if self.weakness > 0 {
-            (base_amount as f32 * 0.75) as i32
+            (total_base as f32 * 0.75) as i32
         } else {
-            base_amount
+            total_base
         };
 
         if let Some(env) = environment {
@@ -209,6 +235,9 @@ pub struct PlayerEnergyText;
 
 #[derive(Component)]
 pub struct PlayerBlockText;
+
+#[derive(Component)]
+pub struct SwordIntentText;
 
 #[derive(Component)]
 pub struct TopBar;
