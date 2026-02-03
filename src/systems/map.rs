@@ -233,20 +233,19 @@ pub fn setup_map_ui(
                 .with_children(|map_parent| {
                     let max_layer = nodes.iter().map(|n| n.position.0).max().unwrap_or(0);
 
+                    // [性能优化] 仅渲染当前层附近的节点，防止后期节点过多卡死
+                    // 视野窗口：向后看2层，向前看 vision_range 层
+                    let min_visible_layer = (current_layer as i32 - 2).max(0);
+                    let max_visible_layer = current_layer as i32 + vision_range as i32;
+
                     for layer in 0..=max_layer {
                         // 视野增强逻辑：
-                        // 1. 在神识视野范围内的层级可见
-                        // 2. Boss层总是可见
-                        // 3. 具有已解锁节点或已完成节点的层级必须可见（确保玩家知道下一步去哪，或者看到来时的路）
-                        let has_relevant_nodes = nodes.iter()
-                            .filter(|n| n.position.0 == layer)
-                            .any(|n| n.unlocked || n.completed);
+                        // 1. 在可视窗口内的层级
+                        // 2. Boss层总是可见 (提供目标感)
+                        let is_in_window = layer as i32 >= min_visible_layer && layer as i32 <= max_visible_layer;
+                        let is_boss_layer = layer == max_layer as i32;
 
-                        let is_visible = (layer as i32) <= (current_layer as i32 + vision_range as i32) 
-                                        || layer == max_layer as i32
-                                        || has_relevant_nodes;
-                        
-                        if !is_visible {
+                        if !is_in_window && !is_boss_layer {
                             continue;
                         }
 
