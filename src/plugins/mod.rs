@@ -328,33 +328,22 @@ fn stop_bgm(mut bgm_events: EventWriter<StopBgmEvent>) {
 // 核心系统
 // ============================================================================
 
-use bevy::core_pipeline::tonemapping::Tonemapping;
-
-/// 相机设置
+/// 第一帧资源加载
 fn start_loading_first_frame(mut commands: Commands, asset_server: Res<AssetServer>) {
     let handle = asset_server.load("video/frames/frame_001.jpg");
     commands.insert_resource(FirstFrameResource(handle));
 }
 
+/// 初始状态重定向（存档检查）
 fn initial_state_redirection(
     mut next_state: ResMut<NextState<GameState>>,
-    asset_server: Res<AssetServer>,
-    first_frame: Option<Res<FirstFrameResource>>,
 ) {
-    // 如果还没存过档，我们需要展示开场视频
-    if !crate::resources::save::GameStateSave::exists() {
-        // 等待第一帧资源加载完成
-        if let Some(ff) = first_frame {
-            if matches!(asset_server.get_load_state(ff.0.id()), Some(bevy::asset::LoadState::Loaded)) {
-                info!("【启动重定向】第一帧已就绪，进入开场动画");
-                next_state.set(GameState::OpeningVideo);
-            } else {
-                // 继续等待，不设置状态（保持 Booting，即黑屏）
-            }
-        }
-    } else {
+    if crate::resources::save::GameStateSave::exists() {
         info!("【启动重定向】检测到存档，直接进入主菜单");
         next_state.set(GameState::MainMenu);
+    } else {
+        info!("【启动重定向】首次降临，进入开场演武");
+        next_state.set(GameState::OpeningVideo);
     }
 }
 
@@ -871,7 +860,7 @@ fn setup_combat_ui(
     let chinese_font: Handle<Font> = asset_server.load("fonts/Arial Unicode.ttf");
 
     // 检查当前节点是否为 Boss
-    let is_boss_node = map_progress.is_at_boss();
+    let is_boss_node = map_progress.is_at_boss(); // 恢复正常的节点判定
 
     // 创建根容器
         let root_entity = commands.spawn((
@@ -1669,11 +1658,16 @@ pub fn process_enemy_turn_queue(
         EventWriter<EnemyAttackEvent>,
         EventWriter<PlaySfxEvent>,
     ),
-    enemy_sprite_query: Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
+    mut enemy_sprite_query: Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &mut Transform), Without<crate::components::sprite::PlayerSpriteMarker>>,
+    player_sprite_query: Query<&Transform, With<crate::components::sprite::PlayerSpriteMarker>>,
     time: Res<Time>,
     env: Option<Res<Environment>>,
 ) {
     let (mut anim_events, mut effect_events, mut screen_events, mut attack_events, mut sfx_events) = events;
+    
+    // 获取修行者坐标用于特效定位
+    let player_pos = player_sprite_query.get_single().map(|t| t.translation).unwrap_or(Vec3::new(-4.0, 0.0, 0.0));
+
     let Some(mut combat_state) = combat_state_opt else { return; };
     if !queue.processing || combat_state.phase != TurnPhase::EnemyTurn {
         return;
@@ -1696,74 +1690,66 @@ pub fn process_enemy_turn_queue(
                 let intent = enemy.execute_intent();
                 let enemy_id = enemy.id;
 
-                // [关键修复] 恢复敌人攻击动画与特效的隔离匹配
-                for (render_entity, marker, transform) in enemy_sprite_query.iter() {
+                // --- [增强] 视觉反馈分发 ---
+                for (render_entity, marker, mut transform) in enemy_sprite_query.iter_mut() {
                     if marker.id == enemy_id {
-                        let anim = match intent {
+                        match intent {
                             EnemyIntent::Attack { .. } => {
-                                match enemy.enemy_type {
-                                    EnemyType::DemonicWolf => {
-                                        effect_events.send(SpawnEffectEvent::new(EffectType::SwordEnergy, transform.translation).burst(15));
-                                        crate::components::sprite::AnimationState::WolfAttack
-                                    },
-                                    EnemyType::PoisonSpider => {
-                                        // 恢复吐丝特效
-                                        effect_events.send(SpawnEffectEvent::new(EffectType::WebShot, transform.translation).burst(30));
-                                        
-                                        // 恢复覆盖全屏的实体蛛网 Mesh
-                                        let web_texture = asset_server.load("textures/web_effect.png");
-                                        commands.spawn((
-                                            crate::components::sprite::Ghost { ttl: 1.2 },
-                                            Mesh3d(meshes.add(Rectangle::new(2.5, 2.5))), 
-                                            MeshMaterial3d(materials.add(StandardMaterial {
-                                                base_color: Color::srgba(1.0, 1.0, 1.0, 0.8),
-                                                base_color_texture: Some(web_texture),
-                                                alpha_mode: AlphaMode::Blend,
-                                                unlit: true,
-                                                ..default()
-                                            })),
-                                            Transform::from_xyz(-3.5, 0.0, 0.5).with_rotation(Quat::from_rotation_z(0.3)),
-                                            CombatUiRoot,
-                                        ));
-                                        crate::components::sprite::AnimationState::SpiderAttack
-                                    },
-                                    EnemyType::CursedSpirit => {
-                                        // 怨灵增加幽冥粒子
-                                        effect_events.send(SpawnEffectEvent::new(EffectType::AmbientSpirit, transform.translation).burst(25));
-                                        crate::components::sprite::AnimationState::SpiritAttack
-                                    },
-                                    EnemyType::GreatDemon => {
-                                        // 首领攻击增加雷光 (落地 Y=0.0)
-                                        let target_pos = Vec3::new(transform.translation.x, 0.0, transform.translation.z);
-                                        effect_events.send(SpawnEffectEvent::new(EffectType::Lightning, target_pos).burst(15));
-                                        crate::components::sprite::AnimationState::DemonCast
-                                    },
-                                    _ => crate::components::sprite::AnimationState::DemonAttack,
-                                }
-                            },
-                            EnemyIntent::Seal { .. } | EnemyIntent::Curse { .. } | EnemyIntent::Debuff { .. } => {
-                                match enemy.enemy_type {
-                                    EnemyType::PoisonSpider => {
-                                        effect_events.send(SpawnEffectEvent::new(EffectType::WebShot, transform.translation).burst(20));
-                                        crate::components::sprite::AnimationState::SpiderAttack
-                                    },
-                                    EnemyType::CursedSpirit | EnemyType::GreatDemon => {
-                                        // 诅咒或施法时产生暗影效果
-                                        effect_events.send(SpawnEffectEvent::new(EffectType::AmbientSpirit, transform.translation).burst(30));
-                                        crate::components::sprite::AnimationState::DemonCast
+                                // 攻击时：大幅度前冲，直接撞向修行者
+                                transform.translation.x -= 6.0; 
+                                
+                                // 根据类型播放特效
+                                if enemy.enemy_type == EnemyType::GreatDemon {
+                                    // 雷光锁定：落点在修行者身旁 (Y=0.0 为地面)
+                                    let strike_pos = Vec3::new(player_pos.x, 0.0, player_pos.z);
+                                    effect_events.send(SpawnEffectEvent::new(EffectType::Lightning, strike_pos).burst(35));
+                                    
+                                    // 额外增加冲击粒子
+                                    effect_events.send(SpawnEffectEvent::new(EffectType::SwordEnergy, strike_pos).burst(20));
+
+                                    // 如果是带蓄势的攻击，额外增加红光闪烁
+                                    if enemy.is_charged {
+                                        screen_events.send(ScreenEffectEvent::Flash { color: Color::srgba(1.0, 0.0, 0.0, 0.6), duration: 0.4 });
+                                        screen_events.send(ScreenEffectEvent::Shake { trauma: 0.8, decay: 4.0 });
                                     }
-                                    _ => crate::components::sprite::AnimationState::DemonCast,
                                 }
+                                anim_events.send(CharacterAnimationEvent { target: render_entity, animation: crate::components::sprite::AnimationState::DemonAttack });
+                            },
+                            EnemyIntent::Defend { .. } => {
+                                // 防御/蓄势时：身体后缩并发出光芒
+                                transform.translation.x += 0.8;
+                                if enemy.enemy_type == EnemyType::GreatDemon {
+                                    // 蓄势光环
+                                    effect_events.send(SpawnEffectEvent::new(EffectType::AmbientSpirit, transform.translation).burst(50));
+                                    info!("🛡️ 视觉反馈：Boss 正在凝聚煞气...");
+                                }
+                                anim_events.send(CharacterAnimationEvent { target: render_entity, animation: crate::components::sprite::AnimationState::DemonCast });
+                            },
+                            _ => {
+                                anim_events.send(CharacterAnimationEvent { target: render_entity, animation: crate::components::sprite::AnimationState::DemonCast });
                             }
-                            _ => crate::components::sprite::AnimationState::DemonCast,
-                        };
-                        anim_events.send(CharacterAnimationEvent { target: render_entity, animation: anim });
+                        }
+                    }
+                }
+
+                // 检查二阶段转换瞬间的视觉触发
+                if enemy.enemy_type == EnemyType::GreatDemon && enemy.hp < enemy.max_hp / 2 {
+                    let is_already_rage = enemy.ai_pattern.sequence.len() == 3;
+                    if !is_already_rage {
+                        // 逻辑层切换已在 choose_new_intent 完成，这里只管视觉
+                        screen_events.send(ScreenEffectEvent::Shake { trauma: 1.0, decay: 2.0 });
+                        screen_events.send(ScreenEffectEvent::Flash { color: Color::srgba(0.5, 0.0, 0.0, 0.8), duration: 0.5 });
+                        effect_events.send(SpawnEffectEvent::new(EffectType::SwordEnergy, Vec3::new(3.0, 1.0, 0.0)).burst(100));
                     }
                 }
 
                 match intent {
                     EnemyIntent::Attack { damage } => {
                         let final_damage = enemy.calculate_outgoing_damage_with_env(damage, env.as_ref().map(|r| r.as_ref()));
+                        
+                        // [新增重构] 攻击后消耗蓄势状态
+                        enemy.consume_charge();
+
                         if let Ok((mut player, _)) = player_query.get_single_mut() {
                             player.take_damage_with_env(final_damage, env.as_ref().map(|r| r.as_ref()));
                             

@@ -331,10 +331,11 @@ pub struct Enemy {
     pub weakness: i32,
     /// 易伤层数
     pub vulnerable: i32,
-    /// 中毒层数
     pub poison: i32,
-    /// 敌人词缀列表
+    /// 敌人词缀
     pub affixes: Vec<EnemyAffix>,
+    /// [新增] 是否处于“蓄势”状态（下一次攻击伤害翻倍）
+    pub is_charged: bool,
 }
 
 /// 敌人词缀
@@ -436,7 +437,7 @@ pub enum EnemyType {
     GreatDemon,
 }
 
-/// AI模式配置 - 定义敌人选择意图的概率
+/// AI模式配置 - 支持概率选择或固定序列
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiPattern {
     pub attack_chance: f32,
@@ -448,38 +449,75 @@ pub struct AiPattern {
     pub damage_range: (i32, i32),
     pub block_range: (i32, i32),
     pub buff_range: (i32, i32),
+    /// [新增] 固定招式序列 (如果不为空，则优先按序列循环)
+    pub sequence: Vec<EnemyIntent>,
+    /// [新增] 当前招式进度
+    pub current_step: usize,
 }
 
 impl AiPattern {
+    pub fn new_random(
+        attack: f32, defend: f32, buff: f32, 
+        damage: (i32, i32), block: (i32, i32),
+    ) -> Self {
+        Self {
+            attack_chance: attack,
+            defend_chance: defend,
+            buff_chance: buff,
+            debuff_chance: 0.0,
+            curse_chance: 0.0,
+            seal_chance: 0.0,
+            damage_range: damage,
+            block_range: block,
+            buff_range: (1, 3),
+            sequence: Vec::new(),
+            current_step: 0,
+        }
+    }
+
     pub fn demonic_wolf() -> Self {
         Self {
             attack_chance: 0.7, defend_chance: 0.1, buff_chance: 0.2, debuff_chance: 0.0,
             curse_chance: 0.0, seal_chance: 0.0,
             damage_range: (8, 12), block_range: (3, 5), buff_range: (1, 3),
+            sequence: Vec::new(),
+            current_step: 0,
         }
     }
 
     pub fn poison_spider() -> Self {
         Self {
             attack_chance: 0.3, defend_chance: 0.2, buff_chance: 0.0, debuff_chance: 0.3,
-            curse_chance: 0.0, seal_chance: 0.2, // 蜘蛛会封印气穴
+            curse_chance: 0.0, seal_chance: 0.2, 
             damage_range: (5, 8), block_range: (4, 6), buff_range: (0, 0),
+            sequence: Vec::new(),
+            current_step: 0,
         }
     }
 
     pub fn cursed_spirit() -> Self {
         Self {
             attack_chance: 0.2, defend_chance: 0.2, buff_chance: 0.0, debuff_chance: 0.2,
-            curse_chance: 0.4, seal_chance: 0.0, // 怨灵擅长施加诅咒
+            curse_chance: 0.4, seal_chance: 0.0,
             damage_range: (10, 15), block_range: (5, 10), buff_range: (0, 0),
+            sequence: Vec::new(),
+            current_step: 0,
         }
     }
 
     pub fn great_demon() -> Self {
+        // Boss 采用固定序列
         Self {
             attack_chance: 0.5, defend_chance: 0.2, buff_chance: 0.1, debuff_chance: 0.1,
             curse_chance: 0.05, seal_chance: 0.05,
             damage_range: (12, 18), block_range: (6, 10), buff_range: (3, 5),
+            sequence: vec![
+                EnemyIntent::Attack { damage: 15 },      // 1. 试探
+                EnemyIntent::Defend { block: 12 },       // 2. 蓄势 (获得护甲)
+                EnemyIntent::Attack { damage: 28 },      // 3. 破魔斩 (重击)
+                EnemyIntent::Wait,                       // 4. 喘息
+            ],
+            current_step: 0,
         }
     }
 
@@ -489,6 +527,48 @@ impl AiPattern {
             EnemyType::PoisonSpider => Self::poison_spider(),
             EnemyType::CursedSpirit => Self::cursed_spirit(),
             EnemyType::GreatDemon => Self::great_demon(),
+        }
+    }
+
+    /// 获取下一步意图
+    pub fn next_intent(&mut self, roll: f32, strength: i32) -> EnemyIntent {
+        if !self.sequence.is_empty() {
+            let mut intent = self.sequence[self.current_step].clone();
+            // 应用当前的攻击力加成
+            if let EnemyIntent::Attack { ref mut damage } = intent {
+                *damage += strength;
+            }
+            self.current_step = (self.current_step + 1) % self.sequence.len();
+            intent
+        } else {
+            // 原有的概率逻辑
+            if roll < self.attack_chance {
+                use rand::Rng;
+                let mut rng = rand::thread_rng();
+                let base_damage = rng.gen_range(self.damage_range.0..=self.damage_range.1);
+                EnemyIntent::Attack { damage: base_damage + strength }
+            } else if roll < self.attack_chance + self.defend_chance {
+                use rand::Rng;
+                let mut rng = rand::thread_rng();
+                let block = rng.gen_range(self.block_range.0..=self.block_range.1);
+                EnemyIntent::Defend { block }
+            } else if roll < self.attack_chance + self.defend_chance + self.buff_chance {
+                use rand::Rng;
+                let mut rng = rand::thread_rng();
+                let strength_gain = rng.gen_range(self.buff_range.0..=self.buff_range.1);
+                EnemyIntent::Buff { strength: strength_gain }
+            } else if roll < self.attack_chance + self.defend_chance + self.buff_chance + self.debuff_chance {
+                EnemyIntent::Debuff { poison: 2, weakness: 1 }
+            } else if roll < self.attack_chance + self.defend_chance + self.buff_chance + self.debuff_chance + self.curse_chance {
+                EnemyIntent::Curse { card_id: 500 }
+            } else if roll < self.attack_chance + self.defend_chance + self.buff_chance + self.debuff_chance + self.curse_chance + self.seal_chance {
+                use rand::Rng;
+                let mut rng = rand::thread_rng();
+                let slot = rng.gen_range(0..5);
+                EnemyIntent::Seal { slot_index: slot, duration: 2 }
+            } else {
+                EnemyIntent::Attack { damage: self.damage_range.0 + strength }
+            }
         }
     }
 }
@@ -513,6 +593,7 @@ impl Enemy {
             vulnerable: 0,
             poison: 0,
             affixes: Vec::new(),
+            is_charged: false,
         }
     }
 
@@ -534,6 +615,7 @@ impl Enemy {
             vulnerable: 0,
             poison: 0,
             affixes: Vec::new(),
+            is_charged: false,
         }
     }
 
@@ -543,11 +625,16 @@ impl Enemy {
     }
 
     pub fn calculate_outgoing_damage_with_env(&self, base_amount: i32, environment: Option<&Environment>) -> i32 {
-        let damage = if self.weakness > 0 {
+        let mut damage = if self.weakness > 0 {
             (base_amount as f32 * 0.75) as i32
         } else {
             base_amount
         };
+
+        // 应用蓄势加成 (翻倍)
+        if self.is_charged {
+            damage *= 2;
+        }
 
         if let Some(env) = environment {
             (damage as f32 * env.damage_modifier) as i32
@@ -588,6 +675,14 @@ impl Enemy {
         self.hp = (self.hp - remaining_damage).max(0);
     }
 
+    /// 消耗“蓄势”状态
+    pub fn consume_charge(&mut self) {
+        if self.is_charged {
+            self.is_charged = false;
+            info!("✨ {} 的蓄势劲力已倾泻而出", self.name);
+        }
+    }
+
     /// 设置意图
     pub fn set_intent(&mut self, intent: EnemyIntent) {
         self.intent = intent;
@@ -603,58 +698,22 @@ impl Enemy {
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
-        // BOSS 专属固定招式循环
-        if self.enemy_type == EnemyType::GreatDemon {
-            let cycle_pos = self.turn_count % 3;
-            let intent = match cycle_pos {
-                0 => {
-                    // 啸天：基准大伤害
-                    EnemyIntent::Attack { damage: 20 + self.strength }
-                },
-                1 => {
-                    // 瞬狱杀：中等伤害
-                    EnemyIntent::Attack { damage: 15 + self.strength }
-                },
-                _ => {
-                    // 聚灵：大幅提升攻击力
-                    EnemyIntent::Buff { strength: 5 }
-                }
-            };
-            self.intent = intent;
-            self.turn_count += 1;
-            return;
+        // 如果是二阶段 Boss 且血量过低，切换至狂暴序列
+        if self.enemy_type == EnemyType::GreatDemon && self.hp < self.max_hp / 2 {
+            // 检查是否已经切换过序列 (通过序列第一个招式的伤害值来判断，或者检查长度)
+            let is_already_rage = self.ai_pattern.sequence.len() == 3;
+            if !is_already_rage {
+                 self.ai_pattern.sequence = vec![
+                    EnemyIntent::Attack { damage: 35 }, 
+                    EnemyIntent::Buff { strength: 8 },                 
+                    EnemyIntent::Attack { damage: 25 }, 
+                 ];
+                 self.ai_pattern.current_step = 0;
+                 info!("🔥 {} 进入了【狂暴二阶段】！", self.name);
+            }
         }
 
-        let roll: f32 = rng.gen();
-        let intent = if roll < self.ai_pattern.attack_chance {
-            // 攻击
-            let base_damage = rng.gen_range(self.ai_pattern.damage_range.0..=self.ai_pattern.damage_range.1);
-            let total_damage = base_damage + self.strength;
-            EnemyIntent::Attack { damage: total_damage }
-        } else if roll < self.ai_pattern.attack_chance + self.ai_pattern.defend_chance {
-            // 防御
-            let block = rng.gen_range(self.ai_pattern.block_range.0..=self.ai_pattern.block_range.1);
-            EnemyIntent::Defend { block }
-        } else if roll < self.ai_pattern.attack_chance + self.ai_pattern.defend_chance + self.ai_pattern.buff_chance {
-            // 强化
-            let strength = rng.gen_range(self.ai_pattern.buff_range.0..=self.ai_pattern.buff_range.1);
-            EnemyIntent::Buff { strength }
-        } else if roll < self.ai_pattern.attack_chance + self.ai_pattern.defend_chance + self.ai_pattern.buff_chance + self.ai_pattern.debuff_chance {
-            // 减益
-            EnemyIntent::Debuff { poison: 2, weakness: 1 }
-        } else if roll < self.ai_pattern.attack_chance + self.ai_pattern.defend_chance + self.ai_pattern.buff_chance + self.ai_pattern.debuff_chance + self.ai_pattern.curse_chance {
-            // 诅咒 (card_id 500 可能是某种诅咒卡)
-            EnemyIntent::Curse { card_id: 500 }
-        } else if roll < self.ai_pattern.attack_chance + self.ai_pattern.defend_chance + self.ai_pattern.buff_chance + self.ai_pattern.debuff_chance + self.ai_pattern.curse_chance + self.ai_pattern.seal_chance {
-            // 封印
-            let slot = rng.gen_range(0..5);
-            EnemyIntent::Seal { slot_index: slot, duration: 2 }
-        } else {
-            // 默认回退到攻击
-            EnemyIntent::Attack { damage: self.ai_pattern.damage_range.0 + self.strength }
-        };
-
-        self.intent = intent;
+        self.intent = self.ai_pattern.next_intent(rng.gen(), self.strength);
     }
 
     /// 执行意图（敌人回合行动）
@@ -667,6 +726,11 @@ impl Enemy {
             EnemyIntent::Defend { block } => {
                 // 获得护甲
                 self.block += block;
+                // 如果是大妖 (Boss)，防御即蓄势
+                if self.enemy_type == EnemyType::GreatDemon {
+                    self.is_charged = true;
+                    info!("🛡️ {} 正在蓄势，其势待发！", self.name);
+                }
                 info!("{} 获得了 {} 点护甲", self.name, block);
                 EnemyIntent::Defend { block }
             }
@@ -707,44 +771,13 @@ impl Enemy {
     pub fn apply_attack_affixes(&self, player: &mut Player) {
         for affix in &self.affixes {
             match affix {
-                EnemyAffix::Fire => player.burn += 3, // 每次攻击施加3层灼烧
-                EnemyAffix::Poison => player.poison += 2, // 每次攻击施加2层中毒
-                EnemyAffix::Ice => player.weakness += 1, // 每次攻击施加1层虚弱
-                _ => {} // 其他词缀无攻击特效
+                EnemyAffix::Fire => player.burn += 3, 
+                EnemyAffix::Poison => player.poison += 2, 
+                EnemyAffix::Ice => player.weakness += 1, 
+                _ => {} 
             }
         }
     }
-}
-
-// ============================================================================
-// 战斗资源
-// ============================================================================
-
-/// 战斗配置资源
-#[derive(Resource, Debug, Clone)]
-pub struct CombatConfig {
-    /// 每回合基础能量
-    pub base_energy: i32,
-    /// 初始生命值
-    pub initial_hp: i32,
-}
-
-impl Default for CombatConfig {
-    fn default() -> Self {
-        Self {
-            base_energy: 3,
-            initial_hp: 80,
-        }
-    }
-}
-
-/// 战斗状态
-#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CombatState {
-    /// 当前回合阶段
-    pub phase: TurnPhase,
-    /// 本回合是否已抽牌
-    pub cards_drawn_this_turn: bool,
 }
 
 /// 天象环境UI面板标记
@@ -840,6 +873,15 @@ impl VictoryDelay {
             duration,
         }
     }
+}
+
+/// 战斗状态
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CombatState {
+    /// 当前回合阶段
+    pub phase: TurnPhase,
+    /// 本回合是否已抽牌
+    pub cards_drawn_this_turn: bool,
 }
 
 impl Default for CombatState {
