@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy_card_battler::states::GameState;
-use bevy_card_battler::plugins::opening::{OpeningPlugin, OpeningPlayedLock};
+use bevy_card_battler::plugins::opening::OpeningPlugin;
 
 /// 计数器：统计进入状态的次数
 #[derive(Resource, Default)]
