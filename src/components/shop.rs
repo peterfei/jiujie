@@ -23,6 +23,15 @@ pub enum ShopItem {
     },
     /// 遗忘功法（移除卡牌服务）
     ForgetTechnique,
+    /// 售罄/已获得
+    SoldOut {
+        original_name: String,
+    },
+}
+
+#[derive(Event)]
+pub struct ShopItemPurchased {
+    pub item_index: usize,
 }
 
 impl ShopItem {
@@ -51,26 +60,29 @@ impl ShopItem {
             }
             ShopItem::Elixir { price, .. } => *price,
             ShopItem::ForgetTechnique => 50,
+            ShopItem::SoldOut { .. } => 0,
         }
     }
 
     /// 获取商品名称
-    pub fn get_name(&self) -> &str {
+    pub fn get_name(&self) -> String {
         match self {
-            ShopItem::Card(card) => &card.name,
-            ShopItem::Relic(relic) => &relic.name,
-            ShopItem::Elixir { name, .. } => name,
-            ShopItem::ForgetTechnique => "遗忘功法",
+            ShopItem::Card(card) => card.name.clone(),
+            ShopItem::Relic(relic) => relic.name.clone(),
+            ShopItem::Elixir { name, .. } => name.clone(),
+            ShopItem::ForgetTechnique => "遗忘功法".to_string(),
+            ShopItem::SoldOut { .. } => "已售罄".to_string(),
         }
     }
 
     /// 获取商品描述
-    pub fn get_description(&self) -> &str {
+    pub fn get_description(&self) -> String {
         match self {
-            ShopItem::Card(card) => &card.description,
-            ShopItem::Relic(relic) => &relic.description,
-            ShopItem::Elixir { description, .. } => description,
-            ShopItem::ForgetTechnique => "从识海中永久抹去一门功法，以免贪多嚼不烂",
+            ShopItem::Card(card) => card.description.clone(),
+            ShopItem::Relic(relic) => relic.description.clone(),
+            ShopItem::Elixir { description, .. } => description.clone(),
+            ShopItem::ForgetTechnique => "从识海中永久抹去一门功法，以免贪多嚼不烂".to_string(),
+            ShopItem::SoldOut { original_name } => format!("{} 已被取走，因果已了。", original_name),
         }
     }
 }
