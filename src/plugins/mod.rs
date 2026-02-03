@@ -8,7 +8,7 @@ use crate::components::background_music::{BgmType, PlayBgmEvent, StopBgmEvent};
 use crate::components::{
     Player, Enemy, EnemyType, EnemyIntent, EnemyAffix, Card, CardType, CardEffect, CardRarity, Hand, DrawPile, DiscardPile,
     CombatState, TurnPhase, NodeType, Realm, Cultivation, MapNode, MapProgress, PlayerDeck, DeckConfig, CardPool,
-    MapUiRoot, MapNodeButton, RippleEffect, // 新增导入
+    MapUiRoot, MapNodeButton, RippleEffect, EntranceAnimation, HoverEffect, // 新增导入
     CharacterType, EnemyAttackEvent,
     SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent,
     PlayerHpBufferMarker, EnemyHpBarMarker, EnemyHpBufferMarker,
@@ -3065,8 +3065,14 @@ fn setup_game_over_ui(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     map_progress: Res<MapProgress>,
+    player_query: Query<&Player>,
+    cultivation_query: Query<&crate::components::Cultivation>,
 ) {
-    info!("设置游戏结束界面");
+    info!("【UI】展现身死道消结算界面");
+
+    let player = player_query.get_single().cloned().unwrap_or_default();
+    let cultivation = cultivation_query.get_single().cloned().unwrap_or_else(|_| crate::components::Cultivation::new());
+    let chinese_font = asset_server.load("fonts/Arial Unicode.ttf");
 
     // 获取当前层数
     let current_layer = map_progress.current_layer;
@@ -3079,114 +3085,152 @@ fn setup_game_over_ui(
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::Center,
-                row_gap: Val::Px(30.0),
                 ..default()
             },
-            BackgroundColor(Color::srgb(0.05, 0.05, 0.1)),
+            // 深邃的幽冥紫黑背景
+            BackgroundColor(Color::srgba(0.02, 0.01, 0.03, 1.0)),
             GameOverUiRoot,
         ))
         .with_children(|parent| {
-            // 标题
+            // --- 标题演出 ---
             parent.spawn((
-                Text::new("你败北"),
-                TextFont {
-                    font: asset_server.load("fonts/Arial Unicode.ttf"),
-                    font_size: 64.0,
-                    ..default()
-                },
-                TextColor(Color::srgb(0.8, 0.2, 0.2)),
-                TextLayout::new_with_justify(JustifyText::Center),
-            ));
-
-            // 层数信息
-            parent.spawn((
-                Text::new(format!("到达层数：{} 层", current_layer)),
-                TextFont {
-                    font: asset_server.load("fonts/Arial Unicode.ttf"),
-                    font_size: 28.0,
-                    ..default()
-                },
-                TextColor(Color::srgb(0.9, 0.9, 0.9)),
-                TextLayout::new_with_justify(JustifyText::Center),
                 Node {
-                    margin: UiRect::top(Val::Px(20.0)),
+                    margin: UiRect::bottom(Val::Px(50.0)),
                     ..default()
                 },
-            ));
+            )).with_children(|title_box| {
+                title_box.spawn((
+                    Text::new("身 死 道 消"),
+                    TextFont {
+                        font: chinese_font.clone(),
+                        font_size: 100.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.7, 0.1, 0.1)), // 惨淡的血红色
+                    TextLayout::new_with_justify(JustifyText::Center),
+                    EntranceAnimation::new(1.2), // 缓慢浮现
+                ));
+            });
 
-            // 按钮容器
+            // --- 结算详情容器 ---
+            parent.spawn((
+                Node {
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Start, // 左对齐列表
+                    row_gap: Val::Px(15.0),
+                    padding: UiRect::all(Val::Px(30.0)),
+                    border: UiRect::all(Val::Px(2.0)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)),
+                BorderColor(Color::srgba(0.7, 0.1, 0.1, 0.3)),
+                EntranceAnimation::new(1.8),
+            )).with_children(|stats| {
+                // 1. 境界
+                let realm_name = match cultivation.realm {
+                    crate::components::cultivation::Realm::QiRefining => "炼气期",
+                    crate::components::cultivation::Realm::FoundationEstablishment => "筑基期",
+                    crate::components::cultivation::Realm::GoldenCore => "金丹期",
+                    crate::components::cultivation::Realm::NascentSoul => "元婴期",
+                };
+                stats.spawn((
+                    Text::new(format!("终焉境界：{}", realm_name)),
+                    TextFont { font: chinese_font.clone(), font_size: 28.0, ..default() },
+                    TextColor(Color::srgb(0.8, 0.8, 0.8)),
+                ));
+
+                // 2. 层数
+                stats.spawn((
+                    Text::new(format!("探索进度：第 {} 层", current_layer + 1)),
+                    TextFont { font: chinese_font.clone(), font_size: 28.0, ..default() },
+                    TextColor(Color::srgb(0.8, 0.8, 0.8)),
+                ));
+
+                // 3. 灵石
+                stats.spawn((
+                    Text::new(format!("遗留灵石：{}", player.gold)),
+                    TextFont { font: chinese_font.clone(), font_size: 28.0, ..default() },
+                    TextColor(Color::srgb(1.0, 0.8, 0.2)),
+                ));
+
+                // 4. 感悟
+                stats.spawn((
+                    Text::new(format!("大道感悟：{}", cultivation.insight)),
+                    TextFont { font: chinese_font.clone(), font_size: 28.0, ..default() },
+                    TextColor(Color::srgb(0.4, 0.8, 1.0)),
+                ));
+            });
+
+            // --- 交互按钮 ---
             parent
                 .spawn(Node {
-                    width: Val::Auto,
-                    height: Val::Auto,
                     flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(20.0),
-                    margin: UiRect::top(Val::Px(40.0)),
+                    column_gap: Val::Px(40.0),
+                    margin: UiRect::top(Val::Px(60.0)),
                     ..default()
                 })
-                .with_children(|button_parent| {
+                .with_children(|btn_row| {
                     // 重新开始按钮
-                    button_parent
-                        .spawn((
-                            Button,
-                            BackgroundColor(Color::srgb(0.2, 0.5, 0.8)),
-                            BorderColor(Color::srgb(0.3, 0.6, 0.9)),
-                            Node {
-                                width: Val::Px(160.0),
-                                height: Val::Px(50.0),
-                                align_items: AlignItems::Center,
-                                justify_content: JustifyContent::Center,
-                                border: UiRect::all(Val::Px(2.0)),
-                                ..default()
-                            },
-                            RestartButton,
-                        ))
-                        .with_children(|btn| {
-                            btn.spawn((
-                                Text::new("重新开始"),
-                                TextFont {
-                                    font: asset_server.load("fonts/Arial Unicode.ttf"),
-                                    font_size: 20.0,
-                                    ..default()
-                                },
-                                TextColor(Color::WHITE),
-                            ));
-                        });
+                    btn_row.spawn((
+                        Button,
+                        Node {
+                            width: Val::Px(200.0),
+                            height: Val::Px(60.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            border: UiRect::all(Val::Px(2.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgba(0.15, 0.05, 0.05, 0.9)),
+                        BorderColor(Color::srgb(0.6, 0.1, 0.1)),
+                        RestartButton,
+                        HoverEffect { base_scale: 1.0, hover_scale: 1.1 },
+                    )).with_children(|btn| {
+                        btn.spawn((
+                            Text::new("重 塑 道 基"),
+                            TextFont { font: chinese_font.clone(), font_size: 28.0, ..default() },
+                            TextColor(Color::WHITE),
+                        ));
+                    });
 
                     // 返回主菜单按钮
-                    button_parent
-                        .spawn((
-                            Button,
-                            BackgroundColor(Color::srgb(0.3, 0.3, 0.4)),
-                            BorderColor(Color::srgb(0.5, 0.5, 0.6)),
-                            Node {
-                                width: Val::Px(160.0),
-                                height: Val::Px(50.0),
-                                align_items: AlignItems::Center,
-                                justify_content: JustifyContent::Center,
-                                border: UiRect::all(Val::Px(2.0)),
-                                ..default()
-                            },
-                        ))
-                        .observe(
-                            |_entity: Trigger<Pointer<Click>>,
-                            mut next_state: ResMut<NextState<GameState>>| {
-                                info!("游戏结束：返回主菜单");
-                                next_state.set(GameState::MainMenu);
-                            },
-                        )
-                        .with_children(|btn| {
-                            btn.spawn((
-                                Text::new("返回主菜单"),
-                                TextFont {
-                                    font: asset_server.load("fonts/Arial Unicode.ttf"),
-                                    font_size: 20.0,
-                                    ..default()
-                                },
-                                TextColor(Color::WHITE),
-                            ));
-                        });
+                    btn_row.spawn((
+                        Button,
+                        Node {
+                            width: Val::Px(200.0),
+                            height: Val::Px(60.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            border: UiRect::all(Val::Px(2.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgba(0.1, 0.1, 0.15, 0.9)),
+                        BorderColor(Color::srgb(0.3, 0.3, 0.5)),
+                        BackToMenuButton,
+                        HoverEffect { base_scale: 1.0, hover_scale: 1.1 },
+                    )).with_children(|btn| {
+                        btn.spawn((
+                            Text::new("归 隐 山 林"),
+                            TextFont { font: chinese_font.clone(), font_size: 28.0, ..default() },
+                            TextColor(Color::srgb(0.7, 0.7, 0.7)),
+                        ));
+                    });
                 });
+
+            // 底部脚注
+            parent.spawn((
+                Text::new("纵有万般不甘，亦是因果使然。"),
+                TextFont {
+                    font: chinese_font.clone(),
+                    font_size: 18.0,
+                    ..default()
+                },
+                TextColor(Color::srgba(0.5, 0.5, 0.5, 0.4)),
+                Node {
+                    margin: UiRect::top(Val::Px(40.0)),
+                    ..default()
+                },
+            ));
         });
 }
 
@@ -3317,35 +3361,42 @@ fn handle_game_over_clicks(
     mut cultivation_query: Query<&mut crate::components::Cultivation>,
     mut deck: ResMut<PlayerDeck>,
     mut relics: ResMut<RelicCollection>,
-    mut map_progress: ResMut<MapProgress>, // 新增
-    button_queries: Query<(&Interaction, &RestartButton), Changed<Interaction>>,
+    mut map_progress: ResMut<MapProgress>,
+    mut sfx_events: EventWriter<PlaySfxEvent>,
+    restart_button_query: Query<&Interaction, (Changed<Interaction>, With<RestartButton>)>,
+    menu_button_query: Query<&Interaction, (Changed<Interaction>, With<BackToMenuButton>)>,
 ) {
-    for (interaction, _) in button_queries.iter() {
+    // 1. 重新开始 (重塑道基)
+    for interaction in restart_button_query.iter() {
         if matches!(interaction, Interaction::Pressed) {
-            info!("【游戏结束】点击重新开始，正在重塑道基...");
+            sfx_events.send(PlaySfxEvent::new(SfxType::UiClick));
+            info!("【游戏结束】点击重塑道基，因果轮转...");
             
-            // 1. 彻底删除旧存档
             crate::resources::save::GameStateSave::delete_save();
 
-            // 2. 重置玩家数值
             if let Ok(mut player) = player_query.get_single_mut() {
-                *player = Player::default(); // 恢复 80 HP
+                *player = Player::default();
             }
-            
-            // 3. 重置修为
             if let Ok(mut cultivation) = cultivation_query.get_single_mut() {
                 *cultivation = crate::components::Cultivation::new();
             }
 
-            // 4. 重置牌组与遗物
             deck.reset(); 
             relics.relic.clear();
             relics.add_relic(crate::components::relic::Relic::burning_blood());
-
-            // 5. 重置地图进度 (关键修复)
             map_progress.reset();
 
             next_state.set(GameState::Prologue);
+            return;
+        }
+    }
+
+    // 2. 返回主菜单 (归隐山林)
+    for interaction in menu_button_query.iter() {
+        if matches!(interaction, Interaction::Pressed) {
+            sfx_events.send(PlaySfxEvent::new(SfxType::UiClick));
+            info!("【游戏结束】归隐山林，暂离凡尘...");
+            next_state.set(GameState::MainMenu);
             return;
         }
     }
