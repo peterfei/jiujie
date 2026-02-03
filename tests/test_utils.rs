@@ -67,6 +67,8 @@ pub fn create_test_app() -> App {
     app.add_event::<ScreenEffectEvent>();
     app.add_event::<EnemyAttackEvent>();
     app.add_event::<bevy_card_battler::components::PlaySfxEvent>();
+    app.add_event::<bevy_card_battler::components::background_music::PlayBgmEvent>();
+    app.add_event::<bevy_card_battler::components::background_music::StopBgmEvent>();
     app.add_event::<bevy_card_battler::components::DamageEffectEvent>();
     app.add_event::<bevy_card_battler::components::StatusEffectEvent>();
     app.add_event::<bevy::input::mouse::MouseWheel>(); // 新增滚轮事件
@@ -95,6 +97,10 @@ pub fn create_test_app() -> App {
     app.insert_resource(MapProgress::default());
     app.insert_resource(CombatConfig::default());
     app.insert_resource(RelicCollection::default());
+    
+    // 初始化 Opening 所需的资源
+    let first_frame_handle = Handle::<Image>::default();
+    app.insert_resource(bevy_card_battler::plugins::opening::FirstFrameResource(first_frame_handle));
 
     // 初始化输入资源
     app.init_resource::<ButtonInput<KeyCode>>();
