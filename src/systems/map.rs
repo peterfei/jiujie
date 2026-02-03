@@ -246,6 +246,13 @@ pub fn setup_map_ui(
                         let is_boss_layer = layer == max_layer as i32;
 
                         if !is_in_window && !is_boss_layer {
+                            // [关键修复] 对于被剔除的层级，渲染一个占位容器，保持滚动条高度和布局位置
+                            // 否则中间层级消失会导致 Boss 层直接紧挨着当前层，造成视觉错乱
+                            map_parent.spawn(Node {
+                                width: Val::Percent(100.0),
+                                height: Val::Px(140.0), // 估算高度：节点行(80) + 连线(60)
+                                ..default()
+                            });
                             continue;
                         }
 
