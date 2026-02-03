@@ -11,6 +11,7 @@ pub mod audio;
 pub mod background_music;
 pub mod ui;
 pub mod map;
+pub mod event;
 pub mod enemy_gen;
 
 pub use animation::AnimationPlugin;
@@ -23,6 +24,7 @@ pub use relic::{
 };
 pub use shop::{ShopPlugin, update_gold_display};
 pub use rest::RestPlugin;
+pub use event::EventPlugin;
 pub use audio::SfxPlugin;
 pub use background_music::BackgroundMusicPlugin;
 pub use ui::UiPlugin;

@@ -21,7 +21,7 @@ use bevy::prelude::*;
 use bevy::text::TextPlugin;
 use bevy_card_battler::plugins::{CorePlugin, MenuPlugin};
 use bevy_card_battler::components::sprite::CharacterAssets;
-use bevy_card_battler::systems::{AnimationPlugin, SpritePlugin, ParticlePlugin, ScreenEffectPlugin, ShopPlugin, RestPlugin, MapPlugin};
+use bevy_card_battler::systems::{AnimationPlugin, SpritePlugin, ParticlePlugin, ScreenEffectPlugin, ShopPlugin, RestPlugin, MapPlugin, EventPlugin};
 use bevy_card_battler::states::GameState;
 use bevy_card_battler::components::{VictoryDelay, Enemy, Player, PlayerDeck, MapProgress, CombatConfig, RelicCollection};
 use bevy_card_battler::components::shop::CurrentShopItems;
@@ -77,6 +77,7 @@ pub fn create_test_app() -> App {
     app.add_plugins(ShopPlugin);
     app.add_plugins(RestPlugin);
     app.add_plugins(MapPlugin);
+    app.add_plugins(EventPlugin);
 
     // 注册特效插件
     app.add_plugins(AnimationPlugin);

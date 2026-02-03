@@ -245,10 +245,10 @@ impl Plugin for GamePlugin {
         .add_systems(Update, update_prologue.run_if(in_state(GameState::Prologue)))
         .add_systems(OnExit(GameState::Prologue), cleanup_prologue)
         .add_systems(OnEnter(GameState::Tribulation), setup_tribulation)
-        .add_systems(OnEnter(GameState::Event), setup_event_ui)
+        // Event系统已迁移至 EventPlugin
+        .add_plugins(crate::systems::EventPlugin)
         .add_systems(Update, (
             update_tribulation.run_if(in_state(GameState::Tribulation)),
-            handle_event_choices.run_if(in_state(GameState::Event)),
         ))
         .add_systems(OnExit(GameState::Tribulation), teardown_tribulation);
     }
@@ -837,151 +837,13 @@ struct BackToMenuButton;
 #[derive(Component)]
 struct BackToMapButton;
 
-#[derive(Component)]
-pub struct EventUiRoot; // 设为 pub
+// EventUiRoot 已迁移至 src/systems/event.rs
 
 pub fn setup_event_ui_wrapper(commands: Commands, asset_server: Res<AssetServer>) {
-    setup_event_ui(commands, asset_server);
+    // 兼容性保留，实际逻辑在 systems/event.rs
 }
 
-#[derive(Component)]
-enum EventChoiceButton {
-    GainGold(i32),
-    Heal(i32),
-    Leave,
-}
-
-/// 设置机缘事件界面
-fn setup_event_ui(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-) {
-    info!("【机缘】进入奇遇事件");
-    let font = asset_server.load("fonts/Arial Unicode.ttf");
-
-    commands.spawn((
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            row_gap: Val::Px(30.0),
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.05, 0.05, 0.1, 0.9)),
-        EventUiRoot,
-    )).with_children(|parent| {
-        // 标题
-        parent.spawn((
-            Text::new("古 修 遗 迹"),
-            TextFont { font: font.clone(), font_size: 48.0, ..default() },
-            TextColor(Color::srgb(0.4, 0.8, 1.0)),
-        ));
-
-        // 描述
-        parent.spawn((
-            Text::new("你在一处断崖下发现了一尊古老的石像，石像手中握着一颗微弱发光的灵石，而基座上似乎刻着某种愈合咒文。"),
-            Node { max_width: Val::Px(600.0), ..default() },
-            TextFont { font: font.clone(), font_size: 20.0, ..default() },
-            TextColor(Color::WHITE),
-            TextLayout::new_with_justify(JustifyText::Center),
-        ));
-
-        // 选项区
-        parent.spawn(Node {
-            flex_direction: FlexDirection::Column,
-            row_gap: Val::Px(15.0),
-            ..default()
-        }).with_children(|choices| {
-            // 选项 1: 拿走灵石
-            create_event_button(choices, "取走灵石 (+50 灵石)", EventChoiceButton::GainGold(50), font.clone());
-            // 选项 2: 虔诚祈祷
-            create_event_button(choices, "虔诚祈祷 (回复 20 HP)", EventChoiceButton::Heal(20), font.clone());
-            // 选项 3: 离去
-            create_event_button(choices, "因果莫测，径直离去", EventChoiceButton::Leave, font.clone());
-        });
-    });
-}
-
-fn create_event_button(parent: &mut ChildBuilder, label: &str, choice: EventChoiceButton, font: Handle<Font>) {
-    parent.spawn((
-        Button,
-        Node {
-            width: Val::Px(400.0),
-            height: Val::Px(50.0),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.2, 0.2, 0.3, 0.8)),
-        BorderRadius::all(Val::Px(8.0)),
-        choice,
-    )).with_children(|p| {
-        p.spawn((
-            Text::new(label),
-            TextFont { font, font_size: 18.0, ..default() },
-            TextColor(Color::WHITE),
-        ));
-    });
-}
-
-/// 处理机缘事件选择
-fn handle_event_choices(
-    mut commands: Commands,
-    current_state: Res<State<GameState>>,
-    mut next_state: ResMut<NextState<GameState>>,
-    mut player_query: Query<(&mut Player, &crate::components::Cultivation)>,
-    mut map_progress: ResMut<MapProgress>,
-    deck: Res<PlayerDeck>,
-    relics: Res<RelicCollection>,
-    button_query: Query<(&Interaction, &EventChoiceButton), Changed<Interaction>>,
-    ui_query: Query<Entity, With<EventUiRoot>>,
-) {
-    // 仅在当前确实是 Event 状态且没有待处理转换时运行逻辑
-    if *current_state.get() != GameState::Event {
-        return;
-    }
-
-    for (interaction, choice) in button_query.iter() {
-        if *interaction == Interaction::Pressed {
-            // 防止单帧内多次设置状态
-            if next_state.is_changed() { continue; }
-
-            let mut player_modified = false;
-            if let Ok((mut player, _)) = player_query.get_single_mut() {
-                match choice {
-                    EventChoiceButton::GainGold(amt) => {
-                        player.gold += *amt;
-                        info!("【机缘】获得灵石 {}", amt);
-                        player_modified = true;
-                    }
-                    EventChoiceButton::Heal(amt) => {
-                        player.hp = (player.hp + *amt).min(player.max_hp);
-                        info!("【机缘】回复生命 {}", amt);
-                        player_modified = true;
-                    }
-                    EventChoiceButton::Leave => {
-                        info!("【机缘】悄然离去");
-                    }
-                }
-            }
-
-            // 完成当前节点，防止重复进入
-            map_progress.complete_current_node();
-            info!("【机缘】事件节点已完成，下一层已解锁");
-
-            // --- [优化] 移除同步阻塞存档，依赖内存状态传递和状态机自动处理 ---
-            // 避免在此处进行 IO 操作，防止与状态切换产生竞争
-
-            // 清理并退出
-            for e in ui_query.iter() {
-                commands.entity(e).despawn_recursive();
-            }
-            next_state.set(GameState::Map);
-        }
-    }
-}
+// EventChoiceButton 已迁移至 src/systems/event.rs
 
 /// 设置战斗UI
 fn setup_combat_ui(
