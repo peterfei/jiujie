@@ -323,8 +323,8 @@ impl EmitterConfig {
         Self {
             lifetime: (0.4, 0.6),
             size: (30.0, 50.0),
-            start_color: Color::srgba(0.2, 0.4, 1.0, 0.8), // 深蓝色
-            end_color: Color::srgba(0.1, 0.1, 0.3, 0.0),
+            start_color: Color::srgba(1.2, 0.1, 0.1, 0.9), // 绯红色 (带超亮自发光感)
+            end_color: Color::srgba(0.4, 0.0, 0.0, 0.0),   // 深红渐变消失
             speed: (5.0, 15.0),
             angle: (0.0, 0.3), // 集中方向
             gravity: Vec2::ZERO,
@@ -387,25 +387,57 @@ impl EffectType {
 pub struct SpawnEffectEvent {
     pub effect_type: EffectType,
     pub position: Vec3,
-    pub burst: bool,
-    pub count: usize,
-    pub target: Option<Vec2>,
-    pub target_entity: Option<Entity>, // 新增：目标实体
-    /// 所有存活敌人的位置和实体（用于动态重定向）
-    pub target_group: Option<Vec<(Entity, Vec2)>>,
-    /// 当前粒子在目标组中的索引（用于循环分配）
-    pub target_index: Option<usize>,
+    pub count: u32,
+    /// [新增] 覆盖初速度：用于生成式渲染，使用 Vec2 匹配粒子系统
+    pub velocity_override: Option<Vec2>,
+    /// 万剑归宗等系统需要的锁定目标坐标
+    pub target_pos: Option<Vec2>,
+    /// 万剑归宗等系统需要的锁定目标实体
+    pub target_entity: Option<Entity>,
+    /// 万剑归宗需要的全目标列表 (用于避障)
+    pub target_group: Vec<(Entity, Vec2)>,
+    /// 万剑归宗需要的个体索引
+    pub target_index: usize,
 }
 
 impl SpawnEffectEvent {
-    pub fn new(effect_type: EffectType, position: Vec3) -> Self { 
-        Self { effect_type, position, burst: true, count: 20, target: None, target_entity: None, target_group: None, target_index: None } 
+    pub fn new(effect_type: EffectType, position: Vec3) -> Self {
+        Self { 
+            effect_type, 
+            position, 
+            count: 1, 
+            velocity_override: None,
+            target_pos: None,
+            target_entity: None,
+            target_group: Vec::new(),
+            target_index: 0,
+        }
     }
-    pub fn burst(mut self, count: usize) -> Self { self.burst = true; self.count = count; self }
-    pub fn with_target(mut self, target: Vec2) -> Self { self.target = Some(target); self }
-    pub fn with_target_entity(mut self, entity: Entity) -> Self { self.target_entity = Some(entity); self }
-    pub fn with_target_group(mut self, group: Vec<(Entity, Vec2)>) -> Self { self.target_group = Some(group); self }
-    pub fn with_target_index(mut self, index: usize) -> Self { self.target_index = Some(index); self }
+    
+    pub fn burst(mut self, count: u32) -> Self {
+        self.count = count;
+        self
+    }
+
+    pub fn with_target(mut self, pos: Vec2) -> Self {
+        self.target_pos = Some(pos);
+        self
+    }
+
+    pub fn with_target_entity(mut self, entity: Entity) -> Self {
+        self.target_entity = Some(entity);
+        self
+    }
+
+    pub fn with_target_group(mut self, group: Vec<(Entity, Vec2)>) -> Self {
+        self.target_group = group;
+        self
+    }
+
+    pub fn with_target_index(mut self, index: usize) -> Self {
+        self.target_index = index;
+        self
+    }
 }
 
 #[derive(Component)]

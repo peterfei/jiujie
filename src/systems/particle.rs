@@ -139,6 +139,8 @@ fn setup_particle_texture(mut commands: Commands, asset_server: Res<AssetServer>
     commands.insert_resource(ParticleAssets { textures, default_texture });
 }
 
+use crate::components::sprite::{SpriteMarker};
+
 pub fn handle_effect_events(
     mut commands: Commands, 
     assets: Res<ParticleAssets>, 
@@ -154,14 +156,48 @@ pub fn handle_effect_events(
         }
 
         let config = event.effect_type.config();
-        if event.burst {
+        
+        // 如果 count > 1，则视为一次性爆发 (Burst)
+        if event.count > 1 {
             for _ in 0..event.count {
-                let mut particle = config.spawn_particle(event.position, event.effect_type);
-                if let Some(target) = event.target { particle.target = Some(target); }
-                if let Some(target_entity) = event.target_entity { particle.target_entity = Some(target_entity); }
-                if let Some(ref target_group) = event.target_group { particle.target_group = Some(target_group.clone()); }
-                if let Some(target_index) = event.target_index { particle.target_index = Some(target_index); }
-                spawn_particle_entity(&mut commands, &assets, particle);
+                let mut p = config.spawn_particle(event.position, event.effect_type);
+                
+                // 同步目标数据
+                p.target = event.target_pos;
+                p.target_entity = event.target_entity;
+                if !event.target_group.is_empty() {
+                    p.target_group = Some(event.target_group.clone());
+                }
+                p.target_index = Some(event.target_index);
+                p.start_pos = Vec2::new(event.position.x, event.position.y);
+                
+                // 如果提供了速度覆盖，则优先使用
+                if let Some(v_override) = event.velocity_override {
+                    use rand::Rng;
+                    let mut rng = rand::thread_rng();
+                    let jitter = Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0));
+                    p.velocity = v_override + jitter;
+                }
+
+                // [关键修复] 区分 2D UI 粒子和 3D 空间粒子
+                let is_3d_effect = matches!(event.effect_type, 
+                    EffectType::WolfSlash | EffectType::SilkTrail | EffectType::ImpactSpark | EffectType::CloudMist
+                );
+
+                if is_3d_effect {
+                    commands.spawn((
+                        p,
+                        SpriteMarker,
+                        bevy::pbr::NotShadowCaster,
+                        Transform::from_translation(event.position),
+                        Visibility::default(),
+                        InheritedVisibility::default(),
+                        ViewVisibility::default(),
+                    ));
+                } else {
+                    // 使用原本的 2D UI 生成路径
+                    spawn_particle_entity(&mut commands, &assets, p);
+                }
             }
         } else {
             commands.spawn((
@@ -419,10 +455,12 @@ pub fn update_particles(
             image.color = color;
             
             // 抓痕拉伸：极细极长的蓝色闪光
-            transform.scale.x = current_size * 4.0;
-            transform.scale.y = current_size * 0.15;
-            // 让抓痕顺着发射方向旋转
-            transform.rotation = Quat::from_rotation_z(p.seed * std::f32::consts::PI);
+            transform.scale.x = current_size * 4.5;
+            transform.scale.y = current_size * 0.12;
+            
+            // [关键修正] 让抓痕顺着速度方向旋转
+            let angle = p.velocity.y.atan2(p.velocity.x);
+            transform.rotation = Quat::from_rotation_z(angle);
         } else {
             image.color = p.current_color();
         }

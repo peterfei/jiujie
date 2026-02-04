@@ -177,52 +177,49 @@ pub fn update_physical_impacts(
                     pos_damping = 8.0;
                 },
                 ActionType::SiriusFrenzy => {
-                    // 2. 狼大招终极版：目标收束闪击
+                    // 2. 狼大招终极版：高频轨迹采样 + 目标收束
                     let stage_duration = 0.3;
                     let elapsed = (0.9 - impact.action_timer).max(0.0);
                     let stage = (elapsed / stage_duration).floor() as u32;
                     
-                    // 锁定修行者位置 (假设修行者在 -target_offset_dist 处)
                     let player_x = dir * impact.target_offset_dist;
                     let current_x = impact.current_offset.x;
-                    
-                    // 每一段冲刺都向修行者收束
                     let to_player_x = (player_x - current_x).signum();
                     
                     let stage_dir = match stage {
-                        0 => { 
-                            action_tilt_offset = -0.3 * dir; 
-                            Vec3::new(to_player_x, 0.5, 0.0) // 向上撩
-                        },
-                        1 => { 
-                            action_tilt_offset = 0.4 * dir; 
-                            Vec3::new(to_player_x, -0.8, 0.0) // 俯冲
-                        },
-                        _ => { 
-                            action_tilt_offset = 0.0; 
-                            Vec3::new(to_player_x, 0.0, 0.0) // 贯穿
-                        },
+                        0 => { action_tilt_offset = -0.3 * dir; Vec3::new(to_player_x, 0.5, 0.0) },
+                        1 => { action_tilt_offset = 0.4 * dir; Vec3::new(to_player_x, -0.8, 0.0) },
+                        _ => { action_tilt_offset = 0.0; Vec3::new(to_player_x, 0.0, 0.0) },
                     };
                     
-                    if stage != impact.action_stage && stage < 3 {
+                    // --- 持续轨迹生成逻辑 ---
+                    impact.trail_timer -= dt;
+                    if impact.trail_timer <= 0.0 && stage < 3 {
                         use crate::components::particle::EffectType;
-                        let hit_pos = impact.home_position + impact.current_offset;
-                        effect_events.send(crate::components::particle::SpawnEffectEvent::new(
-                            EffectType::WolfSlash,
-                            hit_pos + Vec3::new(0.0, 0.0, 0.2)
-                        ).burst(15)); // 更多粒子
+                        let spawn_pos = impact.home_position + impact.current_offset;
                         
+                        // 每帧生成 2 个带动量的轨迹粒子
+                        let mut event = crate::components::particle::SpawnEffectEvent::new(
+                            EffectType::WolfSlash,
+                            spawn_pos + Vec3::new(0.0, 0.0, 0.1)
+                        ).burst(2);
+                        
+                        // 赋予顺着当前冲刺方向的动量
+                        event.velocity_override = Some(Vec2::new(stage_dir.x * 8.0, stage_dir.y * 8.0));
+                        effect_events.send(event);
+                        
+                        impact.trail_timer = 0.03; // 30ms 高频采样
+                    }
+
+                    if stage != impact.action_stage && stage < 3 {
                         screen_events.send(crate::components::ScreenEffectEvent::Shake { trauma: 0.7, decay: 4.0 });
                         impact.action_stage = stage;
                     }
                     
-                    // 动态速度控制：快冲刺，慢收尾，避免穿通过远
                     let stage_t = (elapsed % stage_duration) / stage_duration;
                     let dist_to_player = (player_x - current_x).abs();
-                    
-                    // 如果离玩家很近，减速，避免穿透屏幕
                     let braking = if dist_to_player < 1.0 { dist_to_player } else { 1.0 };
-                    let dash_speed = 30.0 * (1.0 - stage_t) * braking; 
+                    let dash_speed = 32.0 * (1.0 - stage_t) * braking; 
                     
                     impact.offset_velocity = stage_dir * dash_speed;
                     pos_damping = 4.5; 
@@ -394,6 +391,7 @@ fn trigger_hit_feedback(
                     impact.action_type = ActionType::SiriusFrenzy;
                     impact.action_timer = 0.9;
                     impact.action_stage = 0;
+                    impact.trail_timer = 0.0; // 立即开始生成
                     impact.offset_velocity = Vec3::ZERO;
                     impact.tilt_velocity = 0.0;
                 }

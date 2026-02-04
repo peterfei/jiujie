@@ -2417,7 +2417,7 @@ fn apply_card_effect(
 
                     if !alive_enemies.is_empty() {
                         let total_swords = 80;
-                        let swords_per_enemy = total_swords / alive_enemies.len();
+                        let swords_per_enemy = (total_swords / alive_enemies.len()) as u32;
                         for (idx, (entity, _)) in alive_enemies.iter().enumerate() {
                             effect_events.send(
                                 SpawnEffectEvent::new(EffectType::WanJian, Vec3::new(-350.0, -80.0, 0.5))
