@@ -110,6 +110,8 @@ pub enum AnimationState {
     DemonAttack,
     /// 嗜血妖狼专属：奔袭撕咬
     WolfAttack,
+    /// [新增] 嗜血妖狼大招：天狼狂袭
+    WolfHowl,
     /// 剧毒蛛专属：爬行吐丝
     SpiderAttack,
     /// 怨灵专属：灵体突袭
@@ -238,6 +240,10 @@ pub enum ActionType {
     None, 
     Dash, 
     WolfBite, 
+    /// [新增] 狼类扑杀：抛物线跳跃攻击
+    WolfPounce,
+    /// [新增] 狼类大招：多段残影闪击
+    SiriusFrenzy,
     SpiderWeb, 
     DemonCast, 
     Ascend,

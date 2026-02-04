@@ -53,9 +53,10 @@ fn update_relic_floating(
 
 /// 更新物理冲击效果
 pub fn update_physical_impacts(
-    mut query: Query<(&mut Transform, &mut PhysicalImpact, &BreathAnimation)>,
     time: Res<Time>,
+    mut query: Query<(&mut Transform, &mut PhysicalImpact, &BreathAnimation)>,
     mut effect_events: EventWriter<crate::components::particle::SpawnEffectEvent>,
+    mut screen_events: EventWriter<crate::components::ScreenEffectEvent>,
 ) {
     let dt = time.delta_secs().min(0.033);
     for (mut transform, mut impact, breath) in query.iter_mut() {
@@ -138,6 +139,93 @@ pub fn update_physical_impacts(
                 ActionType::SpiderWeb => {
                     pos_damping = 5.0;
                     impact.offset_velocity = Vec3::new(4.5 * dir, 0.0, 0.0);
+                },
+                ActionType::WolfPounce => {
+                    // 1. 狼扑动作终极版：蓄力 + 动态抛物线
+                    let total_time = 0.8;
+                    let elapsed = (total_time - impact.action_timer).max(0.0);
+                    let normalized = (elapsed / total_time).clamp(0.0, 1.0);
+                    
+                    if normalized < 0.15 {
+                        // --- 蓄力阶段：向后微缩，蓄势待发 ---
+                        let back_t = normalized / 0.15;
+                        action_pos_offset.x = -0.5 * dir * back_t;
+                        action_tilt_offset = -0.1 * dir * back_t; // 压低身体
+                        impact.offset_velocity = Vec3::ZERO;
+                    } else {
+                        // --- 扑杀阶段 ---
+                        let jump_t = (normalized - 0.15) / 0.85;
+                        let max_h = (impact.target_offset_dist * 0.4).min(2.5); // 动态高度
+                        action_pos_offset.y = 4.0 * max_h * jump_t * (1.0 - jump_t);
+                        action_tilt_offset = (0.5 - jump_t) * 0.4 * dir;
+                        
+                        let target_dist = impact.target_offset_dist;
+                        let speed = (target_dist / total_time) * 1.3;
+                        impact.offset_velocity = Vec3::new(speed * dir, 0.0, 0.0);
+                        
+                        // 落地瞬间 (jump_t 接近 1.0)
+                        if jump_t > 0.95 && impact.action_stage == 0 {
+                            use crate::components::particle::EffectType;
+                            let hit_pos = impact.home_position + impact.current_offset;
+                            effect_events.send(crate::components::particle::SpawnEffectEvent::new(
+                                EffectType::ImpactSpark,
+                                hit_pos + Vec3::new(0.0, -0.5, 0.0)
+                            ).burst(8));
+                            impact.action_stage = 1; // 标记已落地
+                        }
+                    }
+                    pos_damping = 8.0;
+                },
+                ActionType::SiriusFrenzy => {
+                    // 2. 狼大招终极版：目标收束闪击
+                    let stage_duration = 0.3;
+                    let elapsed = (0.9 - impact.action_timer).max(0.0);
+                    let stage = (elapsed / stage_duration).floor() as u32;
+                    
+                    // 锁定修行者位置 (假设修行者在 -target_offset_dist 处)
+                    let player_x = dir * impact.target_offset_dist;
+                    let current_x = impact.current_offset.x;
+                    
+                    // 每一段冲刺都向修行者收束
+                    let to_player_x = (player_x - current_x).signum();
+                    
+                    let stage_dir = match stage {
+                        0 => { 
+                            action_tilt_offset = -0.3 * dir; 
+                            Vec3::new(to_player_x, 0.5, 0.0) // 向上撩
+                        },
+                        1 => { 
+                            action_tilt_offset = 0.4 * dir; 
+                            Vec3::new(to_player_x, -0.8, 0.0) // 俯冲
+                        },
+                        _ => { 
+                            action_tilt_offset = 0.0; 
+                            Vec3::new(to_player_x, 0.0, 0.0) // 贯穿
+                        },
+                    };
+                    
+                    if stage != impact.action_stage && stage < 3 {
+                        use crate::components::particle::EffectType;
+                        let hit_pos = impact.home_position + impact.current_offset;
+                        effect_events.send(crate::components::particle::SpawnEffectEvent::new(
+                            EffectType::WolfSlash,
+                            hit_pos + Vec3::new(0.0, 0.0, 0.2)
+                        ).burst(15)); // 更多粒子
+                        
+                        screen_events.send(crate::components::ScreenEffectEvent::Shake { trauma: 0.7, decay: 4.0 });
+                        impact.action_stage = stage;
+                    }
+                    
+                    // 动态速度控制：快冲刺，慢收尾，避免穿通过远
+                    let stage_t = (elapsed % stage_duration) / stage_duration;
+                    let dist_to_player = (player_x - current_x).abs();
+                    
+                    // 如果离玩家很近，减速，避免穿透屏幕
+                    let braking = if dist_to_player < 1.0 { dist_to_player } else { 1.0 };
+                    let dash_speed = 30.0 * (1.0 - stage_t) * braking; 
+                    
+                    impact.offset_velocity = stage_dir * dash_speed;
+                    pos_damping = 4.5; 
                 },
                 ActionType::SkitterApproach => {
                     // 1. 真实多足爬行位移逻辑 (类大作实现)
@@ -295,11 +383,19 @@ fn trigger_hit_feedback(
                 AnimationState::WolfAttack => {
                     let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
-                    impact.action_type = ActionType::WolfBite;
-                    impact.tilt_velocity = -25.0 * direction;
-                    impact.offset_velocity = Vec3::new(16.0 * direction, 0.0, 0.0);
-                    impact.action_timer = 1.0; 
+                    impact.action_type = ActionType::WolfPounce;
+                    impact.tilt_velocity = -12.0 * direction;
+                    impact.offset_velocity = Vec3::new(15.0 * direction, 0.0, 0.0);
+                    impact.action_timer = 0.8;
+                }
+                AnimationState::WolfHowl => {
+                    let target_x = if direction < 0.0 { -2.0 } else { 2.0 };
+                    impact.target_offset_dist = (target_x - impact.home_position.x).abs();
+                    impact.action_type = ActionType::SiriusFrenzy;
+                    impact.action_timer = 0.9;
                     impact.action_stage = 0;
+                    impact.offset_velocity = Vec3::ZERO;
+                    impact.tilt_velocity = 0.0;
                 }
                 AnimationState::SpiderAttack => {
                     let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
@@ -365,7 +461,7 @@ fn update_sprite_animations(
                         }
                         AnimationState::Attack | AnimationState::Hit | AnimationState::ImperialSword | 
                         AnimationState::HeavenCast | AnimationState::Defense | AnimationState::DemonAttack | 
-                        AnimationState::DemonCast | AnimationState::WolfAttack | AnimationState::SpiderAttack | 
+                        AnimationState::DemonCast | AnimationState::WolfAttack | AnimationState::WolfHowl | AnimationState::SpiderAttack | 
                         AnimationState::SpiritAttack | AnimationState::BossRoar | AnimationState::BossFrenzy => { 
                             // 自动恢复待机
                             if is_player.is_some() {
@@ -423,6 +519,9 @@ fn handle_animation_events(
                 }
                 AnimationState::WolfAttack => {
                     sprite.set_attack(10, 1.0);
+                }
+                AnimationState::WolfHowl => {
+                    sprite.set_attack(12, 0.9); // 大招节奏更紧凑
                 }
                 AnimationState::SpiderAttack => {
                     sprite.set_attack(8, 0.8);
@@ -574,8 +673,11 @@ fn spawn_ghosts(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     for (_entity, transform, impact, mesh_handle, material_handle, enemy_marker) in query.iter() {
-        let is_moving_fast = impact.offset_velocity.length() > 5.0 || impact.special_rotation_velocity.abs() > 30.0;
-        if is_moving_fast {
+        // [新增逻辑] 仅在非跳跃动作且高速移动时生成残影
+        let is_jumping = impact.action_type == ActionType::WolfPounce;
+        let is_moving_fast = impact.offset_velocity.length() > 15.0 || impact.special_rotation_velocity.abs() > 60.0;
+        
+        if is_moving_fast && !is_jumping {
             let is_boss = enemy_marker.map_or(false, |m| m.id == 99);
             let ghost_material = if let Some(base_mat) = materials.get(material_handle) {
                 let mut m = base_mat.clone();
@@ -588,7 +690,7 @@ fn spawn_ghosts(
             };
 
             commands.spawn((
-                Ghost { ttl: 0.3 },
+                Ghost { ttl: 0.15 }, // 从 0.3 减短到 0.15，残影更干脆
                 Mesh3d(mesh_handle.0.clone()),
                 MeshMaterial3d(ghost_material),
                 Transform {
@@ -613,7 +715,7 @@ fn cleanup_ghosts(
         ghost.ttl -= time.delta_secs();
         if ghost.ttl <= 0.0 { commands.entity(entity).despawn_recursive(); }
         else if let Some(material) = materials.get_mut(material_handle) {
-            let alpha = (ghost.ttl / 0.3).powi(2) * 0.4;
+            let alpha = (ghost.ttl / 0.15).powi(2) * 0.4; // 同步缩短 alpha 衰减周期
             material.base_color.set_alpha(alpha);
         }
     }

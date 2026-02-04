@@ -1696,13 +1696,20 @@ pub fn process_enemy_turn_queue(
                 for (render_entity, marker, mut transform) in enemy_sprite_query.iter_mut() {
                     if marker.id == enemy_id {
                         match intent {
-                            EnemyIntent::Attack { .. } => {
+                            EnemyIntent::Attack { damage } => {
                                 // 基础位移修正：防止敌人直接重叠在玩家身上，由 PhysicalImpact 内部处理长跨度冲刺
                                 // transform.translation.x -= 6.0; // 移除这行硬编码，交给动画事件处理
                                 
                                 // 根据类型播放特效和动画
                                 let animation = match enemy.enemy_type {
-                                    EnemyType::DemonicWolf => AnimationState::WolfAttack,
+                                    EnemyType::DemonicWolf => {
+                                        // 如果狼血量低于 40%，触发大招动画 (SiriusFrenzy)
+                                        if enemy.hp < 15 { // 假设狼的基础 HP 较低，40% 约为 15
+                                            AnimationState::WolfHowl
+                                        } else {
+                                            AnimationState::WolfAttack
+                                        }
+                                    },
                                     EnemyType::PoisonSpider => AnimationState::SpiderAttack,
                                     EnemyType::CursedSpirit => AnimationState::SpiritAttack,
                                     EnemyType::GreatDemon => AnimationState::DemonAttack,

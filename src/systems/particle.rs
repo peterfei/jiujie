@@ -413,6 +413,16 @@ pub fn update_particles(
             // 特殊拉伸效果：模拟丝线的长条感
             transform.scale.x = current_size * 2.5; 
             transform.scale.y = current_size * 0.4;
+        } else if p.effect_type == EffectType::WolfSlash {
+            let mut color = p.current_color();
+            color.set_alpha(0.7 * (1.0 - global_prog));
+            image.color = color;
+            
+            // 抓痕拉伸：极细极长的蓝色闪光
+            transform.scale.x = current_size * 4.0;
+            transform.scale.y = current_size * 0.15;
+            // 让抓痕顺着发射方向旋转
+            transform.rotation = Quat::from_rotation_z(p.seed * std::f32::consts::PI);
         } else {
             image.color = p.current_color();
         }

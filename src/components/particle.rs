@@ -319,6 +319,20 @@ impl EmitterConfig {
         }
     }
 
+    pub fn wolf_slash() -> Self {
+        Self {
+            lifetime: (0.4, 0.6),
+            size: (30.0, 50.0),
+            start_color: Color::srgba(0.2, 0.4, 1.0, 0.8), // 深蓝色
+            end_color: Color::srgba(0.1, 0.1, 0.3, 0.0),
+            speed: (5.0, 15.0),
+            angle: (0.0, 0.3), // 集中方向
+            gravity: Vec2::ZERO,
+            rotation_speed: (0.0, 0.0),
+            shape: ParticleShape::Line,
+        }
+    }
+
     pub fn spawn_particle(&self, position: Vec3, effect_type: EffectType) -> Particle {
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -340,7 +354,7 @@ impl EmitterConfig {
 pub enum ParticleShape { Circle, Square, Line, Triangle, Star }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum EffectType { Fire, Ice, Poison, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit, SwordEnergy, DemonAura, WebShot, WanJian, ImpactSpark, Slash, Shield, CloudMist, SilkTrail }
+pub enum EffectType { Fire, Ice, Poison, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit, SwordEnergy, DemonAura, WebShot, WanJian, ImpactSpark, Slash, Shield, CloudMist, SilkTrail, WolfSlash }
 
 impl EffectType {
     pub fn config(&self) -> EmitterConfig {
@@ -364,6 +378,7 @@ impl EffectType {
             EffectType::Shield => EmitterConfig::shield(),
             EffectType::CloudMist => EmitterConfig::cloud_mist(),
             EffectType::SilkTrail => EmitterConfig::silk_trail(),
+            EffectType::WolfSlash => EmitterConfig::wolf_slash(),
         }
     }
 }
