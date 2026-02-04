@@ -123,7 +123,7 @@ pub fn update_physical_impacts(
                         let y_offset = (current_stage as f32 - 1.0) * 0.3;
                         effect_events.send(crate::components::particle::SpawnEffectEvent::new(
                             EffectType::Slash, 
-                            Vec3::new(-3.5, y_offset, 0.5)
+                            Vec3::new(-350.0, y_offset * 100.0, 0.5)
                         ).burst(12));
                         impact.action_stage += 1;
                     }
@@ -166,10 +166,11 @@ pub fn update_physical_impacts(
                         // 落地瞬间 (jump_t 接近 1.0)
                         if jump_t > 0.95 && impact.action_stage == 0 {
                             use crate::components::particle::EffectType;
-                            let hit_pos = impact.home_position + impact.current_offset;
+                            // [Fix] Convert 3D position back to UI coordinates (x100) for correct particle placement
+                            let hit_pos = (impact.home_position + impact.current_offset) * 100.0;
                             effect_events.send(crate::components::particle::SpawnEffectEvent::new(
                                 EffectType::ImpactSpark,
-                                hit_pos + Vec3::new(0.0, -0.5, 0.0)
+                                hit_pos + Vec3::new(0.0, -50.0, 0.0) // Adjusted offset for UI scale
                             ).burst(8));
                             impact.action_stage = 1; // 标记已落地
                         }
@@ -196,7 +197,7 @@ pub fn update_physical_impacts(
                     impact.trail_timer -= dt;
                     if impact.trail_timer <= 0.0 && stage < 3 {
                         use crate::components::particle::EffectType;
-                        let spawn_pos = impact.home_position + impact.current_offset;
+                        let spawn_pos = (impact.home_position + impact.current_offset) * 100.0;
                         
                         // 每帧生成 2 个带动量的轨迹粒子
                         let mut event = crate::components::particle::SpawnEffectEvent::new(
