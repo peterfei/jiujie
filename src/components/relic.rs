@@ -89,9 +89,12 @@ impl RelicCollection {
     }
 
     /// 强制添加遗物（用于初始赠送或特殊剧情，忽略槽位限制）
-    pub fn add_relic_forced(&mut self, relic: Relic) {
+    pub fn add_relic_forced(&mut self, relic: Relic) -> bool {
         if !self.relic.iter().any(|r| r.id == relic.id) {
             self.relic.push(relic);
+            true
+        } else {
+            false
         }
     }
 

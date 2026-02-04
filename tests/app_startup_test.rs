@@ -67,10 +67,10 @@ fn test_game_state_enum_exists() {
 fn test_game_state_default() {
     // GIVEN: 期望GameState有默认值
     // WHEN: 获取默认GameState
-    // THEN: 默认值应该是MainMenu
+    // THEN: 默认值应该是Booting (用于资产预热)
 
     let default_state = GameState::default();
-    assert_eq!(default_state, GameState::MainMenu, "Default GameState should be MainMenu");
+    assert_eq!(default_state, GameState::Booting, "Default GameState should be Booting");
 }
 
 #[test]

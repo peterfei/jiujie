@@ -24,21 +24,13 @@ fn test_rest_node_completion_on_leave() {
     app.insert_resource(State::new(GameState::Rest));
     
     // 模拟实体
-    app.world_mut().spawn((
+    app.world_mut().spawn(
         Player {
-            hp: 10,
+            hp: 40,
             max_hp: 80,
-            gold: 100,
-            energy: 3,
-            max_energy: 3,
-            block: 0,
-            turn: 1,
-            vulnerable: 0,
-            poison: 0,
-            weakness: 0,
-        }, 
-        Cultivation::new()
-    ));
+            ..default()
+        }
+    );
     app.insert_resource(PlayerDeck::default());
     app.insert_resource(RelicCollection::default());
     

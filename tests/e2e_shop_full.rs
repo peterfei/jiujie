@@ -30,7 +30,8 @@ fn e2e_full_shop_flow_from_map_to_shop() {
         .add_event::<bevy::picking::backend::PointerHits>()
         .add_event::<bevy::window::WindowScaleFactorChanged>()
         .add_event::<bevy::window::WindowResized>()
-        .add_event::<PlaySfxEvent>() // 注册音效事件，防止 handle_shop_interactions 崩溃
+        .add_event::<PlaySfxEvent>() // 注册音效事件
+        .add_event::<StatusEffectEvent>() // [关键修复] 注册漂字事件，防止 handle_shop_interactions 崩溃
         .add_plugins(bevy::sprite::SpritePlugin::default())
         .add_plugins(bevy::ui::UiPlugin::default())
         .add_plugins(TextPlugin::default())

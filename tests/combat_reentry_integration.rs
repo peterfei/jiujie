@@ -30,9 +30,6 @@ fn create_test_app() -> App {
     app.insert_resource(PlayerDeck::new());
     app.insert_resource(CombatState::default());
 
-    // 运行 Startup 初始化遗物
-    app.update();
-
     app
 }
 

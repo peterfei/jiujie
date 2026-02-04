@@ -27,20 +27,29 @@ fn test_boss_ai_cycle() {
     // 逻辑：BOSS 应该具备更复杂的行为模式
     let mut boss = Enemy::with_type(99, "幽冥白虎".to_string(), 150, EnemyType::GreatDemon);
     
-    // 回合 1: 啸天 (大伤害)
-    boss.choose_new_intent();
+    // 验证固定序列 (试探-蓄势-重击-喘息)
+    boss.choose_new_intent(); // 初始化第一招
     let i1 = boss.execute_intent();
-    assert!(matches!(i1, EnemyIntent::Attack { damage } if damage >= 20), "第一回合应发起啸天猛攻");
+    match i1 {
+        EnemyIntent::Attack { damage } => assert_eq!(damage, 15, "第一回合应发起试探"),
+        _ => panic!("预期攻击，实际得到 {:?}", i1),
+    }
     
-    // 回合 2: 瞬狱杀 (中伤害)
+    // 蓄势 (Defend)
     boss.choose_new_intent();
     let i2 = boss.execute_intent();
-    assert!(matches!(i2, EnemyIntent::Attack { damage } if damage >= 15), "第二回合应执行瞬狱杀");
+    match i2 {
+        EnemyIntent::Defend { block } => assert_eq!(block, 12, "第二回合应开始蓄势"),
+        _ => panic!("预期蓄势防御"),
+    }
     
-    // 回合 3: 聚灵 (强化)
+    // 重击 (Attack 28)
     boss.choose_new_intent();
     let i3 = boss.execute_intent();
-    assert!(matches!(i3, EnemyIntent::Buff { .. }), "第三回合应进行能量聚灵");
+    match i3 {
+        EnemyIntent::Attack { damage } => assert_eq!(damage, 28, "第三回合应发起破魔重击"),
+        _ => panic!("预期重击"),
+    }
 }
 
 #[test]

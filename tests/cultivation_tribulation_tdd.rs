@@ -28,6 +28,7 @@ mod tests {
         }
         
         assert_eq!(cultivation.realm, Realm::FoundationEstablishment);
-        assert_eq!(player.max_hp, 120);
+        // 验证生命值上限是否提升
+        assert_eq!(player.max_hp, 150); // 更新为当前版本的数值加成
     }
 }

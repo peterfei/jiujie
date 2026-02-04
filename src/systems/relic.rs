@@ -81,28 +81,35 @@ pub fn trigger_relics_on_combat_start(
     mut hand_query: Query<&mut Hand>,
     mut draw_pile_query: Query<&mut DrawPile>,
     mut discard_pile_query: Query<&mut DiscardPile>,
-    env: Option<Res<Environment>>, // 新增环境资源
+    env: Option<Res<Environment>>,
 ) {
     // 防止重复触发
     if combat_start_processed.processed {
         return;
     }
-    combat_start_processed.processed = true;
 
-    info!("【遗物系统】战斗开始，触发遗物效果");
+    // 检查是否有必要的目标存在（避免在实体尚未生成时提前锁定标志位）
+    // 我们至少需要看到玩家或者是敌人
+    if player_query.is_empty() && enemy_query.is_empty() {
+        return;
+    }
 
+    let mut effect_applied = false;
     let env_ref = env.as_ref().map(|r| r.as_ref());
 
     for relic in &relic_collection.relic {
         for effect in &relic.effects {
             match effect {
                 RelicEffect::OnCombatStart { damage, block, draw_cards } => {
-                    // 造成伤害
+                    // 造成伤害 (对所有敌人)
                     if *damage > 0 {
-                        if let Ok(mut enemy) = enemy_query.get_single_mut() {
+                        let mut damage_dealt = false;
+                        for mut enemy in enemy_query.iter_mut() {
                             enemy.take_damage_with_env(*damage, env_ref);
-                            info!("  遗物 [{}] 触发：对敌人造成 {} 点伤害", relic.name, damage);
+                            info!("  遗物 [{}] 触发：对敌人 [{}] 造成 {} 点伤害", relic.name, enemy.name, damage);
+                            damage_dealt = true;
                         }
+                        if damage_dealt { effect_applied = true; }
                     }
 
                     // 获得护甲
@@ -110,6 +117,7 @@ pub fn trigger_relics_on_combat_start(
                         if let Ok(mut player) = player_query.get_single_mut() {
                             player.gain_block(*block);
                             info!("  遗物 [{}] 触发：获得 {} 点护甲", relic.name, block);
+                            effect_applied = true;
                         }
                     }
 
@@ -136,12 +144,20 @@ pub fn trigger_relics_on_combat_start(
                                 }
                             }
                         }
-                        info!("  遗物 [{}] 触发：抽了 {} 张牌", relic.name, drawn);
+                        if drawn > 0 {
+                            info!("  遗物 [{}] 触发：抽了 {} 张牌", relic.name, drawn);
+                            effect_applied = true;
+                        }
                     }
                 }
                 _ => {}
             }
         }
+    }
+
+    if effect_applied {
+        info!("【遗物系统】战斗开始，遗物效果已应用");
+        combat_start_processed.processed = true;
     }
 }
 

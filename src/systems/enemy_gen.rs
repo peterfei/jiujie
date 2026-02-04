@@ -25,7 +25,7 @@ impl EnemyGenerator {
         let archetype = Self::pick_archetype(depth, &mut rng);
 
         // 2. 基础数值计算
-        let scaling_factor = 1.0 + (depth as f32 * 0.1); 
+        let scaling_factor = 1.0 + (depth as f32 * 0.2); 
         let base_hp = (archetype.base_hp_range.0 as f32 * scaling_factor) as i32;
         let hp_variance = rng.gen_range(0.9..=1.1);
         let mut final_hp = (base_hp as f32 * hp_variance) as i32;

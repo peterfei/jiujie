@@ -1,7 +1,7 @@
 use bevy::prelude::*;
-use bevy_card_battler::states::GameState;
 use bevy_card_battler::components::map::{MapProgress, MapUiRoot};
-use bevy_card_battler::plugins::EventUiRoot;
+use bevy_card_battler::systems::event::EventUiRoot;
+use bevy_card_battler::states::GameState;
 
 #[test]
 fn test_event_to_map_ui_cleanup() {

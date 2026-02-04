@@ -12,13 +12,18 @@ fn reproduce_double_play_bug() {
     
     // 1. 环境准备
     app.add_plugins((
+        MinimalPlugins,
+        AssetPlugin::default(),
         bevy::state::app::StatesPlugin,
-        bevy::time::TimePlugin,
         bevy::input::InputPlugin,
         OpeningPlugin,
     ));
     app.init_state::<GameState>();
     app.init_resource::<EntryCounter>();
+    app.init_asset::<Image>();
+    app.init_asset::<Font>();
+    // 模拟 setup_opening_video 依赖的 FirstFrameResource (使用默认句柄)
+    app.insert_resource(bevy_card_battler::plugins::opening::FirstFrameResource(Handle::default()));
     
     // 模拟缺失的 BGM 事件防止崩溃
     app.add_event::<bevy_card_battler::components::background_music::PlayBgmEvent>();

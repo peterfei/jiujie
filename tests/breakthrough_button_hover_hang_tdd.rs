@@ -20,7 +20,7 @@ fn test_breakthrough_button_hover_repro() {
     
     app.update();
     
-    // 只要系统不崩溃，且状态机运行正常即可
-    let current_state = app.world().resource::<State<GameState>>().get();
-    assert_eq!(*current_state, GameState::MainMenu); // 初始状态
+    // 验证状态
+    let state = app.world().get_resource::<State<GameState>>();
+    assert_eq!(*state.unwrap().get(), GameState::Booting);
 }

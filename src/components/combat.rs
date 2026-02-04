@@ -875,6 +875,24 @@ impl VictoryDelay {
     }
 }
 
+/// 战斗配置资源
+#[derive(Resource, Debug, Clone)]
+pub struct CombatConfig {
+    /// 每回合基础能量
+    pub base_energy: i32,
+    /// 初始生命值
+    pub initial_hp: i32,
+}
+
+impl Default for CombatConfig {
+    fn default() -> Self {
+        Self {
+            base_energy: 3,
+            initial_hp: 80,
+        }
+    }
+}
+
 /// 战斗状态
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CombatState {

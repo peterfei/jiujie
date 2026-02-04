@@ -4,6 +4,8 @@ use bevy_card_battler::components::shop::*;
 use bevy_card_battler::states::GameState;
 use bevy_card_battler::systems::shop::*;
 use bevy_card_battler::components::audio::PlaySfxEvent;
+use bevy_card_battler::components::relic::RelicObtainedEvent;
+use bevy_card_battler::components::combat::StatusEffectEvent;
 
 #[test]
 fn test_shop_button_component_mismatch_repro() {
@@ -11,6 +13,8 @@ fn test_shop_button_component_mismatch_repro() {
     app.add_plugins(MinimalPlugins);
     app.add_plugins(bevy::state::app::StatesPlugin);
     app.add_event::<PlaySfxEvent>();
+    app.add_event::<RelicObtainedEvent>();
+    app.add_event::<StatusEffectEvent>();
     
     app.init_resource::<CurrentShopItems>();
     app.init_resource::<SelectedCardForRemoval>();
@@ -36,10 +40,15 @@ fn test_shop_button_component_mismatch_repro() {
     app.insert_resource(current_items);
 
     // 2. 模拟玩家
-    app.world_mut().spawn((
-        Player { gold: 100, hp: 80, max_hp: 80, energy: 3, max_energy: 3, block: 0, turn: 1, vulnerable: 0, poison: 0, weakness: 0 }, 
-        Cultivation::new()
-    ));
+    app.world_mut().spawn(
+        Player { 
+            gold: 100, 
+            hp: 80, 
+            max_hp: 80, 
+            ..default()
+        }
+    );
+
 
     // 3. 模拟点击
     app.world_mut().spawn((
@@ -63,6 +72,8 @@ fn test_shop_exit_logic_robustness() {
     app.add_plugins(MinimalPlugins);
     app.add_plugins(bevy::state::app::StatesPlugin);
     app.add_event::<PlaySfxEvent>();
+    app.add_event::<RelicObtainedEvent>();
+    app.add_event::<StatusEffectEvent>();
     
     app.init_resource::<CurrentShopItems>();
     app.init_resource::<SelectedCardForRemoval>();

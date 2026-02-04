@@ -16,22 +16,15 @@ fn test_event_heal_hang_repro() {
     app.insert_resource(PlayerDeck::default());
     app.insert_resource(RelicCollection::default());
     
-    // 模拟 Player 实体
-    app.world_mut().spawn((
+    // 初始化玩家和敌人
+    app.world_mut().spawn(
         Player { 
-            hp: 10, 
+            hp: 50, 
             max_hp: 80, 
-            gold: 100, 
-            energy: 3, 
-            max_energy: 3, 
-            block: 0,
-            turn: 1,
-            vulnerable: 0,
-            poison: 0,
-            weakness: 0,
-        },
-        Cultivation::new(),
-    ));
+            ..default()
+        }
+    );
+
     
     // 模拟 MapProgress
     let mut map_progress = MapProgress::default();
