@@ -305,6 +305,20 @@ impl EmitterConfig {
         }
     }
 
+    pub fn silk_trail() -> Self {
+        Self {
+            lifetime: (1.5, 2.5),
+            size: (10.0, 20.0),
+            start_color: Color::srgba(0.9, 0.9, 1.0, 0.6),
+            end_color: Color::srgba(0.7, 0.7, 0.8, 0.0),
+            speed: (2.0, 10.0),
+            angle: (0.0, std::f32::consts::PI * 2.0),
+            gravity: Vec2::ZERO,
+            rotation_speed: (-0.2, 0.2),
+            shape: ParticleShape::Circle,
+        }
+    }
+
     pub fn spawn_particle(&self, position: Vec3, effect_type: EffectType) -> Particle {
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -326,7 +340,7 @@ impl EmitterConfig {
 pub enum ParticleShape { Circle, Square, Line, Triangle, Star }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum EffectType { Fire, Ice, Poison, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit, SwordEnergy, DemonAura, WebShot, WanJian, ImpactSpark, Slash, Shield, CloudMist }
+pub enum EffectType { Fire, Ice, Poison, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit, SwordEnergy, DemonAura, WebShot, WanJian, ImpactSpark, Slash, Shield, CloudMist, SilkTrail }
 
 impl EffectType {
     pub fn config(&self) -> EmitterConfig {
@@ -349,6 +363,7 @@ impl EffectType {
             EffectType::Slash => EmitterConfig::slash(),
             EffectType::Shield => EmitterConfig::shield(),
             EffectType::CloudMist => EmitterConfig::cloud_mist(),
+            EffectType::SilkTrail => EmitterConfig::silk_trail(),
         }
     }
 }

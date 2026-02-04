@@ -87,7 +87,8 @@ fn setup_particle_texture(mut commands: Commands, asset_server: Res<AssetServer>
     if let Some(handle) = cloud_handle {
         textures.insert(EffectType::Fire, handle.clone());
         textures.insert(EffectType::Ice, handle.clone());
-        textures.insert(EffectType::Poison, handle);
+        textures.insert(EffectType::Poison, handle.clone());
+        textures.insert(EffectType::SilkTrail, handle);
     }
 
     // --- [3.0 终极进化] 程序化生成“灵气烧灼”贴图 ---
@@ -403,6 +404,15 @@ pub fn update_particles(
             
             // 增加更显著的旋转扰动 (水墨流变感)
             p.rotation += delta * (p.seed - 0.5) * 0.25;
+        } else if p.effect_type == EffectType::SilkTrail {
+            let mut color = p.current_color();
+            // 丝迹随着生命值降低快速变透明
+            color.set_alpha(0.5 * (1.0 - global_prog));
+            image.color = color;
+            
+            // 特殊拉伸效果：模拟丝线的长条感
+            transform.scale.x = current_size * 2.5; 
+            transform.scale.y = current_size * 0.4;
         } else {
             image.color = p.current_color();
         }

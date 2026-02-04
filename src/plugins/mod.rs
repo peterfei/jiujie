@@ -34,7 +34,7 @@ use crate::components::{
     TopBar, TopBarHpText, TopBarGoldText, EnergyOrb, EndTurnButton, HandArea, CombatUiRoot,
     StatusEffectEvent, Environment, // 补全导入
 };
-use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, PlayerSpriteMarker, MagicSealMarker, CharacterSprite};
+use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, AnimationState, PlayerSpriteMarker, MagicSealMarker, CharacterSprite};
 use crate::systems::sprite::{spawn_character_sprite};
 use crate::systems::enemy_gen::EnemyGenerator;
 
@@ -1697,10 +1697,17 @@ pub fn process_enemy_turn_queue(
                     if marker.id == enemy_id {
                         match intent {
                             EnemyIntent::Attack { .. } => {
-                                // 攻击时：大幅度前冲，直接撞向修行者
-                                transform.translation.x -= 6.0; 
+                                // 基础位移修正：防止敌人直接重叠在玩家身上，由 PhysicalImpact 内部处理长跨度冲刺
+                                // transform.translation.x -= 6.0; // 移除这行硬编码，交给动画事件处理
                                 
-                                // 根据类型播放特效
+                                // 根据类型播放特效和动画
+                                let animation = match enemy.enemy_type {
+                                    EnemyType::DemonicWolf => AnimationState::WolfAttack,
+                                    EnemyType::PoisonSpider => AnimationState::SpiderAttack,
+                                    EnemyType::CursedSpirit => AnimationState::SpiritAttack,
+                                    EnemyType::GreatDemon => AnimationState::DemonAttack,
+                                };
+
                                 if enemy.enemy_type == EnemyType::GreatDemon {
                                     // 雷光锁定：落点在修行者身旁 (Y=0.0 为地面)
                                     let strike_pos = Vec3::new(player_pos.x, 0.0, player_pos.z);
@@ -1715,7 +1722,7 @@ pub fn process_enemy_turn_queue(
                                         screen_events.send(ScreenEffectEvent::Shake { trauma: 0.8, decay: 4.0 });
                                     }
                                 }
-                                anim_events.send(CharacterAnimationEvent { target: render_entity, animation: crate::components::sprite::AnimationState::DemonAttack });
+                                anim_events.send(CharacterAnimationEvent { target: render_entity, animation });
                             },
                             EnemyIntent::Defend { .. } => {
                                 // 防御/蓄势时：身体后缩并发出光芒

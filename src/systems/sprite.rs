@@ -139,6 +139,44 @@ pub fn update_physical_impacts(
                     pos_damping = 5.0;
                     impact.offset_velocity = Vec3::new(4.5 * dir, 0.0, 0.0);
                 },
+                ActionType::SkitterApproach => {
+                    // 1. 真实多足爬行位移逻辑 (类大作实现)
+                    let jerky_phase = impact.action_timer * 30.0; // 提高频率
+                    
+                    // 垂直方向 (Y) 极微小跳动，模拟步足蹬地
+                    action_pos_offset.y = jerky_phase.sin().abs() * -0.05; 
+                    // [新增] 纵深方向 (Z) 抖动：这是蜘蛛“横行”感的灵魂，模拟左右腿交替发力
+                    action_pos_offset.z = jerky_phase.cos() * 0.12;
+                    
+                    // [关键修正] 消除 45 度倾斜 (Z轴 Roll)，转为高频偏航 (Y轴 Yaw)
+                    // 蜘蛛身体不应该左右歪斜，而是头部左右微调
+                    action_tilt_offset = jerky_phase.sin() * 0.12; 
+                    impact.tilt_amount *= 0.1; // 强制衰减原本的倾斜力
+                    
+                    // 距离限制逻辑 (保持原有的精准停顿)
+                    let target_dist = impact.target_offset_dist;
+                    let current_dist = impact.current_offset.x.abs();
+                    let dist_left = (target_dist - current_dist).max(0.0);
+                    let speed_scalar = if dist_left < 1.0 { (dist_left / 1.0).max(0.0) } else { 1.0 };
+                    
+                    let speed_pulse = (jerky_phase * 0.4).sin().abs() + 0.6;
+                    impact.offset_velocity = Vec3::new(11.0 * dir * speed_pulse * speed_scalar, 0.0, 0.0);
+                    pos_damping = 15.0; // 极高的阻尼，消除滑行感，增加步进感
+
+                    // 2. 丝迹生成 (位置跟随 Z 轴抖动)
+                    if speed_scalar > 0.1 {
+                        impact.trail_timer -= dt;
+                        if impact.trail_timer <= 0.0 {
+                            use crate::components::particle::EffectType;
+                            let trail_pos = impact.home_position + impact.current_offset + action_pos_offset;
+                            effect_events.send(crate::components::particle::SpawnEffectEvent::new(
+                                EffectType::SilkTrail,
+                                trail_pos + Vec3::new(0.0, -0.6, 0.0)
+                            ).burst(2));
+                            impact.trail_timer = 0.05; 
+                        }
+                    }
+                },
                 ActionType::DemonCast => {
                     pos_damping = 30.0;
                     impact.offset_velocity = Vec3::ZERO;
@@ -266,10 +304,11 @@ fn trigger_hit_feedback(
                 AnimationState::SpiderAttack => {
                     let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
-                    impact.action_type = ActionType::SpiderWeb;
-                    impact.tilt_velocity = -8.0 * direction;
-                    impact.offset_velocity = Vec3::new(10.0 * direction, 0.0, 0.0);
-                    impact.action_timer = 0.8;
+                    impact.action_type = ActionType::SkitterApproach;
+                    impact.tilt_velocity = -1.0 * direction; // 近乎为零的微弱倾斜，模拟起步惯性
+                    impact.offset_velocity = Vec3::new(14.0 * direction, 0.0, 0.0);
+                    impact.action_timer = 1.2;
+                    impact.trail_timer = 0.0;
                 }
                 AnimationState::SpiritAttack => {
                     let target_x = if direction < 0.0 { -3.5 } else { 3.5 };

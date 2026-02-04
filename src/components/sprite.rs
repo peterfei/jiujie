@@ -217,6 +217,8 @@ pub struct PhysicalImpact {
     pub action_stage: u32,
     pub special_rotation: f32,
     pub special_rotation_velocity: f32,
+    /// [新增] 丝迹生成计时器 (用于蜘蛛爬行)
+    pub trail_timer: f32,
 }
 
 impl Default for PhysicalImpact {
@@ -226,12 +228,22 @@ impl Default for PhysicalImpact {
             tilt_amount: 0.0, tilt_velocity: 0.0, action_timer: 0.0, action_type: ActionType::None,
             action_direction: 1.0, target_offset_dist: 0.0, action_stage: 0,
             special_rotation: 0.0, special_rotation_velocity: 0.0,
+            trail_timer: 0.0,
         }
     }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum ActionType { None, Dash, WolfBite, SpiderWeb, DemonCast, Ascend }
+pub enum ActionType { 
+    None, 
+    Dash, 
+    WolfBite, 
+    SpiderWeb, 
+    DemonCast, 
+    Ascend,
+    /// [新增] 蜘蛛急速爬行：向目标移动并伴随剧烈抖动与丝迹
+    SkitterApproach,
+}
 
 #[derive(Component)]
 pub struct Rotating { pub speed: f32 }
