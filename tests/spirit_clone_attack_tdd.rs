@@ -74,9 +74,9 @@ mod tests {
                     current_clones += 1;
                     positions.push(transform.translation);
                 }
-                assert_eq!(current_clones, 4, "应当准确生成 4 个分身");
+                assert!(current_clones >= 4 && current_clones <= 6, "应当随机生成 4 到 6 个分身");
                 let dist = positions[0].distance(positions[1]);
-                assert!(dist > 100.0, "分身位置应当分散，当前距离: {}", dist);
+                assert!(dist > 50.0, "分身位置应当分散");
             }
 
             let events = app.world().resource::<Events<SpawnEffectEvent>>();

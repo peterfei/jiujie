@@ -73,23 +73,40 @@ pub fn update_spirit_clones(
                 0.5 // 固定 Z 轴深度
             );
             
-            // 产生复合爆炸效果：冲击火花 + 剑气残留
+            // 生成式爆炸：规模根据随机种子微调
+            let burst_count = if clone.seed > 0.5 { 30 } else { 20 };
+            
+            // 产生复合爆炸效果
             effect_events.send(SpawnEffectEvent::new(
                 EffectType::ImpactSpark,
                 explosion_pos + Vec3::new(0.0, -50.0, 0.0)
-            ).burst(25)); 
+            ).burst(burst_count)); 
             
             effect_events.send(SpawnEffectEvent::new(
                 EffectType::SwordEnergy,
                 explosion_pos
-            ).burst(10)); 
+            ).burst(burst_count / 2)); 
 
             commands.entity(entity).despawn_recursive();
             continue;
         }
 
-        // 移动逻辑
+        // --- 有机运动逻辑 ---
+        // 基础直线位移
         transform.translation += clone.velocity * dt;
+        
+        // 垂直于运动方向的正弦扰动 (飘忽感)
+        let sway_speed = 8.0 + clone.seed * 4.0;
+        let sway_amount = 0.05 + clone.seed * 0.05;
+        let time_val = time.elapsed_secs() + clone.seed * 100.0;
+        
+        // 计算垂向向量 (假设 velocity 只有 X/Z 位移)
+        let sway = (time_val * sway_speed).sin() * sway_amount;
+        transform.translation.y += sway; // 垂直方向飘动
+        
+        // 缩放演化：合拢时稍微拉长，模拟高速感
+        let stretch = 1.0 + (1.0 - clone.lifetime.max(0.0) / 1.5) * 0.2;
+        transform.scale = Vec3::new(1.0, stretch, 1.0);
     }
 }
 
@@ -466,34 +483,36 @@ pub fn trigger_hit_feedback(
                     impact.offset_velocity = Vec3::new(22.0 * direction, 0.0, 0.0);
                     impact.special_rotation_velocity = 120.0; 
 
-                    // --- [大作级优化] 4 方位幻影分身 ---
-                    // 目标 UI 坐标 (3D 坐标 * 100)
+                    // --- [生成式进阶] 动态幻影分身阵 ---
+                    use rand::Rng;
+                    let mut rng = rand::thread_rng();
+                    
                     let target_ui_x = -350.0; 
-                    let target_ui_y = 0.0; // 对应 3D Z
-                    let spawn_radius_ui = 200.0; // 对应 3D 2.0 距离
+                    let target_ui_y = 0.0; 
+                    let clone_count = rng.gen_range(4..=6); // 随机生成 4 到 6 个分身
 
-                    let offsets = [
-                        Vec2::new(spawn_radius_ui, 0.0),   // 右
-                        Vec2::new(-spawn_radius_ui, 0.0),  // 左
-                        Vec2::new(0.0, spawn_radius_ui),   // 前 (3D Z)
-                        Vec2::new(0.0, -spawn_radius_ui),  // 后 (3D Z)
-                    ];
-
-                    for (i, offset) in offsets.iter().enumerate() {
-                        let spawn_pos_ui = Vec3::new(target_ui_x + offset.x, target_ui_y + offset.y, 10.0);
+                    for i in 0..clone_count {
+                        // 1. 程序化位置：在圆周上均匀分布并加入随机抖动 (Jitter)
+                        let base_angle = (i as f32 / clone_count as f32) * std::f32::consts::TAU;
+                        let jitter_angle = rng.gen_range(-0.2..0.2);
+                        let final_angle = base_angle + jitter_angle;
                         
-                        // 使用标准函数生成，确保所有 3D 转换组件齐全
-                        let mut clone_sprite = CharacterSprite::new(sprite.texture.clone(), sprite.size);
-                        let colors = [
-                            Color::srgba(0.2, 0.6, 1.0, 0.7), 
-                            Color::srgba(0.5, 0.2, 1.0, 0.7), 
-                            Color::srgba(0.2, 1.0, 0.8, 0.7), 
-                            Color::srgba(0.1, 0.1, 0.5, 0.7), 
-                        ];
-                        clone_sprite.tint = colors[i % colors.len()];
+                        let radius = rng.gen_range(180.0..250.0);
+                        let offset_x = final_angle.cos() * radius;
+                        let offset_y = final_angle.sin() * radius;
+                        let spawn_pos_ui = Vec3::new(target_ui_x + offset_x, target_ui_y + offset_y, 10.0);
+                        
+                        // 2. 生成式视觉：随机缩放、随机色调插值
+                        let scale = rng.gen_range(0.8..1.2);
+                        let mut clone_sprite = CharacterSprite::new(sprite.texture.clone(), sprite.size * scale);
+                        
+                        // 从冷色调光谱中随机插值
+                        let hue = rng.gen_range(180.0..280.0); // 蓝-紫区间
+                        clone_sprite.tint = Color::hsla(hue, 0.8, 0.6, 0.6); 
 
-                        // 计算汇聚速度 (UI 尺度)
-                        let velocity_ui = Vec3::new(-offset.x, -offset.y, 0.0).normalize() * 500.0;
+                        // 3. 动态运动参数
+                        let speed = rng.gen_range(450.0..650.0);
+                        let velocity_ui = Vec3::new(-offset_x, -offset_y, 0.0).normalize() * speed;
 
                         commands.spawn((
                             Transform::from_translation(spawn_pos_ui),
@@ -503,9 +522,10 @@ pub fn trigger_hit_feedback(
                             InheritedVisibility::default(),
                             ViewVisibility::default(),
                             SpiritClone {
-                                lifetime: 1.5,
-                                delay: 0.8,
-                                velocity: velocity_ui / 100.0, // 转换为 3D 速度用于后续逻辑
+                                lifetime: rng.gen_range(1.3..1.7), // 随机生命周期
+                                delay: rng.gen_range(0.6..1.0),    // 随机静止时间，产生参差感
+                                velocity: velocity_ui / 100.0,
+                                seed: rng.gen(),                   // 独特种子驱动有机运动
                             },
                         ));
                     }

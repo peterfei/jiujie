@@ -266,6 +266,8 @@ pub struct SpiritClone {
     pub velocity: Vec3,
     /// [新增] 静止等待时间，结束后开始移动/爆发
     pub delay: f32,
+    /// [新增] 随机种子，用于生成不同的运动偏移
+    pub seed: f32,
 }
 
 /// 标记旋转法阵
