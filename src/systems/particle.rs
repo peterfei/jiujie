@@ -80,15 +80,38 @@ fn setup_particle_texture(mut commands: Commands, asset_server: Res<AssetServer>
         TextureFormat::Rgba8UnormSrgb,
         RenderAssetUsages::default(),
     );
+    let white_mist_image = Image::new(
+        Extent3d { width: width as u32, height: height as u32, depth_or_array_layers: 1 },
+        TextureDimension::D2,
+        {
+            let mut d = vec![255; width * height * 4];
+            for y in 0..height {
+                for x in 0..width {
+                    let dx = x as f32 - 63.5;
+                    let dy = y as f32 - 63.5;
+                    let dist = (dx*dx + dy*dy).sqrt() / 64.0;
+                    let alpha = (1.0 - dist.min(1.0)).powi(2);
+                    let idx = (y * width + x) * 4;
+                    d[idx+3] = (alpha * 255.0) as u8;
+                }
+            }
+            d
+        },
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::default(),
+    );
+    let white_mist_handle = images.add(white_mist_image);
+
     textures.insert(EffectType::CloudMist, images.add(cloud_image));
     
     // 复用云雾贴图给元素特效，利用粒子颜色进行区分
     let cloud_handle = textures.get(&EffectType::CloudMist).cloned();
     if let Some(handle) = cloud_handle {
-        textures.insert(EffectType::Fire, handle.clone());
-        textures.insert(EffectType::Ice, handle.clone());
+        textures.insert(EffectType::Fire, white_mist_handle.clone()); // 元素用白贴图方便调色
+        textures.insert(EffectType::Ice, white_mist_handle.clone());
         textures.insert(EffectType::Poison, handle.clone());
-        textures.insert(EffectType::SilkTrail, handle);
+        textures.insert(EffectType::SilkTrail, handle.clone());
+        textures.insert(EffectType::WolfSlash, white_mist_handle); // 血刃用白贴图
     }
 
     // --- [3.0 终极进化] 程序化生成“灵气烧灼”贴图 ---
@@ -179,25 +202,8 @@ pub fn handle_effect_events(
                     p.velocity = v_override + jitter;
                 }
 
-                // [关键修复] 区分 2D UI 粒子和 3D 空间粒子
-                let is_3d_effect = matches!(event.effect_type, 
-                    EffectType::WolfSlash | EffectType::SilkTrail | EffectType::ImpactSpark | EffectType::CloudMist
-                );
-
-                if is_3d_effect {
-                    commands.spawn((
-                        p,
-                        SpriteMarker,
-                        bevy::pbr::NotShadowCaster,
-                        Transform::from_translation(event.position),
-                        Visibility::default(),
-                        InheritedVisibility::default(),
-                        ViewVisibility::default(),
-                    ));
-                } else {
-                    // 使用原本的 2D UI 生成路径
-                    spawn_particle_entity(&mut commands, &assets, p);
-                }
+                // 统一使用原本的 2D UI 生成路径，确保可见性
+                spawn_particle_entity(&mut commands, &assets, p);
             }
         } else {
             commands.spawn((
@@ -458,8 +464,8 @@ pub fn update_particles(
             transform.scale.x = current_size * 4.5;
             transform.scale.y = current_size * 0.12;
             
-            // [关键修正] 让抓痕顺着速度方向旋转
-            let angle = p.velocity.y.atan2(p.velocity.x);
+            // [关键修正] 让抓痕顺着速度方向旋转 (UI 坐标系 Y 轴向下，需取负)
+            let angle = (-p.velocity.y).atan2(p.velocity.x);
             transform.rotation = Quat::from_rotation_z(angle);
         } else {
             image.color = p.current_color();

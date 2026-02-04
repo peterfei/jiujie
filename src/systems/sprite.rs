@@ -204,8 +204,8 @@ pub fn update_physical_impacts(
                             spawn_pos + Vec3::new(0.0, 0.0, 0.1)
                         ).burst(2);
                         
-                        // 赋予顺着当前冲刺方向的动量
-                        event.velocity_override = Some(Vec2::new(stage_dir.x * 8.0, stage_dir.y * 8.0));
+                        // 赋予顺着当前冲刺方向的高速动量 (确保超过 10.0 的旋转阈值)
+                        event.velocity_override = Some(Vec2::new(stage_dir.x * 45.0, stage_dir.y * 45.0));
                         effect_events.send(event);
                         
                         impact.trail_timer = 0.03; // 30ms 高频采样
