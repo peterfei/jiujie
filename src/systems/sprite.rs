@@ -35,7 +35,7 @@ impl Plugin for SpritePlugin {
                 spawn_ghosts,
                 cleanup_ghosts,
                 update_spirit_clones,
-                // update_clouds, // 暂时停用，排除干扰
+                update_clouds, // 重新启用：已验证逻辑安全
                 update_sprite_animations,
             ).run_if(in_state(GameState::Combat))
         );
@@ -914,15 +914,17 @@ pub fn spawn_procedural_landscape(
     )).id();
 
     let rock_material = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.5, 0.5, 0.5), // 纯灰色
-        perceptual_roughness: 1.0,
-        metallic: 0.0,
+        base_color: Color::srgb(0.2, 0.25, 0.3), // 深青灰色岩石
+        perceptual_roughness: 0.8,
+        metallic: 0.1,
         ..default()
     });
 
-    let grass_mesh = meshes.add(Rectangle::new(0.2, 0.8));
+    let grass_mesh = meshes.add(Rectangle::new(0.1, 0.5));
     let grass_material = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.0, 1.0, 0.0), // 纯绿色
+        base_color: Color::srgba(0.3, 0.8, 0.5, 0.9), // 幽绿色
+        emissive: LinearRgba::new(0.5, 2.0, 1.0, 1.0), // 适度自发光
+        alpha_mode: AlphaMode::Blend,
         unlit: true,
         ..default()
     });

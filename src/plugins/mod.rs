@@ -362,16 +362,30 @@ fn setup_camera(mut commands: Commands) {
         },
     ));
 
-    // 2. 3D 相机 (还原到最初“截图好”时的纯净状态)
+    // 2. 3D 相机 (唯美进阶版：安全前提下提升细节)
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 6.0, 12.0).looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
+        Camera {
+            clear_color: ClearColorConfig::Custom(Color::srgba(0.02, 0.05, 0.1, 1.0)), 
+            order: 0, 
+            hdr: false, // 依然保持关闭以保稳定
+            ..default()
+        },
+        Transform::from_xyz(0.0, 5.0, 11.0).looking_at(Vec3::new(0.0, 1.0, 0.0), Vec3::Y),
+        DistanceFog {
+            color: Color::srgba(0.02, 0.05, 0.12, 1.0),
+            falloff: FogFalloff::Linear {
+                start: 15.0, 
+                end: 50.0,
+            },
+            ..default()
+        },
     ));
 
-    // 3. 全局环境光 (适中亮度)
+    // 3. 全局环境光 (平衡亮度)
     commands.insert_resource(AmbientLight {
-        color: Color::srgb(0.8, 0.9, 1.0),
-        brightness: 500.0,
+        color: Color::srgb(0.6, 0.8, 1.0),
+        brightness: 800.0,
     });
 }
 
