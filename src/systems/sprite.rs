@@ -8,7 +8,7 @@ use crate::components::sprite::{
     CharacterSprite, AnimationState, CharacterType,
     CharacterAnimationEvent, SpriteMarker, PlayerSpriteMarker, EnemySpriteMarker,
     Combatant3d, BreathAnimation, PhysicalImpact, CharacterAssets, Rotating, Ghost, ActionType,
-    MagicSealMarker, RelicVisualMarker
+    MagicSealMarker, RelicVisualMarker, SpiritClone
 };
 use crate::components::CombatUiRoot;
 
@@ -34,9 +34,62 @@ impl Plugin for SpritePlugin {
                 update_relic_floating,
                 spawn_ghosts,
                 cleanup_ghosts,
+                update_spirit_clones,
                 update_sprite_animations,
             ).run_if(in_state(GameState::Combat))
         );
+    }
+}
+
+use crate::components::particle::SpawnEffectEvent;
+
+/// 更新怨灵分身系统
+pub fn update_spirit_clones(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut SpiritClone, &mut Transform)>,
+    time: Res<Time>,
+    mut effect_events: EventWriter<SpawnEffectEvent>,
+) {
+    let dt = time.delta_secs();
+    for (entity, mut clone, mut transform) in query.iter_mut() {
+        clone.lifetime -= dt;
+        
+        // 处理静止等待延迟
+        if clone.delay > 0.0 {
+            clone.delay -= dt;
+            // 静止期间可以加一点轻微的抖动或半透明闪烁（可选）
+            continue; 
+        }
+
+        // 延迟结束后，执行位移（向中心合拢）
+        if clone.lifetime <= 0.0 {
+            // [最终阶段] 分身合拢至中心并消散，产生剧烈爆炸
+            use crate::components::particle::EffectType;
+            
+            // [修正] 仅对 X 和 Y 进行 UI 坐标转换，Z 轴保持在特效层级 (0.5 左右)
+            let explosion_pos = Vec3::new(
+                transform.translation.x * 100.0,
+                transform.translation.y * 100.0,
+                0.5 // 固定 Z 轴深度
+            );
+            
+            // 产生复合爆炸效果：冲击火花 + 剑气残留
+            effect_events.send(SpawnEffectEvent::new(
+                EffectType::ImpactSpark,
+                explosion_pos + Vec3::new(0.0, -50.0, 0.0)
+            ).burst(25)); 
+            
+            effect_events.send(SpawnEffectEvent::new(
+                EffectType::SwordEnergy,
+                explosion_pos
+            ).burst(10)); 
+
+            commands.entity(entity).despawn_recursive();
+            continue;
+        }
+
+        // 移动逻辑
+        transform.translation += clone.velocity * dt;
     }
 }
 
@@ -308,13 +361,13 @@ pub fn update_physical_impacts(
 }
 
 /// 监听受击，触发物理反馈
-fn trigger_hit_feedback(
+pub fn trigger_hit_feedback(
     mut commands: Commands,
     mut events: EventReader<CharacterAnimationEvent>,
-    mut query: Query<(&mut PhysicalImpact, Option<&PlayerSpriteMarker>)>,
+    mut query: Query<(&mut PhysicalImpact, &CharacterSprite, Option<&PlayerSpriteMarker>)>,
 ) {
     for event in events.read() {
-        if let Ok((mut impact, is_player)) = query.get_mut(event.target) {
+        if let Ok((mut impact, sprite, is_player)) = query.get_mut(event.target) {
             let direction = if is_player.is_some() { 1.0 } else { -1.0 };
             impact.action_direction = direction; 
             
@@ -408,10 +461,54 @@ fn trigger_hit_feedback(
                 AnimationState::SpiritAttack => {
                     let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
-                    impact.action_type = ActionType::None;
+                    impact.action_type = ActionType::SpiritMultiShadow;
                     impact.tilt_velocity = 50.0; 
                     impact.offset_velocity = Vec3::new(22.0 * direction, 0.0, 0.0);
                     impact.special_rotation_velocity = 120.0; 
+
+                    // --- [大作级优化] 4 方位幻影分身 ---
+                    // 目标 UI 坐标 (3D 坐标 * 100)
+                    let target_ui_x = -350.0; 
+                    let target_ui_y = 0.0; // 对应 3D Z
+                    let spawn_radius_ui = 200.0; // 对应 3D 2.0 距离
+
+                    let offsets = [
+                        Vec2::new(spawn_radius_ui, 0.0),   // 右
+                        Vec2::new(-spawn_radius_ui, 0.0),  // 左
+                        Vec2::new(0.0, spawn_radius_ui),   // 前 (3D Z)
+                        Vec2::new(0.0, -spawn_radius_ui),  // 后 (3D Z)
+                    ];
+
+                    for (i, offset) in offsets.iter().enumerate() {
+                        let spawn_pos_ui = Vec3::new(target_ui_x + offset.x, target_ui_y + offset.y, 10.0);
+                        
+                        // 使用标准函数生成，确保所有 3D 转换组件齐全
+                        let mut clone_sprite = CharacterSprite::new(sprite.texture.clone(), sprite.size);
+                        let colors = [
+                            Color::srgba(0.2, 0.6, 1.0, 0.7), 
+                            Color::srgba(0.5, 0.2, 1.0, 0.7), 
+                            Color::srgba(0.2, 1.0, 0.8, 0.7), 
+                            Color::srgba(0.1, 0.1, 0.5, 0.7), 
+                        ];
+                        clone_sprite.tint = colors[i % colors.len()];
+
+                        // 计算汇聚速度 (UI 尺度)
+                        let velocity_ui = Vec3::new(-offset.x, -offset.y, 0.0).normalize() * 500.0;
+
+                        commands.spawn((
+                            Transform::from_translation(spawn_pos_ui),
+                            clone_sprite,
+                            SpriteMarker,
+                            Visibility::default(),
+                            InheritedVisibility::default(),
+                            ViewVisibility::default(),
+                            SpiritClone {
+                                lifetime: 1.5,
+                                delay: 0.8,
+                                velocity: velocity_ui / 100.0, // 转换为 3D 速度用于后续逻辑
+                            },
+                        ));
+                    }
                 }
                 AnimationState::BossRoar => {
                     impact.action_type = ActionType::DemonCast;
@@ -477,7 +574,7 @@ fn update_sprite_animations(
 }
 
 /// 处理动画事件
-fn handle_animation_events(
+pub fn handle_animation_events(
     mut events: EventReader<CharacterAnimationEvent>,
     mut query: Query<(&mut CharacterSprite, Option<&PlayerSpriteMarker>)>,
     character_assets: Res<CharacterAssets>,
@@ -577,7 +674,7 @@ fn update_breath_animations(
 }
 
 /// 同步系统：将 2D 贴图同步到 3D 立牌材质
-fn sync_2d_to_3d_render(
+pub fn sync_2d_to_3d_render(
     mut commands: Commands,
     sprite_query: Query<(Entity, &CharacterSprite, &Transform, Option<&Combatant3d>, Option<&MeshMaterial3d<StandardMaterial>>, Has<RelicVisualMarker>), (With<SpriteMarker>, Changed<CharacterSprite>)>,
     mut meshes: ResMut<Assets<Mesh>>,

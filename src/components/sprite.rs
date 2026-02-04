@@ -249,6 +249,8 @@ pub enum ActionType {
     Ascend,
     /// [新增] 蜘蛛急速爬行：向目标移动并伴随剧烈抖动与丝迹
     SkitterApproach,
+    /// [新增] 怨灵大招：多重幻影分身冲击
+    SpiritMultiShadow,
 }
 
 #[derive(Component)]
@@ -256,6 +258,15 @@ pub struct Rotating { pub speed: f32 }
 
 #[derive(Component)]
 pub struct Ghost { pub ttl: f32 }
+
+/// 怨灵分身组件
+#[derive(Component)]
+pub struct SpiritClone {
+    pub lifetime: f32,
+    pub velocity: Vec3,
+    /// [新增] 静止等待时间，结束后开始移动/爆发
+    pub delay: f32,
+}
 
 /// 标记旋转法阵
 #[derive(Component)]
