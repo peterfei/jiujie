@@ -124,8 +124,11 @@ impl Plugin for MenuPlugin {
         // 在进入Combat状态时设置战斗UI
         app.add_systems(OnEnter(GameState::Combat), (
             setup_combat_ui,
-            setup_combat_environment, // 新增 3D 环境设置
+            crate::systems::sprite::spawn_procedural_landscape, // [核心进化]
         ));
+        // 初始化环境资源
+        app.init_resource::<crate::resources::EnvironmentConfig>();
+        app.insert_resource(crate::resources::LandscapeGenerator::new(666));
         // 在进入Combat状态时重置玩家状态（能量、护甲等）
         app.add_systems(OnEnter(GameState::Combat), reset_player_on_combat_start);
         // 在进入Combat状态时抽牌（必须在 setup_combat_ui 之后执行）
@@ -350,35 +353,26 @@ fn initial_state_redirection(
 }
 
 fn setup_camera(mut commands: Commands) {
-    // 2D 相机 (用于 UI 渲染)
+    // 1. 2D 相机 (用于 UI)
     commands.spawn((
         Camera2d,
         Camera {
-            order: 10, // 确保 UI 永远在最上层
-            clear_color: ClearColorConfig::None,
+            order: 1,
             ..default()
         },
     ));
-    
-    // 3. 3D 相机 (大作级视角：低仰角 + 深度雾)
+
+    // 2. 3D 相机 (还原到最初“截图好”时的纯净状态)
     commands.spawn((
         Camera3d::default(),
-        Camera {
-            clear_color: ClearColorConfig::Custom(Color::srgba(0.01, 0.005, 0.02, 1.0)),
-            order: 0, 
-            ..default()
-        },
-        Tonemapping::None,
-        Transform::from_xyz(0.0, 4.5, 10.0).looking_at(Vec3::new(0.0, 1.0, 0.0), Vec3::Y),
-        DistanceFog {
-            color: Color::srgba(0.01, 0.005, 0.02, 1.0), // 幽邃的紫色雾气
-            falloff: FogFalloff::Linear {
-                start: 5.0, 
-                end: 25.0,
-            },
-            ..default()
-        },
+        Transform::from_xyz(0.0, 6.0, 12.0).looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
     ));
+
+    // 3. 全局环境光 (适中亮度)
+    commands.insert_resource(AmbientLight {
+        color: Color::srgb(0.8, 0.9, 1.0),
+        brightness: 500.0,
+    });
 }
 
 /// 资产预加载系统
@@ -417,73 +411,7 @@ pub fn preload_assets(
     info!("【发布准备】资产预热完成，系统进入巅峰性能模式");
 }
 
-/// 设置战斗环境（3D 地板和灯光）
-fn setup_combat_environment(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>,
-) {
-    let floor_texture = asset_server.load("textures/magic_circle.png");
-
-    // 1. 聚灵法阵地板 (3D 平面) - 强化发光
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(20.0, 20.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgba(1.0, 1.0, 1.0, 0.95),
-            base_color_texture: Some(floor_texture.clone()),
-            emissive: LinearRgba::new(0.0, 1.2, 0.5, 1.0), // 初始更亮
-            perceptual_roughness: 0.8,
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        })),
-        Transform::from_xyz(0.0, -1.5, 0.0), 
-        CombatUiRoot, 
-        Rotating { speed: 0.05 },
-        MagicSealMarker, // 标记用于脉动效果
-    ));
-
-    // 2. 主光源 (模拟太阳/大阵光芒)
-    commands.spawn((
-        DirectionalLight {
-            shadows_enabled: true,
-            illuminance: 4000.0,
-            ..default()
-        },
-        Transform::from_xyz(5.0, 10.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
-        CombatUiRoot,
-    ));
-
-    // 3. 局部氛围光源 - 增加电影感
-    // 玩家位光
-    commands.spawn((
-        PointLight {
-            intensity: 150000.0,
-            range: 15.0,
-            color: Color::srgb(0.3, 0.5, 1.0),
-            ..default()
-        },
-        Transform::from_xyz(-4.5, 3.0, 2.0),
-        CombatUiRoot,
-    ));
-
-    // 敌人位光
-    commands.spawn((
-        PointLight {
-            intensity: 120000.0,
-            range: 12.0,
-            color: Color::srgb(1.0, 0.2, 0.3),
-            ..default()
-        },
-        Transform::from_xyz(4.5, 3.0, 2.0),
-        CombatUiRoot,
-    ));
-    
-    commands.insert_resource(AmbientLight {
-        color: Color::srgb(0.1, 0.1, 0.1), 
-        brightness: 20.0, // 降低到极低，主要靠点光源和自发光
-    });
-}
+// 移除了旧的 setup_combat_environment
 
 // ============================================================================
 // 主菜单系统

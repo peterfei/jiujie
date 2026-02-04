@@ -270,6 +270,15 @@ pub struct SpiritClone {
     pub seed: f32,
 }
 
+/// [新增] 动态云组件
+#[derive(Component)]
+pub struct Cloud {
+    pub scroll_speed: Vec2,
+    pub amplitude: f32,
+    pub frequency: f32,
+    pub seed: f32,
+}
+
 /// 标记旋转法阵
 #[derive(Component)]
 pub struct MagicSealMarker;
