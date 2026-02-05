@@ -2,7 +2,7 @@
 pub mod hand_ui_v2;
 pub mod opening;
 use bevy::prelude::*;
-use crate::resources::ArenaAssets;
+use crate::resources::{ArenaAssets, PlayerAssets};
 use crate::states::GameState;
 use crate::components::background_music::{BgmType, PlayBgmEvent, StopBgmEvent};
 
@@ -50,6 +50,7 @@ impl Plugin for CorePlugin {
         app.register_type::<GameState>();
         app.init_resource::<crate::resources::EnvironmentAssets>();
         app.init_resource::<ArenaAssets>();
+        app.init_resource::<crate::resources::PlayerAssets>(); // [新增] 初始化玩家模块化资产
         app.init_resource::<CharacterAssets>(); // [核心修复] 注册角色资产资源
         app.add_systems(Startup, load_environment_assets);
         // 应用启动时设置相机与资产预热
@@ -456,6 +457,13 @@ pub fn preload_assets(
     };
     commands.insert_resource(arena_assets);
 
+    // 5. 初始化玩家模块化资产
+    let player_assets = PlayerAssets {
+        body: asset_server.load("3d/player/warrior_main.glb#Scene0"),
+        weapon: asset_server.load("3d/player/sword_01.glb#Scene0"),
+    };
+    commands.insert_resource(player_assets);
+
     info!("【发布准备】资产预热完成，系统进入巅峰性能模式");
 }
 
@@ -820,6 +828,7 @@ fn setup_combat_ui(
     character_assets_opt: Option<Res<CharacterAssets>>,
     player_deck_opt: Option<Res<PlayerDeck>>,
     relic_collection_opt: Option<Res<RelicCollection>>,
+    player_assets_opt: Option<Res<PlayerAssets>>,
     enemy_query: Query<(Entity, &Enemy)>,
     mut victory_delay: ResMut<VictoryDelay>,
     player_query: Query<(Entity, &Player, &crate::components::Cultivation)>,
@@ -833,6 +842,7 @@ fn setup_combat_ui(
     let player_deck = if let Some(pd) = player_deck_opt { pd } else { error!("缺失 PlayerDeck"); return; };
     let _relics = if let Some(rc) = relic_collection_opt { rc } else { error!("缺失 RelicCollection"); return; };
     let map_progress = if let Some(mp) = map_progress_opt { mp } else { error!("缺失 MapProgress"); return; };
+    let player_assets = player_assets_opt.as_ref().map(|r| r.as_ref());
 
     info!("【战斗】进入战场，众妖环伺");
     
@@ -910,6 +920,7 @@ fn setup_combat_ui(
                 Some(gen_enemy.visual_color),
                 &mut *meshes,
                 &mut *materials,
+                player_assets,
             );
 
             // 挂载词缀特效 (元素光环)
@@ -1044,6 +1055,7 @@ fn setup_combat_ui(
         None, // 玩家无染色
         &mut *meshes,
         &mut *materials,
+        player_assets,
     );
 
     commands.insert_resource(CombatState::default());

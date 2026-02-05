@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use bevy::scene::SceneRoot; 
 use bevy::pbr::{DistanceFog, FogFalloff}; 
 use crate::states::GameState;
-use crate::resources::ArenaAssets;
+use crate::resources::{ArenaAssets, PlayerAssets};
 use crate::components::sprite::{
     CharacterSprite, AnimationState, CharacterType,
     CharacterAnimationEvent, SpriteMarker, PlayerSpriteMarker, EnemySpriteMarker,
@@ -1272,14 +1272,17 @@ pub fn spawn_character_sprite(
     tint: Option<Color>, 
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
+    player_assets: Option<&PlayerAssets>,
 ) -> Entity {
     // 1. 资源准备
     let model_3d = match character_type {
-        CharacterType::Player => &character_assets.player_3d,
-        CharacterType::DemonicWolf => &character_assets.wolf_3d,
-        CharacterType::PoisonSpider => &character_assets.spider_3d,
-        CharacterType::CursedSpirit => &character_assets.spirit_3d,
-        CharacterType::GreatDemon => &character_assets.boss_3d,
+        CharacterType::Player => {
+            if let Some(pa) = player_assets { Some(&pa.body) } else { character_assets.player_3d.as_ref() }
+        },
+        CharacterType::DemonicWolf => character_assets.wolf_3d.as_ref(),
+        CharacterType::PoisonSpider => character_assets.spider_3d.as_ref(),
+        CharacterType::CursedSpirit => character_assets.spirit_3d.as_ref(),
+        CharacterType::GreatDemon => character_assets.boss_3d.as_ref(),
     };
 
     let texture_2d = match character_type {
@@ -1341,6 +1344,17 @@ pub fn spawn_character_sprite(
                 },
                 Transform::from_xyz(0.0, 3.0, 2.0), 
             ));
+
+            // [新增] 如果是玩家，挂载武器模块
+            if is_player {
+                if let Some(pa) = player_assets {
+                    parent.spawn((
+                        SceneRoot(pa.weapon.clone()),
+                        Transform::from_xyz(0.2, 0.5, 0.1), // 默认位置，实际应挂载到骨骼
+                        Name::new("PlayerWeapon"),
+                    ));
+                }
+            }
         });
     } else {
             

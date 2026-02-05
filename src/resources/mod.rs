@@ -86,3 +86,10 @@ pub struct ArenaAssets {
     pub lantern: Handle<Scene>,
     pub sword_debris: Handle<Scene>,
 }
+
+/// [新增] 玩家模块化资产
+#[derive(Resource, Default, Clone)]
+pub struct PlayerAssets {
+    pub body: Handle<Scene>,
+    pub weapon: Handle<Scene>,
+}
