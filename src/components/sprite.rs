@@ -183,7 +183,7 @@ impl CharacterAssets {
             boss: asset_server.load("textures/enemies/boss.png"),
             magic_circle: asset_server.load("textures/magic_circle.png"),
             // 默认 3D 字段
-            player_3d: None,
+            player_3d: Some(asset_server.load("3d/stylized_warrior.glb#Scene0")),
             wolf_3d: None,
             spider_3d: None,
             spirit_3d: None,

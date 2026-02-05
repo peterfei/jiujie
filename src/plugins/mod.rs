@@ -434,7 +434,7 @@ pub fn preload_assets(
         boss: asset_server.load("textures/enemies/boss.png"),
         magic_circle: asset_server.load("textures/magic_circle.png"),
         // 注入 3D 模型
-        player_3d: Some(asset_server.load("3d/fantasy_warrior.glb#Scene0")),
+        player_3d: Some(asset_server.load("3d/stylized_warrior.glb#Scene0")),
         wolf_3d: Some(asset_server.load("3d/fantasy_wolf.glb#Scene0")),
         spider_3d: Some(asset_server.load("3d/ornate_green_spider.glb#Scene0")),
         boss_3d: Some(asset_server.load("3d/fantasy_armored_warrior.glb#Scene0")),
