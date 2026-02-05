@@ -782,28 +782,31 @@ pub fn sync_2d_to_3d_render(
             // 非法宝（人物/怪）生成底座和补光灯
             if !is_relic {
                 entity_cmd.with_children(|parent| {
-                    let base_radius = if is_boss { 1.2 } else { 0.8 };
+                    let base_radius = if is_boss { 2.5 } else { 1.8 };
+                    // 灵气法阵 (同步大作效果)
                     parent.spawn((
-                        Mesh3d(meshes.add(Cylinder::new(base_radius, 0.02))), 
+                        Mesh3d(meshes.add(Plane3d::default().mesh().size(base_radius * 2.0, base_radius * 2.0))), 
                         MeshMaterial3d(materials.add(StandardMaterial {
-                            base_color: Color::srgba(0.0, 0.05, 0.0, 0.4),
-                            emissive: LinearRgba::new(0.0, 0.2, 0.1, 1.0),
+                            base_color: Color::srgba(0.0, 0.8, 1.0, 0.6),
+                            emissive: LinearRgba::new(0.0, 2.0, 5.0, 1.0),
                             alpha_mode: AlphaMode::Blend,
+                            unlit: true,
                             ..default()
                         })),
-                        Transform::from_xyz(0.0, -0.02, 0.0),
+                        Transform::from_xyz(0.0, 0.01, 0.0),
+                        Rotating { speed: 0.6 },
                     ));
                     
-                    // [大作优化] 为每个角色增加局部点光源，显著提升清晰度和质感
+                    // [大作优化] 为每个角色增加局部点光源
                     parent.spawn((
                         PointLight {
-                            intensity: 5000.0,
-                            radius: 5.0,
-                            color: Color::srgb(0.8, 0.9, 1.0),
+                            intensity: 12000.0,
+                            radius: 8.0,
+                            color: Color::srgb(1.0, 1.0, 1.0),
                             shadows_enabled: false,
                             ..default()
                         },
-                        Transform::from_xyz(0.0, 1.5, 1.0),
+                        Transform::from_xyz(0.0, 2.5, 1.5),
                     ));
                 });
             }
@@ -1085,24 +1088,36 @@ pub fn spawn_procedural_landscape(
         CombatUiRoot,
     ));
 
+    // --- [万法归一] 巨型全场聚灵阵地板 (解决太空感) ---
+    let floor_radius = 15.0;
+    commands.spawn((
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(floor_radius * 2.0, floor_radius * 2.0))), 
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgba(0.0, 0.8, 1.0, 0.4),
+            base_color_texture: Some(_asset_server.load("textures/magic_circle.png")),
+            emissive: LinearRgba::new(0.0, 1.5, 3.0, 1.0),
+            emissive_texture: Some(_asset_server.load("textures/magic_circle.png")),
+            alpha_mode: AlphaMode::Blend,
+            unlit: true,
+            ..default()
+        })),
+        Transform::from_xyz(0.0, -0.05, 0.0),
+        Rotating { speed: 0.15 }, // 全场大阵缓缓转动，庄严厚重
+        MagicSealMarker, // 标记以便后期实现呼吸脉动光效
+        CombatUiRoot,
+    ));
+
     if let Some(assets) = &env_assets {
-        // [性能与视觉优化] 打造“远景巨石阵”，确保战斗中心绝对空旷
-        for _ in 0..30 { 
-            let radius = rng.gen_range(15.0..45.0); // 显著推远起始半径
+        // [Reactive PG] 极简巨石阵，填补远景虚空
+        for _ in 0..15 { 
+            let radius = rng.gen_range(25.0..65.0); 
             let angle = rng.gen_range(0.0..std::f32::consts::TAU);
             let pos_z = angle.sin() * radius;
-            
-            // 下沉 Y 轴，使巨石成为背景基座
-            let y = ((radius - 10.0) / 5.0f32).powf(1.2) * 1.5 - 2.5 + rng.gen_range(-0.5..0.5);
+            let y = ((radius - 20.0) / 10.0f32).powf(1.3) * 5.0 - 5.0;
             let pos = Vec3::new(angle.cos() * radius, y, pos_z);
             
-            // 比例优化：增加纵向高度，使其更像山峰
-            let scale_xz = rng.gen_range(8.0..18.0);
-            let scale_y = rng.gen_range(5.0..12.0);
-            
-            // 为了兼容后续植被逻辑
-            let is_in_arena = false; 
-            let s_y = scale_y;
+            let scale_xz = rng.gen_range(15.0..35.0);
+            let scale_y = rng.gen_range(10.0..45.0); // 真正的高耸入云
 
             commands.entity(main_island_root).with_children(|parent| {
                 parent.spawn((
@@ -1111,74 +1126,44 @@ pub fn spawn_procedural_landscape(
                         .with_scale(Vec3::new(scale_xz, scale_y, scale_xz))
                         .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..6.28))),
                 ));
-
-                let noise_val = (pos.x * 0.4f32).sin() * (pos.z * 0.4f32).cos();
-                if noise_val > -0.3 && y < 2.5 {
-                    let veg_density = if is_in_arena { 0.85 } else { 0.35 };
-                    if rng.gen_bool(veg_density) {
-                        let g_pos = pos + Vec3::new(rng.gen_range(-0.5..0.5), s_y * 0.85, rng.gen_range(-0.5..0.5));
-                        let rand_val = rng.gen_range(0.0..1.0);
-                        let (model, scale) = if rand_val < 0.7 {
-                            (assets.bush.clone(), Vec3::new(rng.gen_range(1.0..1.8), rng.gen_range(0.2..0.4), rng.gen_range(1.0..1.8)))
-                        } else {
-                            (assets.shrub.clone(), Vec3::splat(rng.gen_range(0.4..0.8)))
-                        };
-
-                        parent.spawn((
-                            SceneRoot(model),
-                            Transform::from_translation(g_pos)
-                                .with_scale(scale)
-                                .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..6.28))),
-                            // [新增] 植被风场摇曳
-                            crate::components::sprite::WindSway {
-                                speed: rng.gen_range(1.5..3.0),
-                                strength: rng.gen_range(0.05..0.12),
-                                seed: rng.gen(),
-                            },
-                        ));
-                    }
-                }
             });
         }
     }
 
-    // --- 动态流雾生成 ---
+    // --- 动态流雾与光照微调 ---
     let mist_tex = generate_noise_texture(&mut images, 256, 256, NoiseType::Cloud);
     let unit_quad = meshes.add(Plane3d::default().mesh().size(1.0, 1.0));
     
-    for _ in 0..20 {
-        // [视觉优化] 将流雾推向外围 (20.0+)，确保战斗中心 (0.0~10.0) 清晰锐利
-        // 解决石头穿插消失和角色模糊的问题
-        let radius = rng.gen_range(20.0..60.0) as f32;
+    for _ in 0..25 {
+        let radius = rng.gen_range(30.0..80.0) as f32;
         let angle = rng.gen_range(0.0..6.28) as f32;
-        let pos = Vec3::new(angle.cos() * radius, rng.gen_range(1.5..3.5), angle.sin() * radius);
+        let pos = Vec3::new(angle.cos() * radius, rng.gen_range(2.0..6.5), angle.sin() * radius);
         
         commands.spawn((
             Mesh3d(unit_quad.clone()),
             MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: Color::srgba(0.8, 0.9, 1.0, rng.gen_range(0.1..0.2)), // 进一步降低不透明度，提升清晰度
+                base_color: Color::srgba(0.8, 0.9, 1.0, rng.gen_range(0.05..0.15)), 
                 base_color_texture: Some(mist_tex.clone()),
                 alpha_mode: AlphaMode::Blend,
-                emissive: LinearRgba::new(0.1, 0.2, 0.3, 0.5), 
-                double_sided: true,
-                cull_mode: None,
-                ..default()
+                emissive: LinearRgba::new(0.05, 0.1, 0.2, 0.2), 
+                double_sided: true, cull_mode: None, ..default()
             })),
             Transform::from_translation(pos)
-                .with_scale(Vec3::new(rng.gen_range(20.0..50.0), 1.0, rng.gen_range(15.0..35.0)))
+                .with_scale(Vec3::new(rng.gen_range(35.0..75.0), 1.0, rng.gen_range(25.0..55.0)))
                 .with_rotation(Quat::from_rotation_y(rng.gen_range(-1.0..1.0))),
-            crate::components::sprite::Mist {
-                scroll_speed: Vec2::new(rng.gen_range(-1.5..1.5), rng.gen_range(-0.5..0.5)),
-                seed: rng.gen(),
-            },
+            crate::components::sprite::Mist { scroll_speed: Vec2::new(rng.gen_range(-0.8..0.8), 0.0), seed: rng.gen() },
             CombatUiRoot,
         ));
     }
 
-    commands.insert_resource(AmbientLight { color: Color::srgb(0.7, 0.8, 1.0), brightness: 2200.0 });
     commands.spawn((
-        DirectionalLight { shadows_enabled: false, illuminance: 55000.0, color: Color::srgb(1.0, 0.98, 0.9), ..default() },
-        Transform::from_xyz(20.0, 50.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
+        DirectionalLight { 
+            shadows_enabled: false, 
+            illuminance: 120000.0, // 极强主光源勾勒 NPR 轮廓
+            color: Color::srgb(1.0, 0.98, 0.92), 
+            ..default() 
+        },
+        Transform::from_xyz(30.0, 60.0, 30.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
     spawn_cloud_sea(&mut commands, &mut materials, &mut images, &mut meshes, seed, env_assets);
@@ -1300,66 +1285,78 @@ pub fn spawn_character_sprite(
             .with_rotation(Quat::from_rotation_x(-0.2) * Quat::from_rotation_y(base_rotation))
             .with_scale(Vec3::splat(if is_boss { 3.0 } else { 2.0 })));
             
-                            // [大作优化] 为每个 3D 角色挂载专属补光灯，增强质感与清晰度
+                // [NPR 优化] 补光灯大幅减弱，仅用于提供边缘微光
             
-                            entity_cmd.with_children(|parent| {
+                entity_cmd.with_children(|parent| {
             
-                                parent.spawn((
+                    parent.spawn((
             
-                                    PointLight {
+                        PointLight {
             
-                                        intensity: 15000.0, // 微调强度，达到细节与亮度的平衡
+                            intensity: 3000.0, 
             
-                                        radius: 8.0,
+                            radius: 10.0,
             
-                                        color: Color::srgb(1.0, 1.0, 1.0),
+                            color: Color::srgb(0.8, 0.9, 1.0),
             
-                                        shadows_enabled: false,
+                            shadows_enabled: false,
             
-                                        ..default()
+                            ..default()
             
-                                    },
+                        },
             
-                                    Transform::from_xyz(0.0, 2.5, 1.5), 
+                        Transform::from_xyz(0.0, 3.0, 2.0), 
             
-                                ));
+                    ));
             
-                            });    } else {
-        // [降级] 2D 分支材质优化
-        let mesh = meshes.add(Rectangle::new(size.x / 50.0, size.y / 50.0));
-        let material = materials.add(StandardMaterial {
-            base_color: tint.unwrap_or(Color::WHITE),
-            base_color_texture: Some(texture_2d),
-            perceptual_roughness: 0.1,
-            unlit: false, // 启用光照，接受环境和补光
-            alpha_mode: AlphaMode::Blend, cull_mode: None, double_sided: true,
-            ..default()
-        });
-        entity_cmd.insert((Mesh3d(mesh), MeshMaterial3d(material)));
-    }
-
-    let entity = entity_cmd.id();
-
-    // 3. 统一增加灵气底座
-    commands.entity(entity).with_children(|parent| {
-        let base_radius = if is_boss { 1.5 } else { 1.0 };
-        parent.spawn((
-            Mesh3d(meshes.add(Cylinder::new(base_radius, 0.05))), 
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: Color::srgba(0.0, 0.1, 0.15, 0.6),
-                emissive: LinearRgba::new(0.0, 0.5, 0.8, 1.0),
-                alpha_mode: AlphaMode::Blend,
-                ..default()
-            })),
-            Transform::from_xyz(0.0, -0.05, 0.0),
-        ));
-    });
-
-    // 4. 挂载身份标记
-    match character_type {
-        CharacterType::Player => { commands.entity(entity).insert(PlayerSpriteMarker); }
-        _ => { if let Some(id) = enemy_id { commands.entity(entity).insert(EnemySpriteMarker { id }); } }
-    };
-
-    entity
-}
+                });
+            
+            } else {
+            
+                // [NPR 降级] 2D 分支材质优化：消除高光
+            
+                let mesh = meshes.add(Rectangle::new(size.x / 50.0, size.y / 50.0));
+            
+                let material = materials.add(StandardMaterial {
+            
+                    base_color: tint.unwrap_or(Color::WHITE),
+            
+                    base_color_texture: Some(texture_2d),
+            
+                    perceptual_roughness: 0.95,
+            
+                    reflectance: 0.05, // 极低反射，消除泛白感
+            
+                    unlit: false, 
+            
+                    alpha_mode: AlphaMode::Blend, cull_mode: None, double_sided: true,
+            
+                    ..default()
+            
+                });
+            
+                entity_cmd.insert((Mesh3d(mesh), MeshMaterial3d(material)));
+            
+            }
+            
+        
+            
+            let entity = entity_cmd.id();
+            
+        
+            
+            // 4. 挂载身份标记
+            
+            match character_type {
+            
+                CharacterType::Player => { commands.entity(entity).insert(PlayerSpriteMarker); }
+            
+                _ => { if let Some(id) = enemy_id { commands.entity(entity).insert(EnemySpriteMarker { id }); } }
+            
+            };
+            
+        
+            
+            entity
+            
+        }

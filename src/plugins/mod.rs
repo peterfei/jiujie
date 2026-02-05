@@ -364,37 +364,39 @@ fn setup_camera(mut commands: Commands) {
         },
     ));
 
-    // 2. 3D 相机 (大作级画质：窄视场角，产生电影级长焦感，显著提升清晰度)
+    // 2. 3D 相机 (大作级画质：开启 ACES 色调映射，极致色彩表现)
     commands.spawn((
         Camera3d::default(),
+        Tonemapping::AcesFitted, // 3A 大作级的色彩映射，消除泛灰
         Projection::Perspective(PerspectiveProjection {
-            fov: 35.0f32.to_radians(), // 窄 FOV (35度)：物体更大、更清晰
+            fov: 32.0f32.to_radians(), // 进一步缩窄 FOV，长焦感更强
             ..default()
         }),
         Camera {
-            clear_color: ClearColorConfig::Custom(Color::srgb(0.65, 0.75, 0.9)), 
+            clear_color: ClearColorConfig::Custom(Color::srgb(0.5, 0.7, 0.9)), 
             order: 0, 
             hdr: false, 
             ..default()
         },
         Msaa::Sample4, 
         CombatCamera {
-            distance: 12.0,
+            distance: 13.0, // 稍微拉远一点点，增加纵深
             target: Vec3::new(0.0, 1.2, 0.0),
             ..default()
         },
         Transform::from_xyz(0.0, 5.5, 12.0).looking_at(Vec3::new(0.0, 1.2, 0.0), Vec3::Y),
         DistanceFog {
             color: Color::srgba(0.65, 0.75, 0.9, 1.0),
-            falloff: FogFalloff::Linear { start: 30.0, end: 80.0 },
+            // 极远雾化：50米内绝对清晰，只保留远山胧影
+            falloff: FogFalloff::Linear { start: 50.0, end: 120.0 },
             ..default()
         },
     ));
 
-    // 3. 全局环境光 (仙侠感：高亮度，偏冷色调)
+    // 3. 全局环境光 (大作质感：低环境光营造深邃阴影，由主光和自发光勾勒轮廓)
     commands.insert_resource(AmbientLight {
         color: Color::srgb(0.8, 0.9, 1.0),
-        brightness: 3000.0,
+        brightness: 600.0,
     });
 }
 
@@ -428,6 +430,7 @@ pub fn preload_assets(
         spider: asset_server.load("textures/enemies/spider.png"),
         spirit: asset_server.load("textures/enemies/spirit.png"),
         boss: asset_server.load("textures/enemies/boss.png"),
+        magic_circle: asset_server.load("textures/magic_circle.png"),
         // 注入 3D 模型
         player_3d: Some(asset_server.load("3d/fantasy_warrior.glb#Scene0")),
         wolf_3d: Some(asset_server.load("3d/fantasy_wolf.glb#Scene0")),
