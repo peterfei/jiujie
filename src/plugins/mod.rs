@@ -1379,6 +1379,7 @@ pub fn cleanup_combat_ui(
     particle_query: Query<Entity, With<ParticleMarker>>,
     emitter_query: Query<Entity, With<EmitterMarker>>,
     piles_query: Query<Entity, Or<(With<DrawPile>, With<DiscardPile>, With<Hand>)>>,
+    light_query: Query<Entity, With<DirectionalLight>>, // [关键修复] 显式清理光源
 ) {
     // 1. 持久化同步
     if let Ok(player) = player_query.get_single() {
@@ -1397,8 +1398,9 @@ pub fn cleanup_combat_ui(
     for entity in particle_query.iter() { commands.entity(entity).despawn_recursive(); }
     for entity in emitter_query.iter() { commands.entity(entity).despawn_recursive(); }
     for entity in piles_query.iter() { commands.entity(entity).despawn_recursive(); }
+    for entity in light_query.iter() { commands.entity(entity).despawn_recursive(); }
     
-    info!("【战斗清理】已彻底销毁所有战斗相关实体");
+    info!("【战斗清理】已彻底销毁所有战斗相关实体（含光源）");
 }
 
 /// 处理战斗界面按钮点击

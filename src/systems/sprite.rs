@@ -1065,6 +1065,7 @@ pub fn spawn_procedural_landscape(
         Transform::from_xyz(0.0, -2.2, 0.0),
         Visibility::default(), InheritedVisibility::default(), ViewVisibility::default(),
         Name::new("DynamicEnvIsland"),
+        CombatUiRoot, // [关键修复] 标记以便清理
     )).id();
 
     // [新增] 动态水面
@@ -1166,6 +1167,7 @@ pub fn spawn_procedural_landscape(
             ..default() 
         },
         Transform::from_xyz(30.0, 60.0, 30.0).looking_at(Vec3::ZERO, Vec3::Y),
+        CombatUiRoot, // [关键修复] 标记以便清理
     ));
 
     spawn_cloud_sea(&mut commands, &mut materials, &mut images, &mut meshes, seed, env_assets);
