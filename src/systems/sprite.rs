@@ -13,7 +13,7 @@ use crate::components::sprite::{
     CharacterAnimationEvent, SpriteMarker, PlayerSpriteMarker, EnemySpriteMarker,
     Combatant3d, BreathAnimation, PhysicalImpact, CharacterAssets, Rotating, Ghost, ActionType,
     MagicSealMarker, RelicVisualMarker, SpiritClone, CombatCamera,
-    ArenaLantern, ArenaVegetation, ArenaSpiritStone
+    ArenaLantern, ArenaVegetation, ArenaSpiritStone, PlayerWeapon
 };
 use crate::components::CombatUiRoot;
 
@@ -46,6 +46,7 @@ impl Plugin for SpritePlugin {
                 update_wind_sway, 
                 update_water, 
                 update_sprite_animations,
+                update_weapon_animation, // [新增]
             ).run_if(in_state(GameState::Combat))
         );
     }
@@ -1157,6 +1158,42 @@ pub fn spawn_procedural_landscape(
     spawn_cloud_sea(&mut commands, &mut materials, &mut images, &mut meshes, seed, env_assets);
 }
 
+/// [新增] 武器程序化挥砍系统
+///
+/// 监听玩家的 PhysicalImpact 状态，驱动武器实体的旋转
+pub fn update_weapon_animation(
+    // 我们需要查询武器，且需要知道它的父物体(玩家)的状态
+    // 由于 Bevy 的查询限制，我们先查武器，再通过 Parent 查玩家
+    mut weapon_query: Query<(&mut Transform, &Parent), With<PlayerWeapon>>,
+    player_query: Query<&PhysicalImpact, With<PlayerSpriteMarker>>,
+    time: Res<Time>,
+) {
+    for (mut transform, parent) in weapon_query.iter_mut() {
+        if let Ok(impact) = player_query.get(parent.get()) {
+            // 基础姿态：斜指前方
+            let base_rot = Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2) * Quat::from_rotation_y(0.3);
+            
+            // 检查是否处于攻击状态 (Dash 或 None 且有速度/计时器)
+            let is_attacking = impact.action_timer > 0.0 || impact.offset_velocity.x.abs() > 1.0;
+
+            if is_attacking {
+                // 挥砍逻辑: 蓄力(后仰) -> 劈砍(前压) -> 恢复
+                // 利用 action_timer 或正弦波模拟
+                let wave = (time.elapsed_secs() * 15.0).sin(); 
+                
+                // 绕 X 轴旋转 (上下劈) 和 Z 轴 (前后摆)
+                let swing = Quat::from_euler(EulerRot::XYZ, 0.0, 0.0, wave * 1.2);
+                
+                transform.rotation = base_rot * swing;
+            } else {
+                // 待机呼吸：轻微上下浮动
+                let breath = (time.elapsed_secs() * 2.0).sin() * 0.08;
+                transform.rotation = base_rot * Quat::from_rotation_z(breath);
+            }
+        }
+    }
+}
+
 /// [新增] 模块化对战台生成系统
 pub fn spawn_modular_arena(
     mut commands: Commands,
@@ -1350,8 +1387,11 @@ pub fn spawn_character_sprite(
                 if let Some(pa) = player_assets {
                     parent.spawn((
                         SceneRoot(pa.weapon.clone()),
-                        Transform::from_xyz(0.2, 0.5, 0.1), // 默认位置，实际应挂载到骨骼
-                        Name::new("PlayerWeapon"),
+                        // 修正：将剑从竖直状态旋转至斜指前方 (绕 Z 轴转 -90度指向右，再绕 Y 轴微调)
+                        // 假设剑原本朝上 (+Y)
+                        Transform::from_xyz(0.2, 0.8, 0.2) // 稍微提高一点位置
+                            .with_rotation(Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2) * Quat::from_rotation_y(0.3)),
+                        PlayerWeapon,
                     ));
                 }
             }

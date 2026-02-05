@@ -363,6 +363,10 @@ pub struct Water {
     pub wave_strength: f32,
 }
 
+/// [新增] 玩家武器标记，用于程序化挥剑控制
+#[derive(Component)]
+pub struct PlayerWeapon;
+
 /// [新增] 场景装饰 - 灯笼
 #[derive(Component)]
 pub struct ArenaLantern;
