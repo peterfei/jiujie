@@ -5,8 +5,9 @@
 
 use bevy::prelude::*;
 use bevy::scene::SceneRoot; 
-use bevy::pbr::{DistanceFog, FogFalloff}; // 显式导入雾气组件
+use bevy::pbr::{DistanceFog, FogFalloff}; 
 use crate::states::GameState;
+use crate::resources::ArenaAssets;
 use crate::components::sprite::{
     CharacterSprite, AnimationState, CharacterType,
     CharacterAnimationEvent, SpriteMarker, PlayerSpriteMarker, EnemySpriteMarker,
@@ -604,9 +605,10 @@ pub fn trigger_hit_feedback(
 fn update_sprite_animations(
     mut commands: Commands,
     mut query: Query<(Entity, &mut CharacterSprite, Option<&PlayerSpriteMarker>)>,
-    character_assets: Res<CharacterAssets>,
+    character_assets_opt: Option<Res<CharacterAssets>>,
     time: Res<Time>,
 ) {
+    let character_assets = if let Some(ca) = character_assets_opt { ca } else { return; };
     for (entity, mut sprite, is_player) in query.iter_mut() {
         if sprite.total_frames <= 1 { continue; }
         sprite.elapsed += time.delta_secs();
@@ -643,8 +645,9 @@ fn update_sprite_animations(
 pub fn handle_animation_events(
     mut events: EventReader<CharacterAnimationEvent>,
     mut query: Query<(&mut CharacterSprite, Option<&PlayerSpriteMarker>)>,
-    character_assets: Res<CharacterAssets>,
+    character_assets_opt: Option<Res<CharacterAssets>>,
 ) {
+    let character_assets = if let Some(ca) = character_assets_opt { ca } else { return; };
     for event in events.read() {
         if let Ok((mut sprite, is_player)) = query.get_mut(event.target) {
             match event.animation {
@@ -1047,6 +1050,7 @@ pub fn spawn_procedural_landscape(
     _asset_server: Res<AssetServer>,
     env_assets: Option<Res<crate::resources::EnvironmentAssets>>,
 ) {
+    info!("【场景构建】正在初始化程序化环境...");
     let seed = generator.map(|g| g.seed).unwrap_or(12345);
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
     use rand::Rng;
@@ -1174,6 +1178,64 @@ pub fn spawn_procedural_landscape(
     ));
 
     spawn_cloud_sea(&mut commands, &mut materials, &mut images, &mut meshes, seed, env_assets);
+}
+
+/// [新增] 模块化对战台生成系统
+pub fn spawn_modular_arena(
+    mut commands: Commands,
+    arena_assets: Option<Res<ArenaAssets>>,
+) {
+    let assets = match arena_assets {
+        Some(a) => a,
+        None => {
+            error!("【致命错误】找不到 ArenaAssets 资源，无法构建模块化对战台！");
+            return;
+        }
+    };
+
+    info!("【场景构建】正在部署模块化仙侠对战台...");
+
+    // 1. 部署地基平台 (Base)
+    commands.spawn((
+        SceneRoot(assets.base_platform.clone()),
+        Transform::from_xyz(0.0, -0.05, 0.0),
+        MagicSealMarker,
+        CombatUiRoot,
+    ));
+
+    // 2. 部署四角立柱 (Pillars)
+    let pillar_positions = [
+        Vec3::new(8.5, -0.2, 8.5),
+        Vec3::new(-8.5, -0.2, 8.5),
+        Vec3::new(8.5, -0.2, -8.5),
+        Vec3::new(-8.5, -0.2, -8.5),
+    ];
+
+    for (i, pos) in pillar_positions.iter().enumerate() {
+        commands.spawn((
+            SceneRoot(assets.pillar.clone()),
+            Transform::from_translation(*pos)
+                .with_rotation(Quat::from_rotation_y(i as f32 * std::f32::consts::FRAC_PI_2))
+                .with_scale(Vec3::splat(2.0)),
+            CombatUiRoot,
+        ));
+    }
+
+    // 3. 部署核心装饰 (Main Prop)
+    commands.spawn((
+        SceneRoot(assets.main_prop.clone()),
+        Transform::from_xyz(0.0, 0.0, -10.0).with_scale(Vec3::splat(2.5)),
+        CombatUiRoot,
+    ));
+
+    // 4. 散落散件 (Scatter)
+    commands.spawn((
+        SceneRoot(assets.sword_debris.clone()),
+        Transform::from_xyz(5.0, 0.0, 3.0).with_rotation(Quat::from_rotation_y(0.8)),
+        CombatUiRoot,
+    ));
+
+    info!("【场景构建】模块化部署完成");
 }
 
 fn spawn_cloud_sea(

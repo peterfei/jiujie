@@ -76,3 +76,13 @@ pub struct EnvironmentAssets {
     pub rune_stone: Handle<Scene>, // 新增：符文石
     pub berries: Handle<Scene>, // 新增：浆果丛
 }
+
+/// [新增] 对战场景模块化资产
+#[derive(Resource, Default, Clone)]
+pub struct ArenaAssets {
+    pub base_platform: Handle<Scene>,
+    pub pillar: Handle<Scene>,
+    pub main_prop: Handle<Scene>,
+    pub lantern: Handle<Scene>,
+    pub sword_debris: Handle<Scene>,
+}

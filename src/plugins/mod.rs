@@ -2,6 +2,7 @@
 pub mod hand_ui_v2;
 pub mod opening;
 use bevy::prelude::*;
+use crate::resources::ArenaAssets;
 use crate::states::GameState;
 use crate::components::background_music::{BgmType, PlayBgmEvent, StopBgmEvent};
 
@@ -47,8 +48,10 @@ impl Plugin for CorePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(opening::OpeningPlugin);
         app.register_type::<GameState>();
-        app.init_resource::<crate::resources::EnvironmentAssets>(); // 初始化资产容器
-        app.add_systems(Startup, load_environment_assets); // 加载资产
+        app.init_resource::<crate::resources::EnvironmentAssets>();
+        app.init_resource::<ArenaAssets>();
+        app.init_resource::<CharacterAssets>(); // [核心修复] 注册角色资产资源
+        app.add_systems(Startup, load_environment_assets);
         // 应用启动时设置相机与资产预热
         app.add_systems(Startup, (setup_camera, preload_assets, start_loading_first_frame));
         app.add_systems(Update, initial_state_redirection.run_if(in_state(GameState::Booting)));
@@ -126,7 +129,8 @@ impl Plugin for MenuPlugin {
         // 在进入Combat状态时设置战斗UI
         app.add_systems(OnEnter(GameState::Combat), (
             setup_combat_ui,
-            crate::systems::sprite::spawn_procedural_landscape, // [核心进化]
+            crate::systems::sprite::spawn_procedural_landscape, 
+            crate::systems::sprite::spawn_modular_arena, // [核心切换] 模块化对战场景
         ));
         // 初始化环境资源
         app.init_resource::<crate::resources::EnvironmentConfig>();
@@ -440,7 +444,15 @@ pub fn preload_assets(
         boss_3d: Some(asset_server.load("3d/fantasy_armored_warrior.glb#Scene0")),
         spirit_3d: Some(asset_server.load("3d/fantasy_character.glb#Scene0")),
     };
-    commands.insert_resource(character_assets);
+    // 4. 初始化对战台模块化资产
+    let arena_assets = ArenaAssets {
+        base_platform: asset_server.load("3d/arena/base/platform_01.glb#Scene0"),
+        pillar: asset_server.load("3d/arena/pillars/dragon_pillar.glb#Scene0"),
+        main_prop: asset_server.load("3d/arena/props/bronze_cauldron.glb#Scene0"),
+        lantern: asset_server.load("3d/arena/scatter/lantern.glb#Scene0"), // 暂时共用，或指向新位置
+        sword_debris: asset_server.load("3d/arena/scatter/sword_debris.glb#Scene0"),
+    };
+    commands.insert_resource(arena_assets);
 
     info!("【发布准备】资产预热完成，系统进入巅峰性能模式");
 }
@@ -803,18 +815,23 @@ pub fn setup_event_ui_wrapper(commands: Commands, asset_server: Res<AssetServer>
 fn setup_combat_ui(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    character_assets: Res<CharacterAssets>,
-    player_deck: Res<PlayerDeck>,
-    relic_collection: Res<RelicCollection>,
+    character_assets_opt: Option<Res<CharacterAssets>>,
+    player_deck_opt: Option<Res<PlayerDeck>>,
+    relic_collection_opt: Option<Res<RelicCollection>>,
     enemy_query: Query<(Entity, &Enemy)>,
     mut victory_delay: ResMut<VictoryDelay>,
     player_query: Query<(Entity, &Player, &crate::components::Cultivation)>,
-    map_progress: Res<MapProgress>,
+    map_progress_opt: Option<Res<MapProgress>>,
     existing_ui: Query<Entity, With<CombatUiRoot>>,
     map_ui: Query<Entity, With<MapUiRoot>>, 
-    mut meshes: ResMut<Assets<Mesh>>, // 新增
-    mut materials: ResMut<Assets<StandardMaterial>>, // 新增
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    let character_assets = if let Some(ca) = character_assets_opt { ca } else { error!("缺失 CharacterAssets"); return; };
+    let player_deck = if let Some(pd) = player_deck_opt { pd } else { error!("缺失 PlayerDeck"); return; };
+    let _relics = if let Some(rc) = relic_collection_opt { rc } else { error!("缺失 RelicCollection"); return; };
+    let map_progress = if let Some(mp) = map_progress_opt { mp } else { error!("缺失 MapProgress"); return; };
+
     info!("【战斗】进入战场，众妖环伺");
     
     // [性能优化] 仅清理地图残留 UI，不再清理自己的标记
