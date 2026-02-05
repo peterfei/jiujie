@@ -1161,7 +1161,7 @@ pub fn spawn_procedural_landscape(
     commands.spawn((
         DirectionalLight { 
             shadows_enabled: false, 
-            illuminance: 120000.0, // 极强主光源勾勒 NPR 轮廓
+            illuminance: 25000.0, // 回调至历史最佳值，消除泛白
             color: Color::srgb(1.0, 0.98, 0.92), 
             ..default() 
         },

@@ -334,6 +334,7 @@ fn stop_bgm(mut bgm_events: EventWriter<StopBgmEvent>) {
 // ============================================================================
 
 use bevy::core_pipeline::tonemapping::Tonemapping;
+use bevy::render::camera::Exposure; // 引入曝光控制
 
 /// 第一帧资源加载
 fn start_loading_first_frame(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -368,6 +369,7 @@ fn setup_camera(mut commands: Commands) {
     commands.spawn((
         Camera3d::default(),
         Tonemapping::AcesFitted, // 3A 大作级的色彩映射，消除泛灰
+        Exposure::default(), // [关键修复] 引入标准曝光控制
         Projection::Perspective(PerspectiveProjection {
             fov: 32.0f32.to_radians(), // 进一步缩窄 FOV，长焦感更强
             ..default()
