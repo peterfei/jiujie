@@ -438,18 +438,20 @@ pub fn preload_assets(
         boss: asset_server.load("textures/enemies/boss.png"),
         magic_circle: asset_server.load("textures/magic_circle.png"),
         // 注入 3D 模型
-        player_3d: Some(asset_server.load("3d/stylized_warrior.glb#Scene0")),
+        player_3d: Some(asset_server.load("3d/player.glb#Scene0")),
         wolf_3d: Some(asset_server.load("3d/fantasy_wolf.glb#Scene0")),
         spider_3d: Some(asset_server.load("3d/ornate_green_spider.glb#Scene0")),
         boss_3d: Some(asset_server.load("3d/fantasy_armored_warrior.glb#Scene0")),
         spirit_3d: Some(asset_server.load("3d/fantasy_character.glb#Scene0")),
     };
+    commands.insert_resource(character_assets);
+
     // 4. 初始化对战台模块化资产
     let arena_assets = ArenaAssets {
         base_platform: asset_server.load("3d/arena/base/platform_01.glb#Scene0"),
         pillar: asset_server.load("3d/arena/pillars/dragon_pillar.glb#Scene0"),
         main_prop: asset_server.load("3d/arena/props/bronze_cauldron.glb#Scene0"),
-        lantern: asset_server.load("3d/arena/scatter/lantern.glb#Scene0"), // 暂时共用，或指向新位置
+        lantern: asset_server.load("3d/arena/scatter/lantern.glb#Scene0"), 
         sword_debris: asset_server.load("3d/arena/scatter/sword_debris.glb#Scene0"),
     };
     commands.insert_resource(arena_assets);

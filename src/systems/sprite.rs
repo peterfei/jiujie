@@ -1117,29 +1117,6 @@ pub fn spawn_procedural_landscape(
 
     // --- [移除] 场景装饰已按照用户要求移除 ---
 
-    if let Some(assets) = &env_assets {
-        // [Reactive PG] 极简巨石阵，填补远景虚空
-        for _ in 0..15 { 
-            let radius = rng.gen_range(25.0..65.0); 
-            let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-            let pos_z = angle.sin() * radius;
-            let y = ((radius - 20.0) / 10.0f32).powf(1.3) * 5.0 - 5.0;
-            let pos = Vec3::new(angle.cos() * radius, y, pos_z);
-            
-            let scale_xz = rng.gen_range(15.0..35.0);
-            let scale_y = rng.gen_range(10.0..45.0); // 真正的高耸入云
-
-            commands.entity(main_island_root).with_children(|parent| {
-                parent.spawn((
-                    SceneRoot(assets.rock.clone()),
-                    Transform::from_translation(pos)
-                        .with_scale(Vec3::new(scale_xz, scale_y, scale_xz))
-                        .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..6.28))),
-                ));
-            });
-        }
-    }
-
     // --- 动态流雾与光照微调 ---
     let mist_tex = generate_noise_texture(&mut images, 256, 256, NoiseType::Cloud);
     let unit_quad = meshes.add(Plane3d::default().mesh().size(1.0, 1.0));
@@ -1198,7 +1175,8 @@ pub fn spawn_modular_arena(
     // 1. 部署地基平台 (Base)
     commands.spawn((
         SceneRoot(assets.base_platform.clone()),
-        Transform::from_xyz(0.0, -0.05, 0.0),
+        // 使用非均匀缩放：面积放大 28 倍，厚度仅保持 1.5 倍，位置下沉至 -1.0
+        Transform::from_xyz(0.0, -1.0, 0.0).with_scale(Vec3::new(28.0, 1.5, 28.0)),
         MagicSealMarker,
         CombatUiRoot,
     ));
