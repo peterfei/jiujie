@@ -867,6 +867,8 @@ use rand::SeedableRng;
 
 
 
+
+
 /// 更新云海动画 (实现中心区域避让)
 pub fn update_clouds(
     time: Res<Time>,
@@ -876,9 +878,11 @@ pub fn update_clouds(
     let t = time.elapsed_secs();
     for (mut transform, cloud) in query.iter_mut() {
         let speed_factor = env.wind_strength;
+        
         transform.translation.x += cloud.scroll_speed.x * speed_factor * time.delta_secs();
         transform.translation.z += cloud.scroll_speed.y * speed_factor * time.delta_secs();
 
+        // 禁飞区逻辑
         let dist_sq = transform.translation.x.powi(2) + transform.translation.z.powi(2);
         if dist_sq < 144.0 {
             let dir = Vec2::new(transform.translation.x, transform.translation.z).normalize();
@@ -903,30 +907,38 @@ fn generate_noise_texture(
     mode: NoiseType,
 ) -> Handle<Image> {
     use rand::{Rng, SeedableRng};
-    let mut rng = rand::rngs::StdRng::seed_from_u64(2026);
+    let mut rng = rand::rngs::StdRng::seed_from_u64(42);
     let mut data = vec![0; (width * height * 4) as usize];
     for y in 0..height {
         for x in 0..width {
             let u = (x as f32 / width as f32) - 0.5;
             let v = (y as f32 / height as f32) - 0.5;
             let idx = ((y * width + x) * 4) as usize;
+            
+            let nx = u * 15.0;
+            let ny = v * 15.0;
+            let fbm = (nx.sin() * ny.cos() * 0.6 + (nx * 2.0).cos() * (ny * 2.0).sin() * 0.3 + (nx * 4.0).sin() * 0.1).abs();
+            
             match mode {
                 NoiseType::Rock => {
-                    let noise = (u * 12.0).sin().abs() * 0.15 + (v * 12.0).cos().abs() * 0.15;
-                    let factor = (0.45 + noise).clamp(0.0, 1.0);
-                    data[idx] = (130.0 * factor) as u8;
-                    data[idx+1] = (135.0 * factor) as u8;
-                    data[idx+2] = (145.0 * factor) as u8;
+                    let factor = (0.4 + fbm * 0.6).clamp(0.0, 1.0);
+                    data[idx] = (110.0 * factor) as u8;
+                    data[idx+1] = (112.0 * factor) as u8;
+                    data[idx+2] = (115.0 * factor) as u8;
                     data[idx+3] = 255;
                 }
                 NoiseType::Cloud => {
                     let d = (u*u + v*v).sqrt();
-                    let alpha = (1.0 - (d * 2.5).clamp(0.0, 1.0)).powi(3) * 0.8;
+                    let alpha = ((1.0 - (d * 2.4).clamp(0.0, 1.0)).powi(3) * fbm).clamp(0.0, 1.0);
                     data[idx] = 255; data[idx+1] = 255; data[idx+2] = 255;
-                    data[idx+3] = (alpha * 255.0) as u8;
+                    data[idx+3] = (alpha * 230.0) as u8;
                 }
                 NoiseType::Grass => {
-                    data[idx] = 100; data[idx+1] = 160; data[idx+2] = 100; data[idx+3] = 255;
+                    let factor = (0.5 + fbm * 0.5).clamp(0.0, 1.0);
+                    data[idx] = (60.0 * factor) as u8;
+                    data[idx+1] = (120.0 * factor) as u8;
+                    data[idx+2] = (70.0 * factor) as u8;
+                    data[idx+3] = 255;
                 }
             }
         }
@@ -957,28 +969,27 @@ pub fn spawn_procedural_landscape(
         base_color: Color::WHITE,
         base_color_texture: Some(rock_tex.clone()),
         perceptual_roughness: 0.95,
-        metallic: 0.05,
         ..default()
     });
 
     let main_island_root = commands.spawn((
         Transform::from_xyz(0.0, -2.2, 0.0),
         Visibility::default(), InheritedVisibility::default(), ViewVisibility::default(),
-        Name::new("TexturedArena"),
+        Name::new("FlowFieldIsland"),
     )).id();
 
     if let Some(assets) = &env_assets {
-        for i in 0..120 { 
-            let radius = rng.gen_range(0.0..10.0);
+        for _ in 0..150 { 
+            let radius = rng.gen_range(0.0..11.0);
             let angle = rng.gen_range(0.0..std::f32::consts::TAU);
             let pos_z = angle.sin() * radius;
-            if pos_z > 7.5 { continue; } 
+            if pos_z > 7.0 { continue; } 
 
             let is_in_arena = radius < 5.5;
             let y = if is_in_arena { rng.gen_range(-0.05..0.05) } 
                     else { ((radius - 5.5) / 3.5f32).powf(1.8) * 4.0 + rng.gen_range(-0.3..0.3) };
             let pos = Vec3::new(angle.cos() * radius, y, pos_z);
-            let s_y = if is_in_arena { rng.gen_range(0.1..0.25) } else { rng.gen_range(0.5..1.2) };
+            let s_y = if is_in_arena { rng.gen_range(0.1..0.25) } else { rng.gen_range(0.4..1.2) };
 
             commands.entity(main_island_root).with_children(|parent| {
                 parent.spawn((
@@ -988,15 +999,25 @@ pub fn spawn_procedural_landscape(
                         .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..6.28))),
                 ));
 
+                let noise_val = (pos.x * 0.5).sin() * (pos.z * 0.5).cos();
                 let veg_density = if is_in_arena { 0.85 } else { 0.35 };
-                if rng.gen_bool(veg_density) {
+                
+                if noise_val > -0.5 && rng.gen_bool(veg_density) {
                     let g_pos = pos + Vec3::new(rng.gen_range(-0.4..0.4), s_y * 0.85, rng.gen_range(-0.4..0.4));
-                    let model = if rng.gen_bool(0.7) { assets.bush.clone() } else { assets.shrub.clone() };
+                    let rand_val = rng.gen_range(0.0..1.0);
+                    let (model, scale) = if rand_val < 0.7 {
+                        (assets.bush.clone(), rng.gen_range(0.6..1.2))
+                    } else if rand_val < 0.9 {
+                        (assets.shrub.clone(), rng.gen_range(0.4..0.7))
+                    } else {
+                        (assets.berries.clone(), rng.gen_range(0.6..0.9))
+                    };
+
                     parent.spawn((
                         SceneRoot(model),
                         Transform::from_translation(g_pos)
-                            .with_scale(Vec3::splat(rng.gen_range(0.8..1.8)))
-                            .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..6.28))),
+                            .with_scale(Vec3::splat(scale))
+                            .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..std::f32::consts::TAU))),
                     ));
                 }
             });
@@ -1009,42 +1030,51 @@ pub fn spawn_procedural_landscape(
         Transform::from_xyz(20.0, 50.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
-    spawn_cloud_sea(&mut commands, &mut materials, seed, env_assets);
+    spawn_cloud_sea(&mut commands, &mut materials, &mut images, &mut meshes, seed, env_assets);
 }
 
 fn spawn_cloud_sea(
     commands: &mut Commands,
     materials: &mut ResMut<Assets<StandardMaterial>>,
+    images: &mut ResMut<Assets<Image>>,
+    meshes: &mut ResMut<Assets<Mesh>>,
     seed: u64,
     env_assets: Option<Res<crate::resources::EnvironmentAssets>>,
 ) {
+    let cloud_tex = generate_noise_texture(images, 256, 256, NoiseType::Cloud);
+    let unit_quad = meshes.add(Plane3d::default().mesh().size(1.0, 1.0));
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed + 777);
     use rand::Rng;
     
-    let cloud_mat = materials.add(StandardMaterial {
-        base_color: Color::srgba(1.0, 1.0, 1.0, 0.45),
-        emissive: LinearRgba::new(0.5, 0.6, 0.8, 1.0),
-        alpha_mode: AlphaMode::Blend,
-        ..default()
-    });
-
-    if let Some(assets) = &env_assets {
-        for _ in 0..12 {
-            let radius = rng.gen_range(20.0..75.0);
+    if let Some(_assets) = &env_assets {
+        for _ in 0..15 {
+            let radius = rng.gen_range(25.0..85.0);
             let angle: f32 = rng.gen_range(0.0..6.28);
             let center = Vec3::new(angle.cos() * radius, rng.gen_range(-15.0..-5.0), angle.sin() * radius);
             
-            let puff_count = rng.gen_range(3..5);
-            for _ in 0..puff_count {
-                let offset = Vec3::new(rng.gen_range(-5.0..5.0), rng.gen_range(-2.0..2.0), rng.gen_range(-5.0..5.0));
+            for layer in 0..3 {
+                let layer_offset = Vec3::new(rng.gen_range(-2.0..2.0), layer as f32 * 0.8, rng.gen_range(-2.0..2.0));
+                let layer_opacity = 0.15 - (layer as f32 * 0.04);
+                let base_scale = rng.gen_range(15.0..25.0);
+                
                 commands.spawn((
-                    SceneRoot(assets.cloud.clone()),
-                    Transform::from_translation(center + offset)
-                        .with_scale(Vec3::new(rng.gen_range(10.0..16.0), rng.gen_range(6.0..10.0), rng.gen_range(10.0..16.0)))
-                        .with_rotation(Quat::from_rotation_y(rng.gen_range(-3.0..3.0))),
+                    Mesh3d(unit_quad.clone()),
+                    MeshMaterial3d(materials.add(StandardMaterial {
+                        base_color: Color::srgba(1.0, 1.0, 1.0, layer_opacity),
+                        base_color_texture: Some(cloud_tex.clone()),
+                        alpha_mode: AlphaMode::Blend,
+                        unlit: true,
+                        cull_mode: None, double_sided: true,
+                        ..default()
+                    })),
+                    Transform::from_translation(center + layer_offset)
+                        .with_scale(Vec3::new(base_scale * (1.0 + layer as f32 * 0.25), 1.0, base_scale))
+                        .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..std::f32::consts::TAU))),
                     crate::components::sprite::Cloud {
-                        scroll_speed: Vec2::new(rng.gen_range(0.05..0.1), rng.gen_range(0.05..0.1)),
-                        amplitude: 0.4, frequency: 0.04, seed: rng.gen(),
+                        scroll_speed: Vec2::new(rng.gen_range(0.1..0.35), rng.gen_range(0.1..0.35)),
+                        amplitude: rng.gen_range(0.3..0.7),
+                        frequency: rng.gen_range(0.1..0.4),
+                        seed: rng.gen(),
                     },
                     CombatUiRoot,
                 ));
