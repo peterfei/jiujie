@@ -333,6 +333,26 @@ pub struct WindSway {
     pub seed: f32,
 }
 
+/// 战斗摄像机控制器
+#[derive(Component)]
+pub struct CombatCamera {
+    pub distance: f32,
+    pub target: Vec3,
+    pub rotation_y: f32,
+    pub rotation_x: f32,
+}
+
+impl Default for CombatCamera {
+    fn default() -> Self {
+        Self {
+            distance: 12.0,
+            target: Vec3::new(0.0, 1.2, 0.0),
+            rotation_y: 0.0,
+            rotation_x: -0.3,
+        }
+    }
+}
+
 /// [新增] 动态水面组件
 #[derive(Component)]
 pub struct Water {

@@ -11,7 +11,7 @@ use crate::components::sprite::{
     CharacterSprite, AnimationState, CharacterType,
     CharacterAnimationEvent, SpriteMarker, PlayerSpriteMarker, EnemySpriteMarker,
     Combatant3d, BreathAnimation, PhysicalImpact, CharacterAssets, Rotating, Ghost, ActionType,
-    MagicSealMarker, RelicVisualMarker, SpiritClone
+    MagicSealMarker, RelicVisualMarker, SpiritClone, CombatCamera
 };
 use crate::components::CombatUiRoot;
 
@@ -20,7 +20,7 @@ pub struct SpritePlugin;
 impl Plugin for SpritePlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<CharacterAnimationEvent>();
-        app.add_event::<crate::components::particle::SpawnEffectEvent>(); // 新增特效事件注册
+        app.add_event::<crate::components::particle::SpawnEffectEvent>(); 
         
         app.add_systems(
             Update,
@@ -32,19 +32,53 @@ impl Plugin for SpritePlugin {
                     update_breath_animations,
                     update_physical_impacts,
                 ).chain(),
+                update_combat_camera, // [新增] 交互摄像机
                 update_rotations,
                 update_magic_seal_pulse,
                 update_relic_floating,
                 spawn_ghosts,
                 cleanup_ghosts,
                 update_spirit_clones,
-                update_clouds, // 重新启用：已验证逻辑安全
-                update_mist, // 新增：流雾系统
-                update_wind_sway, // 新增：植被摇曳
-                update_water, // 新增：水面动态
+                update_clouds, 
+                update_mist, 
+                update_wind_sway, 
+                update_water, 
                 update_sprite_animations,
             ).run_if(in_state(GameState::Combat))
         );
+    }
+}
+
+use bevy::input::mouse::{MouseWheel, MouseMotion};
+
+/// 更新战斗交互摄像机
+pub fn update_combat_camera(
+    mut scroll_evr: EventReader<MouseWheel>,
+    mut motion_evr: EventReader<MouseMotion>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
+    mut query: Query<(&mut Transform, &mut CombatCamera)>,
+) {
+    for (mut transform, mut config) in query.iter_mut() {
+        // 1. 滚轮缩放
+        for ev in scroll_evr.read() {
+            config.distance = (config.distance - ev.y * 0.5).clamp(4.0, 25.0);
+        }
+
+        // 2. 左键旋转
+        if mouse_button.pressed(MouseButton::Left) {
+            for ev in motion_evr.read() {
+                config.rotation_y -= ev.delta.x * 0.005;
+                config.rotation_x = (config.rotation_x - ev.delta.y * 0.005).clamp(-1.2, 0.1);
+            }
+        } else {
+            motion_evr.clear(); // 防止累积非点击时的位移
+        }
+
+        // 3. 计算最终位置：Orbit 算法
+        let rotation = Quat::from_rotation_y(config.rotation_y) * Quat::from_rotation_x(config.rotation_x);
+        let direction = rotation * Vec3::Z;
+        transform.translation = config.target + direction * config.distance;
+        transform.look_at(config.target, Vec3::Y);
     }
 }
 
@@ -1052,25 +1086,28 @@ pub fn spawn_procedural_landscape(
     ));
 
     if let Some(assets) = &env_assets {
-        for _ in 0..140 { 
-            let radius = rng.gen_range(0.0..11.0);
+        // [性能与视觉优化] 减少物体数量，增加单体体积，打造“荒古巨石阵”
+        for _ in 0..30 { 
+            let radius = rng.gen_range(8.0..25.0); // 放在外围
             let angle = rng.gen_range(0.0..std::f32::consts::TAU);
             let pos_z = angle.sin() * radius;
-            if pos_z > 7.0 { continue; } 
-
-            let is_in_arena = radius < 5.5;
-            // [修复逻辑] 增加微小的 Y 轴随机偏移，消除深度穿插导致的闪烁消失
-            let micro_offset = rng.gen_range(0.0..0.005);
-            let y = if is_in_arena { rng.gen_range(-0.05..0.05) + micro_offset } 
-                    else { ((radius - 5.5) / 3.5f32).powf(1.8) * 4.0 + rng.gen_range(-0.3..0.3) + micro_offset };
+            
+            let y = ((radius - 5.5) / 3.5f32).powf(1.5) * 2.0 + rng.gen_range(-0.5..0.5);
             let pos = Vec3::new(angle.cos() * radius, y, pos_z);
-            let s_y = if is_in_arena { rng.gen_range(0.1..0.2) } else { rng.gen_range(0.4..1.2) };
+            
+            // 巨型化
+            let scale_xz = rng.gen_range(6.0..15.0);
+            let scale_y = rng.gen_range(2.0..8.0);
+            
+            // 为了兼容后续植被逻辑
+            let is_in_arena = false; 
+            let s_y = scale_y;
 
             commands.entity(main_island_root).with_children(|parent| {
                 parent.spawn((
                     SceneRoot(assets.rock.clone()),
                     Transform::from_translation(pos)
-                        .with_scale(Vec3::new(rng.gen_range(2.0..4.5), s_y, rng.gen_range(2.0..4.5)))
+                        .with_scale(Vec3::new(scale_xz, scale_y, scale_xz))
                         .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..6.28))),
                 ));
 

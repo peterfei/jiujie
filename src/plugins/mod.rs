@@ -27,12 +27,12 @@ use crate::components::{
     EnemySpriteMarker, VictoryDelay, RelicCollection, Relic, RelicId,
     EnemyActionQueue, RelicObtainedEvent, RelicTriggeredEvent, HeavenlyStrikeCinematic,
     ParticleEmitter, PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker, DialogueLine,
-    EnvironmentPanel, EnvironmentText, // 新增导入
+    EnvironmentPanel, EnvironmentText, 
     Particle, DamageNumber, DamageEffectEvent, BlockIconMarker, BlockText, StatusIndicator,
     EnemyHpText, EnemyIntentText, EnemyStatusUi, PlayerHpText, PlayerEnergyText, PlayerBlockText,
-    SwordIntentText, // 补全导入
+    SwordIntentText, 
     TopBar, TopBarHpText, TopBarGoldText, EnergyOrb, EndTurnButton, HandArea, CombatUiRoot,
-    StatusEffectEvent, Environment, // 补全导入
+    StatusEffectEvent, Environment, CombatCamera,
 };
 use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, AnimationState, PlayerSpriteMarker, MagicSealMarker, CharacterSprite, Combatant3d};
 use crate::systems::sprite::{spawn_character_sprite};
@@ -364,20 +364,28 @@ fn setup_camera(mut commands: Commands) {
         },
     ));
 
-    // 2. 3D 相机 (大作级画质：线性雾化，保证近景清晰)
+    // 2. 3D 相机 (大作级画质：窄视场角，产生电影级长焦感，显著提升清晰度)
     commands.spawn((
         Camera3d::default(),
+        Projection::Perspective(PerspectiveProjection {
+            fov: 35.0f32.to_radians(), // 窄 FOV (35度)：物体更大、更清晰
+            ..default()
+        }),
         Camera {
             clear_color: ClearColorConfig::Custom(Color::srgb(0.65, 0.75, 0.9)), 
             order: 0, 
-            hdr: false, // 禁用 HDR 以修复兼容性黑屏
+            hdr: false, 
             ..default()
         },
-        Msaa::Sample4, // [修复] Bevy 0.15 中 Msaa 是相机组件
+        Msaa::Sample4, 
+        CombatCamera {
+            distance: 12.0,
+            target: Vec3::new(0.0, 1.2, 0.0),
+            ..default()
+        },
         Transform::from_xyz(0.0, 5.5, 12.0).looking_at(Vec3::new(0.0, 1.2, 0.0), Vec3::Y),
         DistanceFog {
             color: Color::srgba(0.65, 0.75, 0.9, 1.0),
-            // 改为线性雾：30米内完全清晰，彻底消除战场内的朦胧感
             falloff: FogFalloff::Linear { start: 30.0, end: 80.0 },
             ..default()
         },
