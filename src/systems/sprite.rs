@@ -411,12 +411,12 @@ pub fn update_physical_impacts(
             progress * std::f32::consts::PI * 4.0
         } else { 0.0 };
 
-        // [关键修复] 根据 Combatant3d 的基础旋转字段计算最终偏转
-        // 解决了不同模型（玩家、狼、蜘蛛）初始 Forward 轴不统一导致的朝向混乱
+        // [关键修复] 改变旋转合成顺序：先应用 X 轴后仰，再应用 Y 轴转向
+        // 这样可以确保角色无论朝向左还是右，都是相对于自己的“正面”进行后仰
         let base_y_rot = combatant.base_rotation;
 
-        transform.rotation = Quat::from_rotation_x(-0.2) 
-            * Quat::from_rotation_y(base_y_rot + impact.special_rotation + action_tilt_offset + wolf_spin)
+        transform.rotation = Quat::from_rotation_y(base_y_rot + impact.special_rotation + action_tilt_offset + wolf_spin)
+            * Quat::from_rotation_x(-0.2)
             * Quat::from_rotation_z(effective_tilt);
         
         transform.translation = impact.home_position + impact.current_offset + action_pos_offset + Vec3::new(0.0, breath_y, 0.0);
@@ -1348,13 +1348,12 @@ pub fn spawn_character_sprite(
     let z_3d = position.y / 100.0;
     let world_pos = Vec3::new(x_3d, 0.8, z_3d + 0.1);
 
-    // [最终修正 V6] 彻底解决“朝向屏幕”问题，实现“相向而立” (类比杀戮尖塔)：
-    // 假设模型原始 Forward 为 +Z (朝向屏幕)
-    // 1. 玩家(Warrior): 旋转 -PI/2 (-90度) -> 朝向正右方 (+X)
-    // 2. 所有敌人: 旋转 PI/2 (+90度) -> 朝向正左方 (-X)
+    // [关键修正] 统一所有敌人的朝向
+    // 1. 玩家: 设为 0.6，使其斜向右方 (面朝敌人且偏向镜头)
+    // 2. 所有敌人 (狼、蜘蛛、幽灵、BOSS): 统一设为 -PI/2，使其面向左方 (朝向玩家)
     let base_rotation = match character_type {
-        CharacterType::Player => -std::f32::consts::FRAC_PI_2,
-        _ => std::f32::consts::FRAC_PI_2, 
+        CharacterType::Player => 0.6,
+        _ => -std::f32::consts::FRAC_PI_2, 
     };
 
     let is_player = character_type == CharacterType::Player;
@@ -1362,7 +1361,7 @@ pub fn spawn_character_sprite(
 
     // 2. 生成实体 (3D 优先)
     let mut entity_cmd = commands.spawn((
-        Transform::from_translation(world_pos).with_rotation(Quat::from_rotation_x(-0.2) * Quat::from_rotation_y(base_rotation)),
+        Transform::from_translation(world_pos).with_rotation(Quat::from_rotation_y(base_rotation) * Quat::from_rotation_x(-0.2)),
         Visibility::default(), InheritedVisibility::default(), ViewVisibility::default(),
         SpriteMarker,
         sprite, // 必须挂载，用于保存战斗状态 (AnimationState)
@@ -1376,7 +1375,7 @@ pub fn spawn_character_sprite(
         entity_cmd.insert(bevy::scene::SceneRoot(model_handle.clone()));
         // 修正缩放：3D 模型通常需要放大
         entity_cmd.insert(Transform::from_translation(world_pos)
-            .with_rotation(Quat::from_rotation_x(-0.2) * Quat::from_rotation_y(base_rotation))
+            .with_rotation(Quat::from_rotation_y(base_rotation) * Quat::from_rotation_x(-0.2))
             .with_scale(Vec3::splat(if is_boss { 3.0 } else { 2.0 })));
             
         // [大作优化] 柔和补光灯，仅用于勾勒 NPR 轮廓，解决泛白

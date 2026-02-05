@@ -158,6 +158,8 @@ pub struct CharacterAssets {
     pub spirit: Handle<Image>,
     /// BOSS图
     pub boss: Handle<Image>,
+    /// 法阵纹理
+    pub magic_circle: Handle<Image>,
     // --- 3D 模型资产 ---
     pub player_3d: Option<Handle<Scene>>,
     pub wolf_3d: Option<Handle<Scene>>,
@@ -179,6 +181,7 @@ impl CharacterAssets {
             spider: asset_server.load("textures/enemies/spider.png"),
             spirit: asset_server.load("textures/enemies/spirit.png"),
             boss: asset_server.load("textures/enemies/boss.png"),
+            magic_circle: asset_server.load("textures/magic_circle.png"),
             // 默认 3D 字段
             player_3d: None,
             wolf_3d: None,
@@ -359,3 +362,15 @@ pub struct Water {
     pub flow_speed: Vec2,
     pub wave_strength: f32,
 }
+
+/// [新增] 场景装饰 - 灯笼
+#[derive(Component)]
+pub struct ArenaLantern;
+
+/// [新增] 场景装饰 - 植被
+#[derive(Component)]
+pub struct ArenaVegetation;
+
+/// [新增] 场景装饰 - 灵石
+#[derive(Component)]
+pub struct ArenaSpiritStone;
