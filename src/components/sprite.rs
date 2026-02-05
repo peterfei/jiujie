@@ -200,6 +200,8 @@ pub struct CharacterAnimationEvent {
 #[derive(Component)]
 pub struct Combatant3d {
     pub facing_right: bool,
+    /// 基础 Y 轴旋转偏移 (弧度)，用于纠正不同模型的初始朝向
+    pub base_rotation: f32,
 }
 
 /// 呼吸动画组件

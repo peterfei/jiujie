@@ -376,9 +376,9 @@ pub fn update_physical_impacts(
             progress * std::f32::consts::PI * 4.0
         } else { 0.0 };
 
-        // [朝向修复] 经过实测，当前资产包中玩家模型默认向右(+X)，妖兽模型默认向左(-X)
-        // 因此不需要根据 facing_right 额外旋转 180 度，统一使用 0 度基础偏转即可
-        let base_y_rot = 0.0;
+        // [关键修复] 根据 Combatant3d 的基础旋转字段计算最终偏转
+        // 解决了不同模型（玩家、狼、蜘蛛）初始 Forward 轴不统一导致的朝向混乱
+        let base_y_rot = combatant.base_rotation;
 
         transform.rotation = Quat::from_rotation_x(-0.2) 
             * Quat::from_rotation_y(base_y_rot + impact.special_rotation + action_tilt_offset + wolf_spin)
@@ -1104,14 +1104,16 @@ pub fn spawn_procedural_landscape(
     let unit_quad = meshes.add(Plane3d::default().mesh().size(1.0, 1.0));
     
     for _ in 0..20 {
-        let radius = rng.gen_range(5.0..45.0) as f32;
+        // [视觉优化] 将流雾推向外围 (20.0+)，确保战斗中心 (0.0~10.0) 清晰锐利
+        // 解决石头穿插消失和角色模糊的问题
+        let radius = rng.gen_range(20.0..60.0) as f32;
         let angle = rng.gen_range(0.0..6.28) as f32;
         let pos = Vec3::new(angle.cos() * radius, rng.gen_range(1.5..3.5), angle.sin() * radius);
         
         commands.spawn((
             Mesh3d(unit_quad.clone()),
             MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: Color::srgba(0.8, 0.9, 1.0, rng.gen_range(0.3..0.5)), 
+                base_color: Color::srgba(0.8, 0.9, 1.0, rng.gen_range(0.1..0.2)), // 进一步降低不透明度，提升清晰度
                 base_color_texture: Some(mist_tex.clone()),
                 alpha_mode: AlphaMode::Blend,
                 emissive: LinearRgba::new(0.1, 0.2, 0.3, 0.5), 
@@ -1173,9 +1175,10 @@ fn spawn_cloud_sea(
                     Transform::from_translation(center + Vec3::Y * (layer as f32 * 0.8))
                         .with_scale(Vec3::new(base_scale * (1.0 + layer as f32 * 0.3), 1.0, base_scale))
                         .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..6.28))),
+                    // [视觉优化] 将滚动速度和波幅设为 0，使云海石台保持静止
                     crate::components::sprite::Cloud {
-                        scroll_speed: Vec2::new(rng.gen_range(0.1..0.3), rng.gen_range(0.1..0.3)),
-                        amplitude: 0.4, frequency: 0.04, seed: rng.gen(),
+                        scroll_speed: Vec2::ZERO,
+                        amplitude: 0.0, frequency: 0.0, seed: rng.gen(),
                     },
                     CombatUiRoot,
                 ));
@@ -1221,19 +1224,29 @@ pub fn spawn_character_sprite(
     let z_3d = position.y / 100.0;
     let world_pos = Vec3::new(x_3d, 0.8, z_3d + 0.1);
 
-    // 确定朝向：玩家向右，妖兽向左 (语义标记)
+    // [关键修复] 确定基础旋转：解决不同模型 GLB 初始朝向不统一的问题
+    // 玩家(Warrior) 需转 -90度 才能面朝右侧 (+X)
+    // 狼(Wolf) 需转 -90度 才能面朝左侧 (-X)
+    // 蜘蛛(Spider) 需转 +90度 才能面朝左侧 (-X)
+    let base_rotation = match character_type {
+        CharacterType::Player => -std::f32::consts::FRAC_PI_2,
+        CharacterType::DemonicWolf => -std::f32::consts::FRAC_PI_2,
+        CharacterType::PoisonSpider => std::f32::consts::FRAC_PI_2,
+        _ => -std::f32::consts::FRAC_PI_2, // 默认与狼一致
+    };
+
     let is_player = character_type == CharacterType::Player;
     let facing_right = is_player;
 
     // 2. 生成实体 (3D 优先)
     let mut entity_cmd = commands.spawn((
-        Transform::from_translation(world_pos).with_rotation(Quat::from_rotation_x(-0.2)),
+        Transform::from_translation(world_pos).with_rotation(Quat::from_rotation_x(-0.2) * Quat::from_rotation_y(base_rotation)),
         Visibility::default(), InheritedVisibility::default(), ViewVisibility::default(),
         SpriteMarker,
         sprite, // 必须挂载，用于保存战斗状态 (AnimationState)
         PhysicalImpact { home_position: world_pos, ..default() }, // 必须挂载，否则无法处理位移
         BreathAnimation::default(), // 必须挂载，提供生命力
-        Combatant3d { facing_right },
+        Combatant3d { facing_right, base_rotation },
     ));
 
     if let Some(model_handle) = model_3d {
@@ -1241,7 +1254,7 @@ pub fn spawn_character_sprite(
         entity_cmd.insert(bevy::scene::SceneRoot(model_handle.clone()));
         // 修正缩放：3D 模型通常需要放大
         entity_cmd.insert(Transform::from_translation(world_pos)
-            .with_rotation(Quat::from_rotation_x(-0.2))
+            .with_rotation(Quat::from_rotation_x(-0.2) * Quat::from_rotation_y(base_rotation))
             .with_scale(Vec3::splat(if is_boss { 3.0 } else { 2.0 })));
     } else {
         // [降级] 2D 分支：生成立牌
