@@ -790,7 +790,9 @@ fn setup_combat_ui(
     player_query: Query<(Entity, &Player, &crate::components::Cultivation)>,
     map_progress: Res<MapProgress>,
     existing_ui: Query<Entity, With<CombatUiRoot>>,
-    map_ui: Query<Entity, With<MapUiRoot>>, // 新增：清理地图残留
+    map_ui: Query<Entity, With<MapUiRoot>>, 
+    mut meshes: ResMut<Assets<Mesh>>, // 新增
+    mut materials: ResMut<Assets<StandardMaterial>>, // 新增
 ) {
     info!("【战斗】进入战场，众妖环伺");
     
@@ -865,7 +867,9 @@ fn setup_combat_ui(
                 Vec3::new(x_world, 50.0, 10.0), 
                 final_size, 
                 Some(enemy_id),
-                Some(gen_enemy.visual_color)
+                Some(gen_enemy.visual_color),
+                &mut meshes,
+                &mut materials,
             );
 
             // 挂载词缀特效 (元素光环)
@@ -1007,7 +1011,9 @@ fn setup_combat_ui(
                 Vec3::new(x_world, 50.0, 10.0), 
                 Vec2::new(100.0, 120.0), 
                 Some(enemy.id),
-                None // 无染色
+                None, // 无染色
+                &mut meshes,
+                &mut materials,
             );
 
             commands.entity(root_entity).with_children(|root| {
@@ -1118,7 +1124,9 @@ fn setup_combat_ui(
         Vec3::new(-350.0, -80.0, 10.0), 
         Vec2::new(120.0, 140.0), 
         None,
-        None // 玩家无染色
+        None, // 玩家无染色
+        &mut meshes,
+        &mut materials,
     );
 
     // --- 法宝 3D 视觉生成 ---
