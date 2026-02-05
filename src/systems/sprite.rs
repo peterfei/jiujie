@@ -2,8 +2,10 @@
 //!
 //! 实现 2.5D 纸片人渲染、物理冲击反馈、呼吸动画及残影特效
 
+
 use bevy::prelude::*;
-use bevy::scene::SceneRoot; // 导入 SceneRoot
+use bevy::scene::SceneRoot; 
+use bevy::pbr::{DistanceFog, FogFalloff}; // 显式导入雾气组件
 use crate::states::GameState;
 use crate::components::sprite::{
     CharacterSprite, AnimationState, CharacterType,
@@ -1024,10 +1026,35 @@ pub fn spawn_procedural_landscape(
         }
     }
 
-    commands.insert_resource(AmbientLight { color: Color::srgb(0.7, 0.8, 1.0), brightness: 2800.0 });
+    // --- AAA 级复合光照系统 ---
     commands.spawn((
-        DirectionalLight { shadows_enabled: false, illuminance: 55000.0, color: Color::srgb(1.0, 0.98, 0.9), ..default() },
-        Transform::from_xyz(20.0, 50.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
+        DirectionalLight {
+            shadows_enabled: false,
+            illuminance: 65000.0,
+            color: Color::srgb(1.0, 0.95, 0.85),
+            ..default()
+        },
+        Transform::from_xyz(30.0, 60.0, 30.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+
+    commands.spawn((
+        DirectionalLight {
+            shadows_enabled: false,
+            illuminance: 25000.0,
+            color: Color::srgb(0.4, 0.6, 1.0),
+            ..default()
+        },
+        Transform::from_xyz(-30.0, 20.0, -30.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+
+    commands.insert_resource(AmbientLight { color: Color::srgb(0.6, 0.7, 0.9), brightness: 1500.0 });
+
+    commands.spawn((
+        DistanceFog {
+            color: Color::srgba(0.65, 0.75, 0.9, 1.0),
+            falloff: FogFalloff::Exponential { density: 0.015 },
+            ..default()
+        },
     ));
 
     spawn_cloud_sea(&mut commands, &mut materials, &mut images, &mut meshes, seed, env_assets);
@@ -1047,15 +1074,15 @@ fn spawn_cloud_sea(
     use rand::Rng;
     
     if let Some(_assets) = &env_assets {
-        for _ in 0..15 {
-            let radius = rng.gen_range(25.0..85.0);
+        for _ in 0..18 {
+            let radius = rng.gen_range(25.0..90.0);
             let angle: f32 = rng.gen_range(0.0..6.28);
-            let center = Vec3::new(angle.cos() * radius, rng.gen_range(-15.0..-5.0), angle.sin() * radius);
+            let center = Vec3::new(angle.cos() * radius, rng.gen_range(-15.0..-2.0), angle.sin() * radius);
             
             for layer in 0..3 {
-                let layer_offset = Vec3::new(rng.gen_range(-2.0..2.0), layer as f32 * 0.8, rng.gen_range(-2.0..2.0));
-                let layer_opacity = 0.15 - (layer as f32 * 0.04);
-                let base_scale = rng.gen_range(15.0..25.0);
+                let layer_offset = Vec3::new(rng.gen_range(-2.5..2.5), layer as f32 * 0.9, rng.gen_range(-2.5..2.5));
+                let layer_opacity = 0.18 - (layer as f32 * 0.05);
+                let base_scale = rng.gen_range(18.0..30.0);
                 
                 commands.spawn((
                     Mesh3d(unit_quad.clone()),
@@ -1068,12 +1095,12 @@ fn spawn_cloud_sea(
                         ..default()
                     })),
                     Transform::from_translation(center + layer_offset)
-                        .with_scale(Vec3::new(base_scale * (1.0 + layer as f32 * 0.25), 1.0, base_scale))
+                        .with_scale(Vec3::new(base_scale * (1.0 + layer as f32 * 0.3), 1.0, base_scale))
                         .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..std::f32::consts::TAU))),
                     crate::components::sprite::Cloud {
-                        scroll_speed: Vec2::new(rng.gen_range(0.1..0.35), rng.gen_range(0.1..0.35)),
-                        amplitude: rng.gen_range(0.3..0.7),
-                        frequency: rng.gen_range(0.1..0.4),
+                        scroll_speed: Vec2::new(rng.gen_range(0.15..0.4), rng.gen_range(0.15..0.4)),
+                        amplitude: rng.gen_range(0.4..0.8),
+                        frequency: rng.gen_range(0.15..0.45),
                         seed: rng.gen(),
                     },
                     CombatUiRoot,
