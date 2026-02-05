@@ -131,12 +131,12 @@ fn update_relic_floating(
 /// 更新物理冲击效果
 pub fn update_physical_impacts(
     time: Res<Time>,
-    mut query: Query<(&mut Transform, &mut PhysicalImpact, &BreathAnimation)>,
+    mut query: Query<(&mut Transform, &mut PhysicalImpact, &BreathAnimation, &Combatant3d)>,
     mut effect_events: EventWriter<crate::components::particle::SpawnEffectEvent>,
     mut screen_events: EventWriter<crate::components::ScreenEffectEvent>,
 ) {
     let dt = time.delta_secs().min(0.033);
-    for (mut transform, mut impact, breath) in query.iter_mut() {
+    for (mut transform, mut impact, breath, combatant) in query.iter_mut() {
         // 1. 模拟旋转弹簧力
         let spring_k = 25.0; 
         let damping = 6.0;
@@ -376,9 +376,13 @@ pub fn update_physical_impacts(
             progress * std::f32::consts::PI * 4.0
         } else { 0.0 };
 
+        // [朝向修复] 经过实测，当前资产包中玩家模型默认向右(+X)，妖兽模型默认向左(-X)
+        // 因此不需要根据 facing_right 额外旋转 180 度，统一使用 0 度基础偏转即可
+        let base_y_rot = 0.0;
+
         transform.rotation = Quat::from_rotation_x(-0.2) 
-            * Quat::from_rotation_z(effective_tilt)
-            * Quat::from_rotation_y(impact.special_rotation + action_tilt_offset + wolf_spin);
+            * Quat::from_rotation_y(base_y_rot + impact.special_rotation + action_tilt_offset + wolf_spin)
+            * Quat::from_rotation_z(effective_tilt);
         
         transform.translation = impact.home_position + impact.current_offset + action_pos_offset + Vec3::new(0.0, breath_y, 0.0);
     }
@@ -1213,10 +1217,13 @@ pub fn spawn_character_sprite(
     if let Some(c) = tint { sprite = sprite.with_tint(c); }
 
     // [关键修复] 将 UI 坐标转换为 3D 世界坐标
-    // 逻辑与 sync_2d_to_3d_render 保持一致：X/100, Y/100 -> Z, 固定高度 0.8
     let x_3d = position.x / 100.0;
     let z_3d = position.y / 100.0;
     let world_pos = Vec3::new(x_3d, 0.8, z_3d + 0.1);
+
+    // 确定朝向：玩家向右，妖兽向左 (语义标记)
+    let is_player = character_type == CharacterType::Player;
+    let facing_right = is_player;
 
     // 2. 生成实体 (3D 优先)
     let mut entity_cmd = commands.spawn((
@@ -1226,7 +1233,7 @@ pub fn spawn_character_sprite(
         sprite, // 必须挂载，用于保存战斗状态 (AnimationState)
         PhysicalImpact { home_position: world_pos, ..default() }, // 必须挂载，否则无法处理位移
         BreathAnimation::default(), // 必须挂载，提供生命力
-        Combatant3d { facing_right: true },
+        Combatant3d { facing_right },
     ));
 
     if let Some(model_handle) = model_3d {
