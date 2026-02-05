@@ -720,35 +720,23 @@ pub fn sync_2d_to_3d_render(
 
             let mesh = meshes.add(Rectangle::new(char_sprite.size.x / 50.0, char_sprite.size.y / 50.0));
             
-            // 法宝使用更轻盈的青蓝色自发光材质
-            let material = if is_relic {
-                materials.add(StandardMaterial {
-                    base_color: char_sprite.tint.with_alpha(0.8), // 使用 tint
-                    base_color_texture: Some(char_sprite.texture.clone()),
-                    emissive: LinearRgba::from(char_sprite.tint).with_alpha(1.0), 
-                    emissive_texture: Some(char_sprite.texture.clone()),
-                    alpha_mode: AlphaMode::Blend,
-                    cull_mode: None,
-                    double_sided: true,
-                    ..default()
-                })
-            } else {
-                materials.add(StandardMaterial {
-                    base_color: char_sprite.tint, // 使用 tint
-                    base_color_texture: Some(char_sprite.texture.clone()),
-                    // 移除强制白光发光，改用 unlit 确保在所有显卡上亮度一致
-                    unlit: true,
-                    alpha_mode: AlphaMode::Blend, 
-                    cull_mode: None,
-                    double_sided: true,
-                    ..default()
-                })
-            };
+            // 使用 PBR 材质替代 Unlit，通过环境光和点光源增强画质
+            let material = materials.add(StandardMaterial {
+                base_color: char_sprite.tint,
+                base_color_texture: Some(char_sprite.texture.clone()),
+                emissive: LinearRgba::from(char_sprite.tint).with_alpha(0.5), 
+                emissive_texture: Some(char_sprite.texture.clone()),
+                alpha_mode: AlphaMode::Blend, 
+                cull_mode: None,
+                double_sided: true,
+                perceptual_roughness: 0.1, // 降低粗糙度，让光影更锐利
+                ..default()
+            });
 
             let home_pos = Vec3::new(x_3d, 0.8, z_3d + 0.1);
             let mut entity_cmd = commands.entity(entity);
             entity_cmd.insert((
-                Combatant3d { facing_right: true },
+                Combatant3d { facing_right: true, base_rotation: 0.0 },
                 BreathAnimation::default(),
                 PhysicalImpact { home_position: home_pos, ..default() }, 
                 Mesh3d(mesh),
@@ -757,7 +745,7 @@ pub fn sync_2d_to_3d_render(
                 Transform::from_translation(home_pos).with_rotation(Quat::from_rotation_x(-0.2)), 
             )).remove::<Sprite>();
 
-            // 非法宝（人物/怪）生成底座，法宝悬空
+            // 非法宝（人物/怪）生成底座和补光灯
             if !is_relic {
                 entity_cmd.with_children(|parent| {
                     let base_radius = if is_boss { 1.2 } else { 0.8 };
@@ -770,6 +758,18 @@ pub fn sync_2d_to_3d_render(
                             ..default()
                         })),
                         Transform::from_xyz(0.0, -0.02, 0.0),
+                    ));
+                    
+                    // [大作优化] 为每个角色增加局部点光源，显著提升清晰度和质感
+                    parent.spawn((
+                        PointLight {
+                            intensity: 5000.0,
+                            radius: 5.0,
+                            color: Color::srgb(0.8, 0.9, 1.0),
+                            shadows_enabled: false,
+                            ..default()
+                        },
+                        Transform::from_xyz(0.0, 1.5, 1.0),
                     ));
                 });
             }
@@ -1014,10 +1014,13 @@ pub fn spawn_procedural_landscape(
     use rand::Rng;
 
     let rock_tex = generate_noise_texture(&mut images, 512, 512, NoiseType::Rock);
+    
+    // [视觉优化] 石台使用 Mask 模式，配合 Y 轴微偏移，彻底解决闪烁消失问题
     let rock_mat = materials.add(StandardMaterial {
         base_color: Color::WHITE,
         base_color_texture: Some(rock_tex.clone()),
         perceptual_roughness: 0.95,
+        alpha_mode: AlphaMode::Mask(0.1),
         ..default()
     });
 
@@ -1056,8 +1059,10 @@ pub fn spawn_procedural_landscape(
             if pos_z > 7.0 { continue; } 
 
             let is_in_arena = radius < 5.5;
-            let y = if is_in_arena { rng.gen_range(-0.05..0.05) } 
-                    else { ((radius - 5.5) / 3.5f32).powf(1.8) * 4.0 + rng.gen_range(-0.3..0.3) };
+            // [修复逻辑] 增加微小的 Y 轴随机偏移，消除深度穿插导致的闪烁消失
+            let micro_offset = rng.gen_range(0.0..0.005);
+            let y = if is_in_arena { rng.gen_range(-0.05..0.05) + micro_offset } 
+                    else { ((radius - 5.5) / 3.5f32).powf(1.8) * 4.0 + rng.gen_range(-0.3..0.3) + micro_offset };
             let pos = Vec3::new(angle.cos() * radius, y, pos_z);
             let s_y = if is_in_arena { rng.gen_range(0.1..0.2) } else { rng.gen_range(0.4..1.2) };
 
@@ -1195,8 +1200,8 @@ pub fn spawn_character_sprite(
     size: Vec2,
     enemy_id: Option<u32>,
     tint: Option<Color>, 
-    meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<StandardMaterial>>,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
 ) -> Entity {
     // 1. 资源准备
     let model_3d = match character_type {
@@ -1224,15 +1229,15 @@ pub fn spawn_character_sprite(
     let z_3d = position.y / 100.0;
     let world_pos = Vec3::new(x_3d, 0.8, z_3d + 0.1);
 
-    // [关键修复] 确定基础旋转：解决不同模型 GLB 初始朝向不统一的问题
-    // 玩家(Warrior) 需转 -90度 才能面朝右侧 (+X)
-    // 狼(Wolf) 需转 -90度 才能面朝左侧 (-X)
-    // 蜘蛛(Spider) 需转 +90度 才能面朝左侧 (-X)
+    // [最终修正] 解决不同模型的 Forward 轴差异，确保对峙感：
+    // 1. 玩家(Warrior): 初始朝向正确，旋转 0 度 (保持默认) 面向右侧 (+X)
+    // 2. 狼(Wolf): 初始朝向正确，旋转 -PI/2 (-90度) 面向左侧 (-X)
+    // 3. 蜘蛛(Spider): 初始朝向右侧，旋转 PI (180度) 面向左侧 (-X)
     let base_rotation = match character_type {
-        CharacterType::Player => -std::f32::consts::FRAC_PI_2,
+        CharacterType::Player => 0.0,
         CharacterType::DemonicWolf => -std::f32::consts::FRAC_PI_2,
-        CharacterType::PoisonSpider => std::f32::consts::FRAC_PI_2,
-        _ => -std::f32::consts::FRAC_PI_2, // 默认与狼一致
+        CharacterType::PoisonSpider => std::f32::consts::PI,
+        _ => -std::f32::consts::FRAC_PI_2, 
     };
 
     let is_player = character_type == CharacterType::Player;
@@ -1256,13 +1261,40 @@ pub fn spawn_character_sprite(
         entity_cmd.insert(Transform::from_translation(world_pos)
             .with_rotation(Quat::from_rotation_x(-0.2) * Quat::from_rotation_y(base_rotation))
             .with_scale(Vec3::splat(if is_boss { 3.0 } else { 2.0 })));
-    } else {
-        // [降级] 2D 分支：生成立牌
+            
+                            // [大作优化] 为每个 3D 角色挂载专属补光灯，增强质感与清晰度
+            
+                            entity_cmd.with_children(|parent| {
+            
+                                parent.spawn((
+            
+                                    PointLight {
+            
+                                        intensity: 15000.0, // 微调强度，达到细节与亮度的平衡
+            
+                                        radius: 8.0,
+            
+                                        color: Color::srgb(1.0, 1.0, 1.0),
+            
+                                        shadows_enabled: false,
+            
+                                        ..default()
+            
+                                    },
+            
+                                    Transform::from_xyz(0.0, 2.5, 1.5), 
+            
+                                ));
+            
+                            });    } else {
+        // [降级] 2D 分支材质优化
         let mesh = meshes.add(Rectangle::new(size.x / 50.0, size.y / 50.0));
         let material = materials.add(StandardMaterial {
             base_color: tint.unwrap_or(Color::WHITE),
             base_color_texture: Some(texture_2d),
-            unlit: true, alpha_mode: AlphaMode::Blend, cull_mode: None, double_sided: true,
+            perceptual_roughness: 0.1,
+            unlit: false, // 启用光照，接受环境和补光
+            alpha_mode: AlphaMode::Blend, cull_mode: None, double_sided: true,
             ..default()
         });
         entity_cmd.insert((Mesh3d(mesh), MeshMaterial3d(material)));

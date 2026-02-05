@@ -364,27 +364,29 @@ fn setup_camera(mut commands: Commands) {
         },
     ));
 
-    // 2. 3D 相机 (唯美进阶版：安全前提下提升细节)
+    // 2. 3D 相机 (大作级画质：线性雾化，保证近景清晰)
     commands.spawn((
         Camera3d::default(),
         Camera {
             clear_color: ClearColorConfig::Custom(Color::srgb(0.65, 0.75, 0.9)), 
             order: 0, 
-            hdr: false, 
+            hdr: false, // 禁用 HDR 以修复兼容性黑屏
             ..default()
         },
-        Transform::from_xyz(0.0, 5.0, 11.0).looking_at(Vec3::new(0.0, 1.0, 0.0), Vec3::Y),
+        Msaa::Sample4, // [修复] Bevy 0.15 中 Msaa 是相机组件
+        Transform::from_xyz(0.0, 5.5, 12.0).looking_at(Vec3::new(0.0, 1.2, 0.0), Vec3::Y),
         DistanceFog {
             color: Color::srgba(0.65, 0.75, 0.9, 1.0),
-            falloff: FogFalloff::Exponential { density: 0.015 },
+            // 改为线性雾：30米内完全清晰，彻底消除战场内的朦胧感
+            falloff: FogFalloff::Linear { start: 30.0, end: 80.0 },
             ..default()
         },
     ));
 
-    // 3. 全局环境光 (平衡亮度)
+    // 3. 全局环境光 (仙侠感：高亮度，偏冷色调)
     commands.insert_resource(AmbientLight {
-        color: Color::srgb(0.6, 0.8, 1.0),
-        brightness: 800.0,
+        color: Color::srgb(0.8, 0.9, 1.0),
+        brightness: 3000.0,
     });
 }
 
@@ -874,8 +876,8 @@ fn setup_combat_ui(
                 final_size, 
                 Some(enemy_id),
                 Some(gen_enemy.visual_color),
-                &mut meshes,
-                &mut materials,
+                &mut *meshes,
+                &mut *materials,
             );
 
             // 挂载词缀特效 (元素光环)
@@ -1018,8 +1020,8 @@ fn setup_combat_ui(
                 Vec2::new(100.0, 120.0), 
                 Some(enemy.id),
                 None, // 无染色
-                &mut meshes,
-                &mut materials,
+                &mut *meshes,
+                &mut *materials,
             );
 
             commands.entity(root_entity).with_children(|root| {
@@ -1131,8 +1133,8 @@ fn setup_combat_ui(
         Vec2::new(120.0, 140.0), 
         None,
         None, // 玩家无染色
-        &mut meshes,
-        &mut materials,
+        &mut *meshes,
+        &mut *materials,
     );
 
     // --- 法宝 3D 视觉生成 ---
@@ -1166,7 +1168,7 @@ fn setup_combat_ui(
             CombatUiRoot,
             Rotating { speed: 1.5 }, // 旋转快一点更灵动
             char_sprite,
-            Combatant3d { facing_right: true },
+            Combatant3d { facing_right: true, base_rotation: 0.0 },
             Mesh3d(mesh),
             MeshMaterial3d(material),
             Transform::from_translation(base_pos).with_rotation(Quat::from_rotation_x(-0.2)),
