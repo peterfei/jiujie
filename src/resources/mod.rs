@@ -65,3 +65,11 @@ impl LandscapeGenerator {
     }
 
 }
+
+#[derive(Resource, Default)]
+pub struct EnvironmentAssets {
+    pub rock: Handle<Scene>,
+    pub cloud: Handle<Scene>,
+    pub bush: Handle<Scene>,  // 新增：灌木丛簇
+    pub shrub: Handle<Scene>, // 新增：绿色灌木
+}

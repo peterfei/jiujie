@@ -47,6 +47,8 @@ impl Plugin for CorePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(opening::OpeningPlugin);
         app.register_type::<GameState>();
+        app.init_resource::<crate::resources::EnvironmentAssets>(); // 初始化资产容器
+        app.add_systems(Startup, load_environment_assets); // 加载资产
         // 应用启动时设置相机与资产预热
         app.add_systems(Startup, (setup_camera, preload_assets, start_loading_first_frame));
         app.add_systems(Update, initial_state_redirection.run_if(in_state(GameState::Booting)));
@@ -4233,4 +4235,13 @@ fn spawn_relic_hover_panel(commands: &mut Commands, relic: &Relic, asset_server:
         });
 
     info!("【悬停面板】已创建遗物详情面板: {}", relic.name);
+}
+
+
+/// 加载 AAA 级 3D 环境资产
+fn load_environment_assets(asset_server: Res<AssetServer>, mut env_assets: ResMut<crate::resources::EnvironmentAssets>) {
+    env_assets.rock = asset_server.load("3d/rock.glb#Scene0");
+    env_assets.cloud = asset_server.load("3d/cloud.glb#Scene0");
+    env_assets.bush = asset_server.load("3d/bush_cluster.glb#Scene0");
+    env_assets.shrub = asset_server.load("3d/green_shrub.glb#Scene0");
 }
