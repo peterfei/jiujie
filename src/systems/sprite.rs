@@ -1095,10 +1095,12 @@ pub fn spawn_procedural_landscape(
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgba(0.0, 0.8, 1.0, 0.4),
             base_color_texture: Some(_asset_server.load("textures/magic_circle.png")),
-            emissive: LinearRgba::new(0.0, 1.5, 3.0, 1.0),
+            emissive: LinearRgba::new(0.0, 1.0, 2.0, 1.0),
             emissive_texture: Some(_asset_server.load("textures/magic_circle.png")),
             alpha_mode: AlphaMode::Blend,
-            unlit: true,
+            unlit: false, // 启用光照接受，产生自然的明暗和深度
+            perceptual_roughness: 0.2, // 较平滑的质感
+            reflectance: 0.5,
             ..default()
         })),
         Transform::from_xyz(0.0, -0.05, 0.0),
@@ -1285,33 +1287,20 @@ pub fn spawn_character_sprite(
             .with_rotation(Quat::from_rotation_x(-0.2) * Quat::from_rotation_y(base_rotation))
             .with_scale(Vec3::splat(if is_boss { 3.0 } else { 2.0 })));
             
-                // [NPR 优化] 补光灯大幅减弱，仅用于提供边缘微光
-            
-                entity_cmd.with_children(|parent| {
-            
-                    parent.spawn((
-            
-                        PointLight {
-            
-                            intensity: 3000.0, 
-            
-                            radius: 10.0,
-            
-                            color: Color::srgb(0.8, 0.9, 1.0),
-            
-                            shadows_enabled: false,
-            
-                            ..default()
-            
-                        },
-            
-                        Transform::from_xyz(0.0, 3.0, 2.0), 
-            
-                    ));
-            
-                });
-            
-            } else {
+        // [大作优化] 柔和补光灯，仅用于勾勒 NPR 轮廓，解决泛白
+        entity_cmd.with_children(|parent| {
+            parent.spawn((
+                PointLight {
+                    intensity: 2000.0, 
+                    radius: 12.0,
+                    color: Color::srgb(0.9, 0.95, 1.0),
+                    shadows_enabled: false,
+                    ..default()
+                },
+                Transform::from_xyz(0.0, 3.0, 2.0), 
+            ));
+        });
+    } else {
             
                 // [NPR 降级] 2D 分支材质优化：消除高光
             

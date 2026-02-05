@@ -393,10 +393,10 @@ fn setup_camera(mut commands: Commands) {
         },
     ));
 
-    // 3. 全局环境光 (大作质感：低环境光营造深邃阴影，由主光和自发光勾勒轮廓)
+    // 3. 全局环境光 (巅峰画质平衡：降低环境光以突出主光轮廓)
     commands.insert_resource(AmbientLight {
-        color: Color::srgb(0.8, 0.9, 1.0),
-        brightness: 600.0,
+        color: Color::srgb(0.85, 0.95, 1.0),
+        brightness: 800.0,
     });
 }
 
