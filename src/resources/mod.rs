@@ -70,6 +70,9 @@ impl LandscapeGenerator {
 pub struct EnvironmentAssets {
     pub rock: Handle<Scene>,
     pub cloud: Handle<Scene>,
-    pub bush: Handle<Scene>,  // 新增：灌木丛簇
-    pub shrub: Handle<Scene>, // 新增：绿色灌木
+    pub bush: Handle<Scene>,
+    pub shrub: Handle<Scene>,
+    pub lantern: Handle<Scene>, // 新增：灯笼
+    pub rune_stone: Handle<Scene>, // 新增：符文石
+    pub berries: Handle<Scene>, // 新增：浆果丛
 }

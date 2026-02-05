@@ -902,48 +902,21 @@ fn generate_noise_texture(
     let mut data = vec![0; (width * height * 4) as usize];
     for y in 0..height {
         for x in 0..width {
-            let u = (x as f32 / width as f32) - 0.5;
-            let v = (y as f32 / height as f32) - 0.5;
             let idx = ((y * width + x) * 4) as usize;
             match mode {
                 NoiseType::Rock => {
-                    // [写实进化] 高频噪波 + 裂痕
-                    let mut n = 0.0f32;
-                    let mut f = 15.0; // 提高频率
-                    for _ in 0..4 {
-                        n += ((u * f).sin() * (v * f).cos()).abs() / f;
-                        f *= 2.0;
-                    }
-                    let factor = (0.3 + n * 2.0).clamp(0.0, 1.0);
-                    // 降低亮度，增加灰度
-                    data[idx] = (100.0 * factor) as u8;
-                    data[idx+1] = (105.0 * factor) as u8;
-                    data[idx+2] = (110.0 * factor) as u8;
-                    data[idx+3] = 255;
+                    data[idx] = 120; data[idx+1] = 120; data[idx+2] = 120; data[idx+3] = 255;
                 }
                 NoiseType::Cloud => {
+                    let u = (x as f32 / width as f32) - 0.5;
+                    let v = (y as f32 / height as f32) - 0.5;
                     let d = (u*u + v*v).sqrt();
-                    let alpha = (1.0 - (d * 2.5).clamp(0.0, 1.0)).powi(2) * 0.6; // 更柔和
+                    let alpha = (1.0 - (d * 2.5).clamp(0.0, 1.0)).powi(3) * 0.7;
                     data[idx] = 255; data[idx+1] = 255; data[idx+2] = 255;
                     data[idx+3] = (alpha * 255.0) as u8;
                 }
                 NoiseType::Grass => {
-                    // [经典回归] 扇形阔叶纹理
-                    let mut a = 0.0f32;
-                    for i in 0..5 {
-                        let off = (i as f32 * 0.2) - 0.4; 
-                        let h = 0.6 + (i as f32 % 3.0) * 0.1;
-                        let dist = (u - off).abs();
-                        let w = 0.12 * (1.0 - v).powf(0.5) * (v + 0.3); 
-                        if dist < w && v < h {
-                            a = a.max((1.0 - (dist / w)).powi(2));
-                        }
-                    }
-                    let r = (40.0 + v * 100.0) as u8;
-                    let g = (90.0 + v * 80.0) as u8;
-                    let b = (50.0 + v * 30.0) as u8;
-                    data[idx] = r; data[idx+1] = g; data[idx+2] = b;
-                    data[idx+3] = (a * 255.0).clamp(0.0, 255.0) as u8;
+                    data[idx] = 100; data[idx+1] = 150; data[idx+2] = 100; data[idx+3] = 255;
                 }
             }
         }
@@ -969,171 +942,120 @@ pub fn spawn_procedural_landscape(
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
     use rand::Rng;
 
-    let rock_tex = generate_noise_texture(&mut images, 512, 512, NoiseType::Rock);
-    let grass_tex = generate_noise_texture(&mut images, 256, 256, NoiseType::Grass);
-    let unit_cube = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
-    let unit_quad = meshes.add(Plane3d::default().mesh().size(1.0, 1.0));
-
     let main_island_root = commands.spawn((
-        Transform::from_xyz(0.0, -2.0, 0.0), // [核心修正] 抬升至 -2.0，完美接住角色
+        Transform::from_xyz(0.0, -2.2, 0.0),
         Visibility::default(), InheritedVisibility::default(), ViewVisibility::default(),
-        Name::new("MasterpieceArena"),
+        Name::new("FullAssetIsland"),
     )).id();
 
-    let rock_mat = materials.add(StandardMaterial {
-        base_color: Color::WHITE,
-        base_color_texture: Some(rock_tex.clone()),
-        perceptual_roughness: 0.9,
-        ..default()
-    });
+    if let Some(assets) = &env_assets {
+        // 1. [地质构建] 全 GLB 岩石堆叠
+        for i in 0..120 { 
+            let radius = rng.gen_range(0.0..10.0);
+            let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+            let pos_z = angle.sin() * radius;
+            if pos_z > 7.5 { continue; } 
 
-    let grass_mat = materials.add(StandardMaterial {
-        base_color: Color::WHITE,
-        base_color_texture: Some(grass_tex),
-        emissive: LinearRgba::new(0.2, 0.5, 0.25, 1.0),
-        alpha_mode: AlphaMode::Blend,
-        cull_mode: None, double_sided: true,
-        ..default()
-    });
+            let is_in_arena = radius < 5.5;
+            let y = if is_in_arena { rng.gen_range(-0.1..0.1) } 
+                    else { ((radius - 5.5) / 3.5f32).powf(1.8) * 4.0 + rng.gen_range(-0.4..0.4) };
+            let pos = Vec3::new(angle.cos() * radius, y, pos_z);
+            let s_y = if is_in_arena { rng.gen_range(0.1..0.3) } else { rng.gen_range(0.5..1.2) };
 
-    // 1. [地质核心] 混合岩层
-    for _ in 0..320 { 
-        let radius = rng.gen_range(0.0..10.0);
-        let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-        let pos_z = angle.sin() * radius;
-        if pos_z > 7.5 { continue; } 
-
-        let is_in_arena = radius < 5.5;
-        // [核心修正] 竞技场中心高度稍微隆起，不再是平的，模拟真实地形
-        let y = if is_in_arena { rng.gen_range(0.0..0.3) } 
-                else { ((radius - 5.5) / 3.5f32).powf(1.8) * 4.5 + rng.gen_range(-0.4..0.4) };
-        let pos = Vec3::new(angle.cos() * radius, y, pos_z);
-        
-        commands.entity(main_island_root).with_children(|parent| {
-            let s_y = if is_in_arena { rng.gen_range(0.15..0.4) } else { rng.gen_range(0.5..1.2) };
-            
-            // AAA 集成：边缘用模型，中心用程序化 (保持平整)
-            if let Some(assets) = &env_assets {
-                if !is_in_arena && rng.gen_bool(0.6) {
-                    parent.spawn((
-                        SceneRoot(assets.rock.clone()),
-                        Transform::from_translation(pos)
-                            .with_scale(Vec3::new(rng.gen_range(1.5..3.0), s_y * 1.2, rng.gen_range(1.5..3.0)))
-                            .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..6.28))),
-                    ));
-                } else {
-                    parent.spawn((
-                        Mesh3d(unit_cube.clone()),
-                        MeshMaterial3d(rock_mat.clone()),
-                        Transform::from_translation(pos)
-                            .with_scale(Vec3::new(rng.gen_range(2.0..4.0), s_y, rng.gen_range(2.0..4.0)))
-                            .with_rotation(Quat::from_euler(EulerRot::XYZ, rng.gen_range(-0.1..0.1), rng.gen_range(0.0..6.28), rng.gen_range(-0.1..0.1))),
-                    ));
-                }
-            } else {
+            commands.entity(main_island_root).with_children(|parent| {
                 parent.spawn((
-                    Mesh3d(unit_cube.clone()),
-                    MeshMaterial3d(rock_mat.clone()),
+                    SceneRoot(assets.rock.clone()),
                     Transform::from_translation(pos)
                         .with_scale(Vec3::new(rng.gen_range(2.0..4.0), s_y, rng.gen_range(2.0..4.0)))
-                        .with_rotation(Quat::from_euler(EulerRot::XYZ, rng.gen_range(-0.1..0.1), rng.gen_range(0.0..6.28), rng.gen_range(-0.1..0.1))),
+                        .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..6.28))),
                 ));
-            }
 
-            // 2. [植被混合] "模型 + 面片" 双重打击
-            let prob = if is_in_arena { 0.85 } else { 0.4 };
-            if rng.gen_bool(prob) {
-                let g_pos = pos + Vec3::new(rng.gen_range(-0.3..0.3), s_y * 0.85, rng.gen_range(-0.3..0.3));
-                
-                // 30% 概率生成 3D 灌木 (如果资源存在)
-                if let Some(assets) = &env_assets {
-                    if rng.gen_bool(0.3) {
-                        let is_shrub = rng.gen_bool(0.4);
-                        let model = if is_shrub { assets.shrub.clone() } else { assets.bush.clone() };
-                        parent.spawn((
-                            SceneRoot(model),
-                            Transform::from_translation(g_pos)
-                                // [关键] 强制压扁 Y 轴，打破球形感
-                                .with_scale(Vec3::new(rng.gen_range(0.8..1.2), rng.gen_range(0.4..0.6), rng.gen_range(0.8..1.2))) 
-                                .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..6.28))),
-                        ));
-                    }
-                }
+                // 2. [植被构建] 全 GLB 地衣填充
+                let veg_density = if is_in_arena { 0.9 } else { 0.4 };
+                if rng.gen_bool(veg_density) {
+                    let g_pos = pos + Vec3::new(rng.gen_range(-0.5..0.5), s_y * 0.8, rng.gen_range(-0.5..0.5));
+                    
+                    // 随机选择植被：灌木、单体灌木或浆果
+                    let rand_val = rng.gen_range(0.0..1.0);
+                    let (model, scale) = if rand_val < 0.6 {
+                        (assets.bush.clone(), rng.gen_range(1.2..2.2))
+                    } else if rand_val < 0.85 {
+                        (assets.shrub.clone(), rng.gen_range(0.6..1.0))
+                    } else {
+                        (assets.berries.clone(), rng.gen_range(0.8..1.2))
+                    };
 
-                // 100% 概率生成面片草 (填补空隙，增加毛茸茸感)
-                let cluster_scale = rng.gen_range(1.5..2.5);
-                for j in 0..3 {
                     parent.spawn((
-                        Mesh3d(unit_quad.clone()),
-                        MeshMaterial3d(grass_mat.clone()),
-                        Transform::from_translation(g_pos + Vec3::new(rng.gen_range(-0.2..0.2), 0.0, rng.gen_range(-0.2..0.2)))
-                            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2) * Quat::from_rotation_y(j as f32 * 1.04))
-                            .with_scale(Vec3::new(0.8 * cluster_scale, cluster_scale, 1.0)),
-                        Rotating { speed: rng.gen_range(-0.05..0.05) },
+                        SceneRoot(model),
+                        Transform::from_translation(g_pos)
+                            .with_scale(Vec3::splat(scale))
+                            .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..6.28))),
                     ));
                 }
-            }
-        });
+
+                // 3. [英雄装饰] 灯笼与符文石
+                if !is_in_arena && rng.gen_bool(0.08) {
+                    let d_pos = pos + Vec3::Y * s_y;
+                    parent.spawn((
+                        SceneRoot(assets.rune_stone.clone()),
+                        Transform::from_translation(d_pos).with_scale(Vec3::splat(0.8)),
+                    ));
+                }
+                
+                if !is_in_arena && rng.gen_bool(0.05) {
+                    let l_pos = pos + Vec3::new(0.0, s_y + 1.5, 0.0);
+                    parent.spawn((
+                        SceneRoot(assets.lantern.clone()),
+                        Transform::from_translation(l_pos).with_scale(Vec3::splat(0.5)),
+                    ));
+                    // 灯笼自带点光
+                    parent.spawn((
+                        PointLight {
+                            intensity: 5000.0,
+                            color: Color::srgb(1.0, 0.8, 0.4),
+                            range: 5.0,
+                            ..default()
+                        },
+                        Transform::from_translation(l_pos),
+                    ));
+                }
+            });
+        }
     }
 
-    commands.insert_resource(AmbientLight { color: Color::srgb(0.7, 0.8, 1.0), brightness: 1200.0 }); // 适中亮度
+    // 顶级光影
+    commands.insert_resource(AmbientLight { color: Color::srgb(0.7, 0.8, 1.0), brightness: 2500.0 });
     commands.spawn((
-        DirectionalLight { shadows_enabled: false, illuminance: 40000.0, color: Color::srgb(1.0, 0.98, 0.9), ..default() },
+        DirectionalLight { shadows_enabled: false, illuminance: 50000.0, color: Color::srgb(1.0, 0.98, 0.9), ..default() },
         Transform::from_xyz(20.0, 50.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
-    spawn_cloud_sea(&mut commands, &mut materials, &mut images, seed, unit_quad, env_assets);
+    spawn_cloud_sea(&mut commands, &mut materials, &mut images, seed, env_assets);
 }
 
 fn spawn_cloud_sea(
     commands: &mut Commands,
-    materials: &mut ResMut<Assets<StandardMaterial>>,
-    images: &mut ResMut<Assets<Image>>,
+    _materials: &mut ResMut<Assets<StandardMaterial>>,
+    _images: &mut ResMut<Assets<Image>>,
     seed: u64,
-    unit_quad: Handle<Mesh>,
     env_assets: Option<Res<crate::resources::EnvironmentAssets>>,
 ) {
-    let cloud_tex = generate_noise_texture(images, 256, 256, NoiseType::Cloud);
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed + 777);
     use rand::Rng;
-    for _ in 0..12 {
-        let radius = rng.gen_range(12.0..80.0);
-        let angle: f32 = rng.gen_range(0.0..6.28);
-        let center = Vec3::new(angle.cos() * radius, rng.gen_range(-20.0..-10.0), angle.sin() * radius);
-        
-        if let Some(assets) = &env_assets {
-             // [积雨云重构] 多个球体堆叠，且比例更圆润
-             let puff_count = rng.gen_range(3..6);
-             for _ in 0..puff_count {
-                 let offset = Vec3::new(rng.gen_range(-5.0..5.0), rng.gen_range(-2.0..2.0), rng.gen_range(-5.0..5.0));
-                 commands.spawn((
+    if let Some(assets) = &env_assets {
+        for _ in 0..12 {
+            let radius = rng.gen_range(15.0..80.0);
+            let angle: f32 = rng.gen_range(0.0..6.28);
+            let center = Vec3::new(angle.cos() * radius, rng.gen_range(-20.0..-10.0), angle.sin() * radius);
+            
+            let puff_count = rng.gen_range(2..4);
+            for _ in 0..puff_count {
+                let offset = Vec3::new(rng.gen_range(-5.0..5.0), rng.gen_range(-2.0..2.0), rng.gen_range(-5.0..5.0));
+                commands.spawn((
                     SceneRoot(assets.cloud.clone()),
                     Transform::from_translation(center + offset)
-                        // [告别飞碟] 比例接近 1:1:1，只是略微扁平
-                        .with_scale(Vec3::new(rng.gen_range(4.0..8.0), rng.gen_range(3.0..6.0), rng.gen_range(4.0..8.0)))
+                        .with_scale(Vec3::new(rng.gen_range(10.0..18.0), rng.gen_range(6.0..10.0), rng.gen_range(10.0..18.0)))
                         .with_rotation(Quat::from_rotation_y(rng.gen_range(-3.0..3.0))),
-                    crate::components::sprite::Cloud {
-                        scroll_speed: Vec2::new(rng.gen_range(0.05..0.1), rng.gen_range(0.05..0.1)),
-                        amplitude: 0.5, frequency: 0.05, seed: rng.gen(),
-                    },
-                    CombatUiRoot,
-                ));
-             }
-        } else {
-            for _ in 0..8 {
-                let offset = Vec3::new(rng.gen_range(-15.0..15.0), rng.gen_range(-2.0..2.0), rng.gen_range(-15.0..15.0));
-                commands.spawn((
-                    Mesh3d(unit_quad.clone()),
-                    MeshMaterial3d(materials.add(StandardMaterial {
-                        base_color: Color::srgba(1.0, 1.0, 1.0, rng.gen_range(0.06..0.15)),
-                        base_color_texture: Some(cloud_tex.clone()),
-                        alpha_mode: AlphaMode::Blend,
-                        emissive: LinearRgba::new(0.2, 0.25, 0.3, 1.0),
-                        ..default()
-                    })),
-                    Transform::from_translation(center + offset)
-                        .with_scale(Vec3::new(rng.gen_range(40.0..80.0), 1.0, rng.gen_range(20.0..40.0)))
-                        .with_rotation(Quat::from_rotation_y(rng.gen_range(-1.2..1.2))),
                     crate::components::sprite::Cloud {
                         scroll_speed: Vec2::new(rng.gen_range(0.05..0.1), rng.gen_range(0.05..0.1)),
                         amplitude: 0.5, frequency: 0.05, seed: rng.gen(),
@@ -1169,6 +1091,7 @@ pub fn spawn_character_sprite(
         SpriteMarker,
         Visibility::default(), InheritedVisibility::default(), ViewVisibility::default(),
     ));
+    entity_cmd.remove::<Sprite>();
     match character_type {
         CharacterType::Player => { entity_cmd.insert(PlayerSpriteMarker); }
         _ => { if let Some(id) = enemy_id { entity_cmd.insert(EnemySpriteMarker { id }); } }

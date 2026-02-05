@@ -4244,4 +4244,7 @@ fn load_environment_assets(asset_server: Res<AssetServer>, mut env_assets: ResMu
     env_assets.cloud = asset_server.load("3d/cloud.glb#Scene0");
     env_assets.bush = asset_server.load("3d/bush_cluster.glb#Scene0");
     env_assets.shrub = asset_server.load("3d/green_shrub.glb#Scene0");
+    env_assets.lantern = asset_server.load("3d/stylized_lantern.glb#Scene0");
+    env_assets.rune_stone = asset_server.load("3d/glowing_rune_stone.glb#Scene0");
+    env_assets.berries = asset_server.load("3d/berry_cluster.glb#Scene0");
 }
