@@ -34,7 +34,7 @@ use crate::components::{
     TopBar, TopBarHpText, TopBarGoldText, EnergyOrb, EndTurnButton, HandArea, CombatUiRoot,
     StatusEffectEvent, Environment, // 补全导入
 };
-use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, AnimationState, PlayerSpriteMarker, MagicSealMarker, CharacterSprite};
+use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, AnimationState, PlayerSpriteMarker, MagicSealMarker, CharacterSprite, Combatant3d};
 use crate::systems::sprite::{spawn_character_sprite};
 use crate::systems::enemy_gen::EnemyGenerator;
 
@@ -418,6 +418,12 @@ pub fn preload_assets(
         spider: asset_server.load("textures/enemies/spider.png"),
         spirit: asset_server.load("textures/enemies/spirit.png"),
         boss: asset_server.load("textures/enemies/boss.png"),
+        // 注入 3D 模型
+        player_3d: Some(asset_server.load("3d/fantasy_warrior.glb#Scene0")),
+        wolf_3d: Some(asset_server.load("3d/fantasy_wolf.glb#Scene0")),
+        spider_3d: Some(asset_server.load("3d/ornate_green_spider.glb#Scene0")),
+        boss_3d: Some(asset_server.load("3d/fantasy_armored_warrior.glb#Scene0")),
+        spirit_3d: Some(asset_server.load("3d/fantasy_character.glb#Scene0")),
     };
     commands.insert_resource(character_assets);
 
@@ -1137,6 +1143,20 @@ fn setup_combat_ui(
         let z_offset = angle.sin() * 0.8;
         let base_pos = Vec3::new(-3.5 + x_offset, 1.5, 1.0 + z_offset); // Z 轴提前到 1.0
 
+        // [核心修复] 手动初始化 3D 组件，防止 sync_2d_to_3d_render 错误重置坐标
+        let char_sprite = CharacterSprite::new(asset_server.load("textures/relics/default.png"), Vec2::new(30.0, 30.0));
+        let mesh = meshes.add(Rectangle::new(char_sprite.size.x / 50.0, char_sprite.size.y / 50.0));
+        let material = materials.add(StandardMaterial {
+            base_color: char_sprite.tint.with_alpha(0.8),
+            base_color_texture: Some(char_sprite.texture.clone()),
+            emissive: LinearRgba::from(char_sprite.tint).with_alpha(1.0),
+            emissive_texture: Some(char_sprite.texture.clone()),
+            alpha_mode: AlphaMode::Blend,
+            cull_mode: None,
+            double_sided: true,
+            ..default()
+        });
+
         commands.spawn((
             crate::components::sprite::RelicVisualMarker { 
                 relic_id: relic.id.clone(),
@@ -1145,8 +1165,12 @@ fn setup_combat_ui(
             SpriteMarker,
             CombatUiRoot,
             Rotating { speed: 1.5 }, // 旋转快一点更灵动
-            CharacterSprite::new(asset_server.load("textures/relics/default.png"), Vec2::new(30.0, 30.0)),
-            Transform::from_translation(base_pos),
+            char_sprite,
+            Combatant3d { facing_right: true },
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            Transform::from_translation(base_pos).with_rotation(Quat::from_rotation_x(-0.2)),
+            bevy::pbr::NotShadowCaster,
         ));
     }
     commands.insert_resource(CombatState::default());

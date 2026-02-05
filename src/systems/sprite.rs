@@ -1191,26 +1191,67 @@ pub fn spawn_character_sprite(
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
 ) -> Entity {
-    let texture = match character_type {
+    // 1. 资源准备
+    let model_3d = match character_type {
+        CharacterType::Player => &character_assets.player_3d,
+        CharacterType::DemonicWolf => &character_assets.wolf_3d,
+        CharacterType::PoisonSpider => &character_assets.spider_3d,
+        CharacterType::CursedSpirit => &character_assets.spirit_3d,
+        CharacterType::GreatDemon => &character_assets.boss_3d,
+    };
+
+    let texture_2d = match character_type {
         CharacterType::Player => character_assets.player_idle.clone(),
         CharacterType::DemonicWolf => character_assets.wolf.clone(),
         CharacterType::PoisonSpider => character_assets.spider.clone(),
         CharacterType::CursedSpirit => character_assets.spirit.clone(),
         CharacterType::GreatDemon => character_assets.boss.clone(),
     };
-    let mut sprite = CharacterSprite::new(texture, size);
-    if let Some(c) = tint { sprite = sprite.with_tint(c); }
+
     let is_boss = size.x > 150.0;
+    let mut sprite = CharacterSprite::new(texture_2d.clone(), size);
+    if let Some(c) = tint { sprite = sprite.with_tint(c); }
 
+    // [关键修复] 将 UI 坐标转换为 3D 世界坐标
+    // 逻辑与 sync_2d_to_3d_render 保持一致：X/100, Y/100 -> Z, 固定高度 0.8
+    let x_3d = position.x / 100.0;
+    let z_3d = position.y / 100.0;
+    let world_pos = Vec3::new(x_3d, 0.8, z_3d + 0.1);
+
+    // 2. 生成实体 (3D 优先)
     let mut entity_cmd = commands.spawn((
-        Transform::from_translation(position),
-        sprite, 
-        SpriteMarker,
+        Transform::from_translation(world_pos).with_rotation(Quat::from_rotation_x(-0.2)),
         Visibility::default(), InheritedVisibility::default(), ViewVisibility::default(),
+        SpriteMarker,
+        sprite, // 必须挂载，用于保存战斗状态 (AnimationState)
+        PhysicalImpact { home_position: world_pos, ..default() }, // 必须挂载，否则无法处理位移
+        BreathAnimation::default(), // 必须挂载，提供生命力
+        Combatant3d { facing_right: true },
     ));
-    entity_cmd.remove::<Sprite>();
 
-    entity_cmd.with_children(|parent| {
+    if let Some(model_handle) = model_3d {
+        // [AAA] 3D 分支：挂载模型
+        entity_cmd.insert(bevy::scene::SceneRoot(model_handle.clone()));
+        // 修正缩放：3D 模型通常需要放大
+        entity_cmd.insert(Transform::from_translation(world_pos)
+            .with_rotation(Quat::from_rotation_x(-0.2))
+            .with_scale(Vec3::splat(if is_boss { 3.0 } else { 2.0 })));
+    } else {
+        // [降级] 2D 分支：生成立牌
+        let mesh = meshes.add(Rectangle::new(size.x / 50.0, size.y / 50.0));
+        let material = materials.add(StandardMaterial {
+            base_color: tint.unwrap_or(Color::WHITE),
+            base_color_texture: Some(texture_2d),
+            unlit: true, alpha_mode: AlphaMode::Blend, cull_mode: None, double_sided: true,
+            ..default()
+        });
+        entity_cmd.insert((Mesh3d(mesh), MeshMaterial3d(material)));
+    }
+
+    let entity = entity_cmd.id();
+
+    // 3. 统一增加灵气底座
+    commands.entity(entity).with_children(|parent| {
         let base_radius = if is_boss { 1.5 } else { 1.0 };
         parent.spawn((
             Mesh3d(meshes.add(Cylinder::new(base_radius, 0.05))), 
@@ -1224,9 +1265,11 @@ pub fn spawn_character_sprite(
         ));
     });
 
+    // 4. 挂载身份标记
     match character_type {
-        CharacterType::Player => { entity_cmd.insert(PlayerSpriteMarker); }
-        _ => { if let Some(id) = enemy_id { entity_cmd.insert(EnemySpriteMarker { id }); } }
+        CharacterType::Player => { commands.entity(entity).insert(PlayerSpriteMarker); }
+        _ => { if let Some(id) = enemy_id { commands.entity(entity).insert(EnemySpriteMarker { id }); } }
     };
-    entity_cmd.id()
+
+    entity
 }

@@ -158,6 +158,12 @@ pub struct CharacterAssets {
     pub spirit: Handle<Image>,
     /// BOSS图
     pub boss: Handle<Image>,
+    // --- 3D 模型资产 ---
+    pub player_3d: Option<Handle<Scene>>,
+    pub wolf_3d: Option<Handle<Scene>>,
+    pub spider_3d: Option<Handle<Scene>>,
+    pub spirit_3d: Option<Handle<Scene>>,
+    pub boss_3d: Option<Handle<Scene>>,
 }
 
 impl CharacterAssets {
@@ -173,6 +179,12 @@ impl CharacterAssets {
             spider: asset_server.load("textures/enemies/spider.png"),
             spirit: asset_server.load("textures/enemies/spirit.png"),
             boss: asset_server.load("textures/enemies/boss.png"),
+            // 默认 3D 字段
+            player_3d: None,
+            wolf_3d: None,
+            spider_3d: None,
+            spirit_3d: None,
+            boss_3d: None,
         }
     }
 }
