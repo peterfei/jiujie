@@ -40,6 +40,8 @@ impl Plugin for SpritePlugin {
                 update_spirit_clones,
                 update_clouds, // 重新启用：已验证逻辑安全
                 update_mist, // 新增：流雾系统
+                update_wind_sway, // 新增：植被摇曳
+                update_water, // 新增：水面动态
                 update_sprite_animations,
             ).run_if(in_state(GameState::Combat))
         );
@@ -865,11 +867,42 @@ fn update_magic_seal_pulse(
     }
 }
 
-
 use crate::resources::{LandscapeGenerator, EnvironmentConfig};
 use rand::SeedableRng;
 
-/// 更新云海动画 (实现中心区域避让)
+/// 更新植被风场摇曳
+pub fn update_wind_sway(
+    time: Res<Time>,
+    env: Res<EnvironmentConfig>,
+    mut query: Query<(&mut Transform, &crate::components::sprite::WindSway)>,
+) {
+    let t = time.elapsed_secs();
+    let wind_power = env.wind_strength; 
+
+    for (mut transform, sway) in query.iter_mut() {
+        let phase = transform.translation.x * 0.5 + transform.translation.z * 0.2 + sway.seed;
+        let angle = (t * sway.speed + phase).sin() * sway.strength * wind_power + 
+                    (t * sway.speed * 2.5 + phase).cos() * (sway.strength * 0.3);
+        
+        let rot = Quat::from_euler(EulerRot::XYZ, angle * 0.7, 0.0, angle);
+        let (y_rot, _, _) = transform.rotation.to_euler(EulerRot::YXZ);
+        transform.rotation = Quat::from_rotation_y(y_rot) * rot;
+    }
+}
+
+/// 更新水面动态
+pub fn update_water(
+    time: Res<Time>,
+    mut query: Query<(&mut Transform, &crate::components::sprite::Water)>,
+) {
+    let t = time.elapsed_secs();
+    for (mut transform, water) in query.iter_mut() {
+        let wave = (t * 0.8).sin() * water.wave_strength;
+        transform.translation.y = -2.2 + wave; 
+    }
+}
+
+/// 更新云海动画
 pub fn update_clouds(
     time: Res<Time>,
     env: Res<EnvironmentConfig>,
@@ -931,8 +964,8 @@ fn generate_noise_texture(
             let v = (y as f32 / height as f32) - 0.5;
             let idx = ((y * width + x) * 4) as usize;
             
-            let nx = u * 15.0;
-            let ny = v * 15.0;
+            let nx = u * 15.0f32;
+            let ny = v * 15.0f32;
             let fbm = (nx.sin() * ny.cos() * 0.6 + (nx * 2.0).cos() * (ny * 2.0).sin() * 0.3 + (nx * 4.0).sin() * 0.1).abs();
             
             match mode {
@@ -987,8 +1020,29 @@ pub fn spawn_procedural_landscape(
     let main_island_root = commands.spawn((
         Transform::from_xyz(0.0, -2.2, 0.0),
         Visibility::default(), InheritedVisibility::default(), ViewVisibility::default(),
-        Name::new("MistFlowIsland"),
+        Name::new("DynamicEnvIsland"),
     )).id();
+
+    // [新增] 动态水面
+    let water_mesh = meshes.add(Circle::new(45.0));
+    commands.spawn((
+        Mesh3d(water_mesh),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgba(0.1, 0.3, 0.5, 0.8),
+            perceptual_roughness: 0.08,
+            metallic: 0.1,
+            alpha_mode: AlphaMode::Blend,
+            cull_mode: None,
+            double_sided: true,
+            ..default()
+        })),
+        Transform::from_xyz(0.0, -2.2, 0.0).with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+        crate::components::sprite::Water {
+            flow_speed: Vec2::new(0.1, 0.1),
+            wave_strength: 0.15,
+        },
+        CombatUiRoot,
+    ));
 
     if let Some(assets) = &env_assets {
         for _ in 0..140 { 
@@ -1011,7 +1065,6 @@ pub fn spawn_procedural_landscape(
                         .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..6.28))),
                 ));
 
-                // [类型明确] 强制 f32
                 let noise_val = (pos.x * 0.4f32).sin() * (pos.z * 0.4f32).cos();
                 if noise_val > -0.3 && y < 2.5 {
                     let veg_density = if is_in_arena { 0.85 } else { 0.35 };
@@ -1029,6 +1082,12 @@ pub fn spawn_procedural_landscape(
                             Transform::from_translation(g_pos)
                                 .with_scale(scale)
                                 .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..6.28))),
+                            // [新增] 植被风场摇曳
+                            crate::components::sprite::WindSway {
+                                speed: rng.gen_range(1.5..3.0),
+                                strength: rng.gen_range(0.05..0.12),
+                                seed: rng.gen(),
+                            },
                         ));
                     }
                 }
@@ -1036,7 +1095,7 @@ pub fn spawn_procedural_landscape(
         }
     }
 
-    // --- 动态流雾生成 (显形增强版) ---
+    // --- 动态流雾生成 ---
     let mist_tex = generate_noise_texture(&mut images, 256, 256, NoiseType::Cloud);
     let unit_quad = meshes.add(Plane3d::default().mesh().size(1.0, 1.0));
     

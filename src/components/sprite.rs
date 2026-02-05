@@ -303,3 +303,25 @@ pub struct PlayerSpriteMarker;
 pub struct EnemySpriteMarker {
     pub id: u32,
 }
+
+/// [新增] 动态流雾组件
+#[derive(Component)]
+pub struct Mist {
+    pub scroll_speed: Vec2,
+    pub seed: f32,
+}
+
+/// [新增] 风场摇曳组件
+#[derive(Component)]
+pub struct WindSway {
+    pub speed: f32,
+    pub strength: f32,
+    pub seed: f32,
+}
+
+/// [新增] 动态水面组件
+#[derive(Component)]
+pub struct Water {
+    pub flow_speed: Vec2,
+    pub wave_strength: f32,
+}
