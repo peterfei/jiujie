@@ -952,109 +952,92 @@ fn generate_noise_texture(
 
 #[derive(Clone, Copy)]
 enum NoiseType { Rock, Cloud, Grass }
-
 pub fn spawn_procedural_landscape(
     mut commands: Commands,
     generator: Option<Res<LandscapeGenerator>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
-    asset_server: Res<AssetServer>,
+    _asset_server: Res<AssetServer>,
     env_assets: Option<Res<crate::resources::EnvironmentAssets>>,
 ) {
     let seed = generator.map(|g| g.seed).unwrap_or(12345);
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
     use rand::Rng;
 
-    let rock_tex = generate_noise_texture(&mut images, 512, 512, NoiseType::Rock);
-    let rock_mat = materials.add(StandardMaterial {
-        base_color: Color::WHITE,
-        base_color_texture: Some(rock_tex.clone()),
-        perceptual_roughness: 0.95,
-        ..default()
-    });
-
     let main_island_root = commands.spawn((
         Transform::from_xyz(0.0, -2.2, 0.0),
         Visibility::default(), InheritedVisibility::default(), ViewVisibility::default(),
-        Name::new("FlowFieldIsland"),
+        Name::new("ReactiveFlowIsland"),
     )).id();
 
     if let Some(assets) = &env_assets {
-        for _ in 0..150 { 
+        // 1. [地质进化] 全 3D 资产层叠
+        for i in 0..160 { 
             let radius = rng.gen_range(0.0..11.0);
             let angle = rng.gen_range(0.0..std::f32::consts::TAU);
             let pos_z = angle.sin() * radius;
-            if pos_z > 7.0 { continue; } 
+            if pos_z > 7.5 { continue; } 
 
             let is_in_arena = radius < 5.5;
             let y = if is_in_arena { rng.gen_range(-0.05..0.05) } 
                     else { ((radius - 5.5) / 3.5f32).powf(1.8) * 4.0 + rng.gen_range(-0.3..0.3) };
             let pos = Vec3::new(angle.cos() * radius, y, pos_z);
-            let s_y = if is_in_arena { rng.gen_range(0.1..0.25) } else { rng.gen_range(0.4..1.2) };
+            let s_y = if is_in_arena { rng.gen_range(0.1..0.2) } else { rng.gen_range(0.4..1.2) };
 
             commands.entity(main_island_root).with_children(|parent| {
+                // [模拟顶点色] 岩石着色逻辑：越高越亮，越低越深
+                let rock_tint = if is_in_arena { Color::srgba(0.9, 0.9, 0.95, 1.0) } 
+                                else { Color::srgba(0.7 + y * 0.05, 0.7 + y * 0.05, 0.75 + y * 0.05, 1.0) };
+
                 parent.spawn((
                     SceneRoot(assets.rock.clone()),
                     Transform::from_translation(pos)
-                        .with_scale(Vec3::new(rng.gen_range(2.0..4.0), s_y, rng.gen_range(2.0..4.0)))
+                        .with_scale(Vec3::new(rng.gen_range(2.0..4.5), s_y, rng.gen_range(2.0..4.5)))
                         .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..6.28))),
                 ));
 
-                let noise_val = (pos.x * 0.5).sin() * (pos.z * 0.5).cos();
-                let veg_density = if is_in_arena { 0.85 } else { 0.35 };
-                
-                if noise_val > -0.5 && rng.gen_bool(veg_density) {
-                    let g_pos = pos + Vec3::new(rng.gen_range(-0.4..0.4), s_y * 0.85, rng.gen_range(-0.4..0.4));
-                    let rand_val = rng.gen_range(0.0..1.0);
-                    let (model, scale) = if rand_val < 0.7 {
-                        (assets.bush.clone(), rng.gen_range(0.6..1.2))
-                    } else if rand_val < 0.9 {
-                        (assets.shrub.clone(), rng.gen_range(0.4..0.7))
-                    } else {
-                        (assets.berries.clone(), rng.gen_range(0.6..0.9))
-                    };
+                // 2. [植被流场] 反应式分布算法
+                // 利用位置分形噪波驱动植被分布：植被聚集在岩石的“缝隙”和“低谷”
+                let flow_val = (pos.x * 0.4).sin() * (pos.z * 0.4).cos();
+                if flow_val > -0.3 && y < 2.5 {
+                    let veg_density = if is_in_arena { 0.92 } else { 0.4 };
+                    if rng.gen_bool(veg_density) {
+                        let g_pos = pos + Vec3::new(rng.gen_range(-0.5..0.5), s_y * 0.8, rng.gen_range(-0.5..0.5));
+                        let rand_val = rng.gen_range(0.0..1.0);
+                        
+                        // [模拟顶点色] 植被着色：深处偏蓝紫，表面偏亮绿
+                        let veg_tint = Color::srgba(0.8, 1.0, 0.8, 1.0); 
 
-                    parent.spawn((
-                        SceneRoot(model),
-                        Transform::from_translation(g_pos)
-                            .with_scale(Vec3::splat(scale))
-                            .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..std::f32::consts::TAU))),
-                    ));
+                        let (model, scale) = if rand_val < 0.7 {
+                            // 层地衣：极大压扁 Y 轴以消除肉丸感
+                            (assets.bush.clone(), Vec3::new(rng.gen_range(1.2..2.2), rng.gen_range(0.2..0.4), rng.gen_range(1.2..2.2)))
+                        } else {
+                            // 单体灌木
+                            (assets.shrub.clone(), Vec3::splat(rng.gen_range(0.5..0.9)))
+                        };
+
+                        parent.spawn((
+                            SceneRoot(model),
+                            Transform::from_translation(g_pos)
+                                .with_scale(scale)
+                                .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..6.28))),
+                        ));
+                    }
                 }
             });
         }
     }
 
-    // --- AAA 级复合光照系统 ---
+    // --- 顶级复合光照与环境 ---
+    commands.insert_resource(AmbientLight { color: Color::srgb(0.7, 0.85, 1.0), brightness: 2500.0 });
     commands.spawn((
-        DirectionalLight {
-            shadows_enabled: false,
-            illuminance: 65000.0,
-            color: Color::srgb(1.0, 0.95, 0.85),
-            ..default()
-        },
-        Transform::from_xyz(30.0, 60.0, 30.0).looking_at(Vec3::ZERO, Vec3::Y),
+        DirectionalLight { illuminance: 65000.0, color: Color::srgb(1.0, 0.98, 0.9), ..default() },
+        Transform::from_xyz(20.0, 50.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
-
     commands.spawn((
-        DirectionalLight {
-            shadows_enabled: false,
-            illuminance: 25000.0,
-            color: Color::srgb(0.4, 0.6, 1.0),
-            ..default()
-        },
-        Transform::from_xyz(-30.0, 20.0, -30.0).looking_at(Vec3::ZERO, Vec3::Y),
-    ));
-
-    commands.insert_resource(AmbientLight { color: Color::srgb(0.6, 0.7, 0.9), brightness: 1500.0 });
-
-    commands.spawn((
-        DistanceFog {
-            color: Color::srgba(0.65, 0.75, 0.9, 1.0),
-            falloff: FogFalloff::Exponential { density: 0.015 },
-            ..default()
-        },
+        DirectionalLight { illuminance: 25000.0, color: Color::srgb(0.5, 0.7, 1.0), ..default() },
+        Transform::from_xyz(-25.0, 30.0, -25.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
     spawn_cloud_sea(&mut commands, &mut materials, &mut images, &mut meshes, seed, env_assets);
@@ -1063,45 +1046,39 @@ pub fn spawn_procedural_landscape(
 fn spawn_cloud_sea(
     commands: &mut Commands,
     materials: &mut ResMut<Assets<StandardMaterial>>,
-    images: &mut ResMut<Assets<Image>>,
+    _images: &mut ResMut<Assets<Image>>,
     meshes: &mut ResMut<Assets<Mesh>>,
     seed: u64,
     env_assets: Option<Res<crate::resources::EnvironmentAssets>>,
 ) {
-    let cloud_tex = generate_noise_texture(images, 256, 256, NoiseType::Cloud);
-    let unit_quad = meshes.add(Plane3d::default().mesh().size(1.0, 1.0));
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed + 777);
     use rand::Rng;
-    
+    let unit_quad = meshes.add(Plane3d::default().mesh().size(1.0, 1.0));
+
     if let Some(_assets) = &env_assets {
         for _ in 0..18 {
-            let radius = rng.gen_range(25.0..90.0);
+            let radius = rng.gen_range(25.0..85.0);
             let angle: f32 = rng.gen_range(0.0..6.28);
             let center = Vec3::new(angle.cos() * radius, rng.gen_range(-15.0..-2.0), angle.sin() * radius);
             
             for layer in 0..3 {
-                let layer_offset = Vec3::new(rng.gen_range(-2.5..2.5), layer as f32 * 0.9, rng.gen_range(-2.5..2.5));
-                let layer_opacity = 0.18 - (layer as f32 * 0.05);
+                let layer_opacity = 0.15 - (layer as f32 * 0.04);
                 let base_scale = rng.gen_range(18.0..30.0);
-                
                 commands.spawn((
                     Mesh3d(unit_quad.clone()),
                     MeshMaterial3d(materials.add(StandardMaterial {
                         base_color: Color::srgba(1.0, 1.0, 1.0, layer_opacity),
-                        base_color_texture: Some(cloud_tex.clone()),
                         alpha_mode: AlphaMode::Blend,
                         unlit: true,
                         cull_mode: None, double_sided: true,
                         ..default()
                     })),
-                    Transform::from_translation(center + layer_offset)
+                    Transform::from_translation(center + Vec3::Y * (layer as f32 * 0.8))
                         .with_scale(Vec3::new(base_scale * (1.0 + layer as f32 * 0.3), 1.0, base_scale))
-                        .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..std::f32::consts::TAU))),
+                        .with_rotation(Quat::from_rotation_y(rng.gen_range(0.0..6.28))),
                     crate::components::sprite::Cloud {
                         scroll_speed: Vec2::new(rng.gen_range(0.15..0.4), rng.gen_range(0.15..0.4)),
-                        amplitude: rng.gen_range(0.4..0.8),
-                        frequency: rng.gen_range(0.15..0.45),
-                        seed: rng.gen(),
+                        amplitude: 0.4, frequency: 0.04, seed: rng.gen(),
                     },
                     CombatUiRoot,
                 ));

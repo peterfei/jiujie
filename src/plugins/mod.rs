@@ -368,18 +368,15 @@ fn setup_camera(mut commands: Commands) {
     commands.spawn((
         Camera3d::default(),
         Camera {
-            clear_color: ClearColorConfig::Custom(Color::srgba(0.02, 0.05, 0.1, 1.0)), 
+            clear_color: ClearColorConfig::Custom(Color::srgb(0.65, 0.75, 0.9)), 
             order: 0, 
-            hdr: false, // 依然保持关闭以保稳定
+            hdr: false, 
             ..default()
         },
         Transform::from_xyz(0.0, 5.0, 11.0).looking_at(Vec3::new(0.0, 1.0, 0.0), Vec3::Y),
         DistanceFog {
-            color: Color::srgba(0.02, 0.05, 0.12, 1.0),
-            falloff: FogFalloff::Linear {
-                start: 15.0, 
-                end: 50.0,
-            },
+            color: Color::srgba(0.65, 0.75, 0.9, 1.0),
+            falloff: FogFalloff::Exponential { density: 0.015 },
             ..default()
         },
     ));
@@ -4240,6 +4237,7 @@ fn spawn_relic_hover_panel(commands: &mut Commands, relic: &Relic, asset_server:
 
 /// 加载 AAA 级 3D 环境资产
 fn load_environment_assets(asset_server: Res<AssetServer>, mut env_assets: ResMut<crate::resources::EnvironmentAssets>) {
+    // 定位到 GLB 内部的 Mesh，以便我们手动注入 PBR 材质
     env_assets.rock = asset_server.load("3d/rock.glb#Scene0");
     env_assets.cloud = asset_server.load("3d/cloud.glb#Scene0");
     env_assets.bush = asset_server.load("3d/bush_cluster.glb#Scene0");
