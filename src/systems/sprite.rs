@@ -1086,18 +1086,19 @@ pub fn spawn_procedural_landscape(
     ));
 
     if let Some(assets) = &env_assets {
-        // [性能与视觉优化] 减少物体数量，增加单体体积，打造“荒古巨石阵”
+        // [性能与视觉优化] 打造“远景巨石阵”，确保战斗中心绝对空旷
         for _ in 0..30 { 
-            let radius = rng.gen_range(8.0..25.0); // 放在外围
+            let radius = rng.gen_range(15.0..45.0); // 显著推远起始半径
             let angle = rng.gen_range(0.0..std::f32::consts::TAU);
             let pos_z = angle.sin() * radius;
             
-            let y = ((radius - 5.5) / 3.5f32).powf(1.5) * 2.0 + rng.gen_range(-0.5..0.5);
+            // 下沉 Y 轴，使巨石成为背景基座
+            let y = ((radius - 10.0) / 5.0f32).powf(1.2) * 1.5 - 2.5 + rng.gen_range(-0.5..0.5);
             let pos = Vec3::new(angle.cos() * radius, y, pos_z);
             
-            // 巨型化
-            let scale_xz = rng.gen_range(6.0..15.0);
-            let scale_y = rng.gen_range(2.0..8.0);
+            // 比例优化：增加纵向高度，使其更像山峰
+            let scale_xz = rng.gen_range(8.0..18.0);
+            let scale_y = rng.gen_range(5.0..12.0);
             
             // 为了兼容后续植被逻辑
             let is_in_arena = false; 
