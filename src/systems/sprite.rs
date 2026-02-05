@@ -11,7 +11,8 @@ use crate::components::sprite::{
     CharacterSprite, AnimationState, CharacterType,
     CharacterAnimationEvent, SpriteMarker, PlayerSpriteMarker, EnemySpriteMarker,
     Combatant3d, BreathAnimation, PhysicalImpact, CharacterAssets, Rotating, Ghost, ActionType,
-    MagicSealMarker, RelicVisualMarker, SpiritClone, CombatCamera
+    MagicSealMarker, RelicVisualMarker, SpiritClone, CombatCamera,
+    ArenaLantern, ArenaVegetation, ArenaSpiritStone
 };
 use crate::components::CombatUiRoot;
 
@@ -1099,16 +1100,107 @@ pub fn spawn_procedural_landscape(
             emissive: LinearRgba::new(0.0, 1.0, 2.0, 1.0),
             emissive_texture: Some(_asset_server.load("textures/magic_circle.png")),
             alpha_mode: AlphaMode::Blend,
-            unlit: false, // 启用光照接受，产生自然的明暗和深度
-            perceptual_roughness: 0.2, // 较平滑的质感
+            unlit: false, 
+            perceptual_roughness: 0.2, 
             reflectance: 0.5,
             ..default()
         })),
         Transform::from_xyz(0.0, -0.05, 0.0),
-        Rotating { speed: 0.15 }, // 全场大阵缓缓转动，庄严厚重
-        MagicSealMarker, // 标记以便后期实现呼吸脉动光效
+        Rotating { speed: 0.03 }, 
+        MagicSealMarker, 
         CombatUiRoot,
     ));
+
+    // --- [新增] 战场内程序化装饰 (Reactive PG & Ecological Distribution) ---
+    if let Some(assets) = &env_assets {
+        let mut anchor_points = Vec::new();
+
+        // 1. 灵灯点缀 (Arena Lanterns) - 嵌入岩石基座
+        for i in 0..4 {
+            let angle = i as f32 * std::f32::consts::FRAC_PI_2 + 0.78; 
+            let l_pos = Vec3::new(angle.cos() * 8.5, -0.2, angle.sin() * 8.5);
+            anchor_points.push(l_pos); // 作为植被生长锚点
+            
+            // 生成基座岩石
+            commands.spawn((
+                SceneRoot(assets.rock.clone()),
+                Transform::from_translation(l_pos)
+                    .with_scale(Vec3::new(2.5, 1.2, 2.5))
+                    .with_rotation(Quat::from_rotation_y(rng.gen())),
+                CombatUiRoot,
+            ));
+
+            // 生成灯笼
+            commands.spawn((
+                SceneRoot(assets.lantern.clone()),
+                Transform::from_translation(l_pos + Vec3::Y * 0.6).with_scale(Vec3::splat(1.5)),
+                ArenaLantern,
+                CombatUiRoot,
+            )).with_children(|p| {
+                p.spawn((
+                    PointLight {
+                        intensity: 15000.0,
+                        radius: 6.0,
+                        color: Color::srgb(1.0, 0.8, 0.4),
+                        shadows_enabled: true,
+                        ..default()
+                    },
+                    Transform::from_xyz(0.0, 1.2, 0.0),
+                ));
+            });
+        }
+
+        // 2. 生态扩散植被算法 (Ecological Diffusion)
+        // 围绕锚点（岩石/灯）生成有机的聚簇植被
+        for anchor in anchor_points.iter() {
+            let cluster_size = rng.gen_range(2..6); // 降低密度，防止过于拥挤
+            for _ in 0..cluster_size {
+                let dist = rng.gen_range(0.6..2.2);
+                let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+                // 稍微嵌入地面 (Y=0.08) 增加融合度
+                let g_pos = *anchor + Vec3::new(angle.cos() * dist, 0.08, angle.sin() * dist);
+                
+                let roll = rng.gen_range(0..100);
+                let model = if roll < 60 { 
+                    assets.bush.clone() 
+                } else if roll < 85 { 
+                    assets.shrub.clone() 
+                } else { 
+                    assets.berries.clone() // 加入浆果变体
+                };
+                
+                commands.spawn((
+                    SceneRoot(model),
+                    Transform::from_translation(g_pos)
+                        .with_rotation(Quat::from_euler(
+                            EulerRot::XYZ, 
+                            rng.gen_range(-0.15..0.15), // 增加随机倾斜度
+                            rng.gen(), 
+                            rng.gen_range(-0.15..0.15)
+                        ))
+                        .with_scale(Vec3::splat(rng.gen_range(0.3..0.8))),
+                    ArenaVegetation,
+                    CombatUiRoot,
+                ));
+            }
+        }
+
+        // 3. 灵石 (Arena Spirit Stones) - 散布在较远边缘，模拟矿脉沉积
+        for _ in 0..10 {
+            let r = rng.gen_range(10.0..14.0);
+            let a = rng.gen_range(0.0..std::f32::consts::TAU);
+            let s_pos = Vec3::new(a.cos() * r, -0.1, a.sin() * r);
+            
+            commands.spawn((
+                SceneRoot(assets.rune_stone.clone()),
+                Transform::from_translation(s_pos)
+                    .with_rotation(Quat::from_rotation_y(rng.gen()))
+                    .with_scale(Vec3::splat(rng.gen_range(1.0..1.8))),
+                ArenaSpiritStone,
+                CombatUiRoot,
+            ));
+        }
+    }
 
     if let Some(assets) = &env_assets {
         // [Reactive PG] 极简巨石阵，填补远景虚空
@@ -1256,15 +1348,13 @@ pub fn spawn_character_sprite(
     let z_3d = position.y / 100.0;
     let world_pos = Vec3::new(x_3d, 0.8, z_3d + 0.1);
 
-    // [最终修正] 解决不同模型的 Forward 轴差异，确保对峙感：
-    // 1. 玩家(Warrior): 初始朝向正确，旋转 0 度 (保持默认) 面向右侧 (+X)
-    // 2. 狼(Wolf): 初始朝向正确，旋转 -PI/2 (-90度) 面向左侧 (-X)
-    // 3. 蜘蛛(Spider): 初始朝向右侧，旋转 PI (180度) 面向左侧 (-X)
+    // [最终修正 V6] 彻底解决“朝向屏幕”问题，实现“相向而立” (类比杀戮尖塔)：
+    // 假设模型原始 Forward 为 +Z (朝向屏幕)
+    // 1. 玩家(Warrior): 旋转 -PI/2 (-90度) -> 朝向正右方 (+X)
+    // 2. 所有敌人: 旋转 PI/2 (+90度) -> 朝向正左方 (-X)
     let base_rotation = match character_type {
-        CharacterType::Player => 0.0,
-        CharacterType::DemonicWolf => -std::f32::consts::FRAC_PI_2,
-        CharacterType::PoisonSpider => std::f32::consts::PI,
-        _ => -std::f32::consts::FRAC_PI_2, 
+        CharacterType::Player => -std::f32::consts::FRAC_PI_2,
+        _ => std::f32::consts::FRAC_PI_2, 
     };
 
     let is_player = character_type == CharacterType::Player;
