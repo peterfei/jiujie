@@ -35,7 +35,7 @@ use crate::components::{
     TopBar, TopBarHpText, TopBarGoldText, EnergyOrb, EndTurnButton, HandArea, CombatUiRoot,
     StatusEffectEvent, Environment, CombatCamera,
 };
-use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, AnimationState, PlayerSpriteMarker, MagicSealMarker, CharacterSprite, Combatant3d};
+use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, AnimationState, PlayerSpriteMarker, MagicSealMarker, CharacterSprite, Combatant3d, PlayerWeapon, WanJianTriggerEvent};
 use crate::systems::sprite::{spawn_character_sprite};
 use crate::systems::enemy_gen::EnemyGenerator;
 
@@ -67,6 +67,25 @@ impl Plugin for CorePlugin {
         app.add_systems(OnEnter(GameState::Shop), init_player);
         app.add_systems(OnEnter(GameState::Rest), init_player);
         app.add_systems(OnEnter(GameState::Reward), init_player);
+
+        // [新增] 生命周期收尾
+        app.add_systems(Update, check_wanjian_end.run_if(in_state(GameState::Combat)));
+    }
+}
+
+/// [新增] 检查万剑归宗是否结束，并恢复武器可见性
+fn check_wanjian_end(
+    mut commands: Commands,
+    query: Query<&crate::components::particle::Particle>,
+    weapon_query: Query<&Visibility, With<PlayerWeapon>>,
+) {
+    use crate::components::particle::EffectType;
+    // 如果没有任何 WanJian 粒子，且武器还是 Hidden 状态，则恢复
+    let has_wanjian = query.iter().any(|p| p.effect_type == EffectType::WanJian);
+    let is_hidden = weapon_query.iter().any(|v| matches!(*v, Visibility::Hidden));
+
+    if !has_wanjian && is_hidden {
+        commands.trigger(WanJianTriggerEvent::End);
     }
 }
 
@@ -2087,7 +2106,10 @@ fn handle_card_play(
                                 effect_events.send(SpawnEffectEvent::new(EffectType::SwordEnergy, Vec3::new(0.0, 1.0, 0.0)).burst(50));
                                 
                                 // 3. 额外音效
-                                sfx_events.send(PlaySfxEvent::new(SfxType::LightningStrike)); // 借用闪电音效表现爆发感
+                                sfx_events.send(PlaySfxEvent::new(SfxType::LightningStrike)); 
+
+                                // [新增] 万剑归宗触发：隐藏手中武器
+                                commands.trigger(WanJianTriggerEvent::Start);
                                 
                                 // 4. 消耗所有剑意
                                 player.reset_sword_intent();

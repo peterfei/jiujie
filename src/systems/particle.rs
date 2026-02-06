@@ -170,6 +170,7 @@ pub fn handle_effect_events(
     mut events: EventReader<SpawnEffectEvent>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    player_assets_opt: Option<Res<crate::resources::PlayerAssets>>,
 ) {
     for event in events.read() {
         if event.effect_type == EffectType::Lightning {
@@ -202,7 +203,15 @@ pub fn handle_effect_events(
                     p.velocity = v_override + jitter;
                 }
 
-                // 统一使用原本的 2D UI 生成路径，确保可见性
+                // [核心进化] 万剑归宗优先使用 3D 模型渲染
+                if p.effect_type == EffectType::WanJian {
+                    if let Some(pa) = &player_assets_opt {
+                        spawn_3d_sword_particle(&mut commands, &assets, p, &pa.weapon);
+                        continue;
+                    }
+                }
+
+                // 统一使用原本的 2D UI 生成路径，确保可见性 (非万剑归宗或缺失 3D 资源时回退)
                 spawn_particle_entity(&mut commands, &assets, p);
             }
         } else {
@@ -214,6 +223,34 @@ pub fn handle_effect_events(
             ));
         }
     }
+}
+
+/// [新增] 生成 3D 剑粒子实体
+fn spawn_3d_sword_particle(
+    commands: &mut Commands,
+    _assets: &ParticleAssets,
+    particle: Particle,
+    sword_model: &Handle<Scene>,
+) -> Entity {
+    // 3D 转换逻辑：将 UI 坐标转换为 3D 坐标
+    // 假设 0,0 为中心
+    let x_3d = particle.position.x / 100.0;
+    let y_3d = 1.0 + (particle.seed - 0.5) * 2.0; // 随机高度
+    let z_3d = -particle.position.y / 100.0;
+    
+    let world_pos = Vec3::new(x_3d, y_3d, z_3d);
+
+    commands.spawn((
+        SceneRoot(sword_model.clone()),
+        Transform::from_translation(world_pos)
+            .with_rotation(Quat::from_rotation_z(particle.rotation))
+            .with_scale(Vec3::splat(1.2)),
+        particle,
+        ParticleMarker,
+        Visibility::Visible,
+        InheritedVisibility::default(),
+        ViewVisibility::default(),
+    )).id()
 }
 
 fn spawn_particle_entity(commands: &mut Commands, assets: &ParticleAssets, particle: Particle) -> Entity {
@@ -372,7 +409,7 @@ pub fn update_emitters(
 
 pub fn update_particles(
     mut commands: Commands,
-    mut query: Query<(Entity, &mut Particle, &mut Node, &mut ImageNode, &mut Visibility, &mut Transform), Without<EnemySpriteMarker>>,
+    mut query: Query<(Entity, &mut Particle, Option<&mut Node>, Option<&mut ImageNode>, &mut Visibility, &mut Transform), Without<EnemySpriteMarker>>,
     time: Res<Time>,
     mut events: EventWriter<SpawnEffectEvent>,
     mut screen_events: EventWriter<ScreenEffectEvent>,
@@ -381,7 +418,7 @@ pub fn update_particles(
     camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
 ) {
     let delta = time.delta_secs();
-    for (entity, mut p, mut _node, mut image, mut visibility, mut transform) in query.iter_mut() {
+    for (entity, mut p, mut node_opt, mut image_opt, mut visibility, mut transform) in query.iter_mut() {
         p.elapsed += delta;
         let global_prog = (p.elapsed / p.lifetime).min(1.0);
 
@@ -414,61 +451,116 @@ pub fn update_particles(
 
         // [性能分流] 万剑归宗涉及复杂 UI 轨迹，需使用 Node 布局；普通粒子使用 Transform 优化
         let current_size = p.current_size();
-        if p.effect_type == EffectType::WanJian {
-            let (w, h) = (current_size * 1.83, current_size); // 还原经典长宽比
-            let ui_x = 640.0 + p.position.x;
-            let ui_y = 360.0 - p.position.y;
-            _node.left = Val::Px(ui_x - w/2.0); 
-            _node.top = Val::Px(ui_y - h/2.0);
-            _node.width = Val::Px(w); 
-            _node.height = Val::Px(h);
-            
-            transform.scale = Vec3::ONE; // 缩放已由 Node 处理
-            // 关键修复：不要放在 ZERO，防止在 3D 空间中心产生亮点残留
-            transform.translation = Vec3::new(-5000.0, -5000.0, -10.0); 
+        
+        if let Some(ref mut _node) = node_opt {
+            // 2D UI 路径 (保留原有逻辑)
+            if p.effect_type == EffectType::WanJian {
+                let (w, h) = (current_size * 1.83, current_size); // 还原经典长宽比
+                let ui_x = 640.0 + p.position.x;
+                let ui_y = 360.0 - p.position.y;
+                _node.left = Val::Px(ui_x - w/2.0); 
+                _node.top = Val::Px(ui_y - h/2.0);
+                _node.width = Val::Px(w); 
+                _node.height = Val::Px(h);
+                
+                transform.scale = Vec3::ONE; 
+                transform.translation = Vec3::new(-5000.0, -5000.0, -10.0); 
+            } else {
+                let ui_x = 640.0 + p.position.x;
+                let ui_y = 360.0 - p.position.y;
+                transform.translation.x = ui_x;
+                transform.translation.y = ui_y;
+                transform.scale = Vec3::splat(current_size);
+            }
         } else {
-            let ui_x = 640.0 + p.position.x;
-            let ui_y = 360.0 - p.position.y;
-            transform.translation.x = ui_x;
-            transform.translation.y = ui_y;
-            transform.scale = Vec3::splat(current_size);
+            // 3D 渲染路径 (万剑归宗 3D 模型：大作级序列化物理指向版)
+            if p.effect_type == EffectType::WanJian {
+                let local_prog = (global_prog * 1.6 - p.seed * 0.6).clamp(0.0, 1.0);
+                let dive_start = 0.5 + p.seed * 0.2; 
+                let is_locking = local_prog > dive_start && local_prog <= dive_start + 0.1;
+                let is_diving = local_prog > dive_start + 0.1;
+
+                // --- 1. 记录上一帧位置用于计算速度向量 ---
+                let prev_pos_3d = transform.translation;
+
+                // --- 2. 坐标与高度计算 ---
+                let sky_height = 5.0 + (p.seed - 0.5) * 1.5;
+                let mut next_pos_3d = Vec3::new(p.position.x / 100.0, 0.0, -p.position.y / 100.0);
+                
+                next_pos_3d.y = if local_prog < 0.15 {
+                    let t = local_prog / 0.15;
+                    0.8 + t * (sky_height - 0.8)
+                } else if !is_diving {
+                    sky_height + (p.elapsed * 4.0 + p.seed * 30.0).sin() * 0.1
+                } else {
+                    let dive_t = (local_prog - (dive_start + 0.1)) / (1.0 - (dive_start + 0.1));
+                    sky_height * (1.0 - dive_t.powi(3)) + 0.2
+                };
+                
+                transform.translation = next_pos_3d;
+                transform.scale = Vec3::splat(0.32); 
+
+                // --- 3. 动态运动学指向 ---
+                // 计算瞬时速度向量 (3D)
+                let velocity_vec = (next_pos_3d - prev_pos_3d).normalize_or(Vec3::Y);
+                
+                if is_diving {
+                    // 俯冲：剑尖（+Y）完全锁定运动方向
+                    transform.rotation = Quat::from_rotation_arc(Vec3::Y, velocity_vec);
+                    transform.scale.y *= 1.4;
+                } else if is_locking {
+                    // 锁定：从盘旋姿态平滑转向目标
+                    let target_3d = Vec3::new(p.target.map_or(0.0, |t| t.x / 100.0), 0.2, p.target.map_or(0.0, |t| -t.y / 100.0));
+                    let look_dir = (target_3d - next_pos_3d).normalize_or(Vec3::NEG_Y);
+                    let final_rot = Quat::from_rotation_arc(Vec3::Y, look_dir);
+                    transform.rotation = transform.rotation.slerp(final_rot, delta * 15.0);
+                } else if local_prog < 0.15 {
+                    // 飞升：剑尖朝向飞升速度方向
+                    transform.rotation = Quat::from_rotation_arc(Vec3::Y, velocity_vec);
+                } else {
+                    // 盘旋：剑身水平，指向圆环切线
+                    // 在 3D 中，盘旋是绕 Y 轴的，速度向量在 XZ 平面
+                    let mut horizontal_vel = velocity_vec;
+                    horizontal_vel.y = 0.0;
+                    horizontal_vel = horizontal_vel.normalize_or(velocity_vec);
+                    transform.rotation = Quat::from_rotation_arc(Vec3::Y, horizontal_vel);
+                }
+
+                // --- 4. 可见性 ---
+                if local_prog < 0.05 { *visibility = Visibility::Hidden; }
+                else { *visibility = Visibility::Visible; }
+            }
         }
         
-        transform.rotation = Quat::from_rotation_z(p.rotation);
+        if node_opt.is_some() {
+            transform.rotation = Quat::from_rotation_z(p.rotation);
+        }
         
-        // 针对 CloudMist 优化平滑淡入淡出
-        if p.effect_type == EffectType::CloudMist {
-            let mut color = p.current_color();
-            let fade = (global_prog * (1.0 - global_prog) * 4.0).clamp(0.0, 1.0);
-            // [黄金平衡] 提升透明度，找回水墨厚度
-            color.set_alpha(0.28 * fade); 
-            image.color = color;
-            
-            // 增加更显著的旋转扰动 (水墨流变感)
-            p.rotation += delta * (p.seed - 0.5) * 0.25;
-        } else if p.effect_type == EffectType::SilkTrail {
-            let mut color = p.current_color();
-            // 丝迹随着生命值降低快速变透明
-            color.set_alpha(0.5 * (1.0 - global_prog));
-            image.color = color;
-            
-            // 特殊拉伸效果：模拟丝线的长条感
-            transform.scale.x = current_size * 2.5; 
-            transform.scale.y = current_size * 0.4;
-        } else if p.effect_type == EffectType::WolfSlash {
-            let mut color = p.current_color();
-            color.set_alpha(0.7 * (1.0 - global_prog));
-            image.color = color;
-            
-            // 抓痕拉伸：极细极长的蓝色闪光
-            transform.scale.x = current_size * 4.5;
-            transform.scale.y = current_size * 0.12;
-            
-            // [关键修正] 让抓痕顺着速度方向旋转 (UI 坐标系 Y 轴向下，需取负)
-            let angle = (-p.velocity.y).atan2(p.velocity.x);
-            transform.rotation = Quat::from_rotation_z(angle);
-        } else {
-            image.color = p.current_color();
+        // 材质属性更新
+        if let Some(mut image) = image_opt {
+            if p.effect_type == EffectType::CloudMist {
+                let mut color = p.current_color();
+                let fade = (global_prog * (1.0 - global_prog) * 4.0).clamp(0.0, 1.0);
+                color.set_alpha(0.28 * fade); 
+                image.color = color;
+                p.rotation += delta * (p.seed - 0.5) * 0.25;
+            } else if p.effect_type == EffectType::SilkTrail {
+                let mut color = p.current_color();
+                color.set_alpha(0.5 * (1.0 - global_prog));
+                image.color = color;
+                transform.scale.x = current_size * 2.5; 
+                transform.scale.y = current_size * 0.4;
+            } else if p.effect_type == EffectType::WolfSlash {
+                let mut color = p.current_color();
+                color.set_alpha(0.7 * (1.0 - global_prog));
+                image.color = color;
+                transform.scale.x = current_size * 4.5;
+                transform.scale.y = current_size * 0.12;
+                let angle = (-p.velocity.y).atan2(p.velocity.x);
+                transform.rotation = Quat::from_rotation_z(angle);
+            } else {
+                image.color = p.current_color();
+            }
         }
 
         if p.is_dead() { commands.entity(entity).despawn_recursive(); continue; }

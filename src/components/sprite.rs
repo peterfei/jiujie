@@ -367,6 +367,13 @@ pub struct Water {
 #[derive(Component)]
 pub struct PlayerWeapon;
 
+/// [新增] 万剑归宗触发事件
+#[derive(Event)]
+pub enum WanJianTriggerEvent {
+    Start,
+    End,
+}
+
 /// [新增] 场景装饰 - 灯笼
 #[derive(Component)]
 pub struct ArenaLantern;
