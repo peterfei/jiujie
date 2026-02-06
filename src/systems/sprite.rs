@@ -1339,6 +1339,8 @@ pub fn spawn_character_sprite(
         let attack_node = graph.add_clip(attack_clip, 1.0, graph.root);
         let cast_node = graph.add_clip(cast_clip, 1.0, graph.root);
         
+        info!("【骨骼初始化】已创建动画图节点: Idle={:?}, Attack={:?}, Cast={:?}", idle_node, attack_node, cast_node);
+
         let graph_handle = graphs.add(graph);
         anim_config = Some(PlayerAnimationConfig {
             graph: graph_handle,

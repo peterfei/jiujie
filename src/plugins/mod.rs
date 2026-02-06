@@ -82,13 +82,21 @@ fn check_wanjian_end(
     query: Query<&crate::components::particle::Particle>,
     weapon_query: Query<&Visibility, With<PlayerWeapon>>,
     cinematic: Res<HeavenlyStrikeCinematic>,
+    player_sprite_query: Query<&CharacterSprite, With<PlayerSpriteMarker>>,
 ) {
     use crate::components::particle::EffectType;
-    // 如果没有任何 WanJian 粒子，且天象演出也已结束，且武器还是 Hidden 状态，则恢复
+    use crate::components::sprite::AnimationState;
+
+    // 1. 检查粒子是否存在
     let has_wanjian = query.iter().any(|p| p.effect_type == EffectType::WanJian);
+    
+    // 2. 检查玩家是否还在释放大招的动作中
+    let is_animating = player_sprite_query.iter().any(|s| s.state == AnimationState::ImperialSword || s.state == AnimationState::HeavenCast);
+
     let is_hidden = weapon_query.iter().any(|v| matches!(*v, Visibility::Hidden));
 
-    if !has_wanjian && !cinematic.active && is_hidden {
+    // 只有当没有万剑粒子、没有天象演出、且玩家动作也已结束时，才恢复显示
+    if !has_wanjian && !cinematic.active && !is_animating && is_hidden {
         commands.trigger(WanJianTriggerEvent::End);
     }
 }
@@ -2058,7 +2066,7 @@ fn handle_card_play(
     victory_delay: Res<VictoryDelay>, // 引入资源
     player_assets_opt: Option<Res<PlayerAssets>>,
     queries: (
-        Query<Entity, With<PlayerSpriteMarker>>,
+        Query<(Entity, &mut CharacterSprite), With<PlayerSpriteMarker>>,
         Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
         Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &crate::components::sprite::PhysicalImpact)>,
         Query<(&Camera, &GlobalTransform), With<Camera3d>>,
@@ -2068,7 +2076,7 @@ fn handle_card_play(
     if victory_delay.active { return; }
 
     let (mut effect_events, mut screen_events, mut sfx_events, mut anim_events, mut damage_events, mut status_events) = events;
-    let (player_sprite_query, enemy_sprite_query, enemy_impact_query, camera_query) = queries;
+    let (mut player_sprite_query, enemy_sprite_query, enemy_impact_query, camera_query) = queries;
     for (interaction, hand_card) in card_query.iter() {
         if matches!(interaction, Interaction::Pressed) {
             // ... (能量检查省略)
@@ -2090,17 +2098,20 @@ fn handle_card_play(
                     info!("打出卡牌: {} (消耗: {})", card.name, card.cost);
                     
                     // 1. 触发玩家动画 (精准隔离：御剑冲刺，天象原地)
-                    if let Ok(player_entity) = player_sprite_query.get_single() {
+                    if let Ok((player_entity, mut sprite)) = player_sprite_query.get_single_mut() {
                         if card.card_type == CardType::Attack {
-                            let anim = if card.name.contains("御剑术") || card.name.contains("剑气斩") {
-                                // 远程/御剑攻击：回旋/剑气
+                            let anim = if card.name.contains("御剑术") || card.name.contains("剑气斩") || card.name.contains("万剑归宗") {
+                                // 远程/御剑攻击：回旋/剑气/万剑
                                 effect_events.send(SpawnEffectEvent::new(EffectType::SwordEnergy, Vec3::new(-3.5, 1.0, 0.2)));
+                                sprite.state = crate::components::sprite::AnimationState::ImperialSword;
                                 crate::components::sprite::AnimationState::ImperialSword
                             } else if card.name.contains("天象") {
-                                // 天象法术：原地施法 (不再即时产生雷击)
+                                // 天象法术：原地施法
+                                sprite.state = crate::components::sprite::AnimationState::HeavenCast;
                                 crate::components::sprite::AnimationState::HeavenCast
                             } else {
                                 // 近战类执行冲刺
+                                sprite.state = crate::components::sprite::AnimationState::Attack;
                                 crate::components::sprite::AnimationState::Attack
                             };
 
@@ -2110,6 +2121,7 @@ fn handle_card_play(
                             });
                         } else if card.card_type == CardType::Defense {
                             // 防御功法：彻底原地不动
+                            sprite.state = crate::components::sprite::AnimationState::Defense;
                             anim_events.send(CharacterAnimationEvent {
                                 target: player_entity,
                                 animation: crate::components::sprite::AnimationState::Defense,
@@ -2159,7 +2171,7 @@ fn handle_card_play(
                     }
 
                         // 获取玩家实体 ID
-                        let player_entity = player_sprite_query.get_single().ok();
+                        let player_entity = player_sprite_query.get_single().map(|(e, _)| e).ok();
 
                         apply_card_effect(
                             &card,

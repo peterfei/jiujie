@@ -187,9 +187,9 @@ impl CharacterAssets {
             // 默认 3D 字段
             player_3d: Some(asset_server.load("3d/player/warrior_main.glb#Scene0")),
             player_anims: vec![
-                asset_server.load("3d/player/warrior_main.glb#Animation1"), // Idle
-                asset_server.load("3d/player/warrior_main.glb#Animation2"), // Attack
-                asset_server.load("3d/player/warrior_main.glb#Animation3"), // Cast
+                asset_server.load("3d/player/warrior_main.glb#Animation0"), // 尝试 0 作为 Idle
+                asset_server.load("3d/player/warrior_main.glb#Animation1"), // 尝试 1 作为 Attack
+                asset_server.load("3d/player/warrior_main.glb#Animation2"), // 尝试 2 作为 Cast
             ],
             wolf_3d: None,
             spider_3d: None,
