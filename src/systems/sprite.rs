@@ -228,29 +228,22 @@ pub fn update_physical_impacts(
                     impact.offset_velocity = Vec3::ZERO;
                 },
                 ActionType::WolfBite => {
+                    // [狼类扑咬逻辑修复] 纯正直线位移，配合骨骼动画，严禁绕圈旋转
                     let action_phase = impact.action_timer * 12.5;
-                    action_tilt_offset = action_phase.sin() * 0.8;
-                    action_pos_offset.y = (progress * std::f32::consts::PI).sin() * 1.5;
+                    action_tilt_offset = action_phase.sin() * 0.4; // 减小身体抖动
+                    action_pos_offset.y = (progress * std::f32::consts::PI).sin() * 1.0; // 稍微跃起
                     
-                    let stage_thresholds = [0.3, 0.6, 0.8];
-                    let current_stage = impact.action_stage as usize;
-                    if current_stage < stage_thresholds.len() && progress >= stage_thresholds[current_stage] {
-                        use crate::components::particle::EffectType;
-                        let y_offset = (current_stage as f32 - 1.0) * 0.3;
-                        effect_events.send(crate::components::particle::SpawnEffectEvent::new(
-                            EffectType::Slash, 
-                            Vec3::new(-350.0, y_offset * 100.0, 0.5)
-                        ).burst(12));
-                        impact.action_stage += 1;
-                    }
-
                     let target_dist = impact.target_offset_dist;
                     let current_dist = impact.current_offset.x.abs();
                     let dist_left = (target_dist - current_dist).max(0.0);
-                    let speed_scalar = if dist_left < 1.0 { dist_left } else { 1.0 };
+                    let speed_scalar = if dist_left < 1.0 { dist_left.max(0.2) } else { 1.0 };
                     
-                    pos_damping = 10.0;
-                    impact.offset_velocity = Vec3::new(8.5 * dir * speed_scalar, 0.0, 0.0); 
+                    pos_damping = 8.0;
+                    impact.offset_velocity = Vec3::new(12.0 * dir * speed_scalar, 0.0, 0.0); 
+                    
+                    // 强制清零旋转，双重保险
+                    impact.special_rotation = 0.0;
+                    impact.special_rotation_velocity = 0.0;
                 },
                 ActionType::SpiderWeb => {
                     pos_damping = 5.0;
@@ -377,6 +370,38 @@ pub fn update_physical_impacts(
                     impact.offset_velocity = stage_dir * dash_speed;
                     pos_damping = 4.5; 
                 },
+                ActionType::PlayerRun => {
+                    // [大作级跑动模拟] 
+                    let target_dist = impact.target_offset_dist;
+                    let current_dist = impact.current_offset.x.abs();
+                    let dist_left = (target_dist - current_dist).max(0.0);
+                    
+                    // 1. 强制身体姿态：严禁任何程序化倾斜或旋转
+                    impact.special_rotation = 0.0;
+                    impact.special_rotation_velocity = 0.0;
+                    impact.tilt_amount = 0.0;
+                    impact.tilt_velocity = 0.0;
+                    action_tilt_offset = 0.0;
+                    
+                    // 2. 模拟脚步落地感：在 Y 轴增加极其微小的步进抖动 (0.01 级别)
+                    let run_phase = (impact.action_timer * 15.0).sin();
+                    action_pos_offset.y = run_phase.abs() * 0.05; 
+
+                    // 3. 到位判定
+                    if dist_left < 0.6 && impact.action_stage == 0 {
+                        if let Some(ref mut sprite) = sprite_opt {
+                            sprite.state = AnimationState::Attack;
+                            info!("【3D重构】跑动到位 -> 平滑变招: Attack");
+                        }
+                        impact.action_stage = 1;
+                    }
+
+                    // 4. 恒定跑动速度 (不滑行)
+                    // 如果还没到位，保持恒速；如果已到位，迅速减速
+                    let speed = if impact.action_stage == 0 { 11.5 } else { 0.0 };
+                    impact.offset_velocity = Vec3::new(speed * dir, 0.0, 0.0);
+                    pos_damping = 15.0; // 极高阻尼配合恒定推力 = 匀速运动
+                },
                 ActionType::SkitterApproach => {
                     // 1. 真实多足爬行位移逻辑 (类大作实现)
                     let jerky_phase = impact.action_timer * 30.0; // 提高频率
@@ -456,10 +481,8 @@ pub fn update_physical_impacts(
         
         let effective_special_rot = if is_dash { 0.0 } else { impact.special_rotation };
 
-        let wolf_spin = if impact.action_timer > 0.0 && impact.action_type == ActionType::WolfBite {
-            let progress = (1.0 - (impact.action_timer / 1.0)).clamp(0.0, 1.0);
-            progress * std::f32::consts::PI * 4.0
-        } else { 0.0 };
+        // 彻底移除 wolf_spin，因为它会干扰 3D 骨骼动画表现并导致绕圈 Bug
+        let wolf_spin = 0.0;
 
         // [关键修复] 改变旋转合成顺序：先应用 X 轴后仰，再应用 Y 轴转向
         // 叠加算法计算的 base_rotation 和模型固有的 model_offset
@@ -485,7 +508,12 @@ pub fn trigger_hit_feedback(
             let direction = if is_player.is_some() { 1.0 } else { -1.0 };
             impact.action_direction = direction; 
             
-            if impact.action_timer > 0.0 { continue; }
+            // 如果是高级技能，允许强制中断普通受击/待机动作
+            let is_special = event.animation == AnimationState::LinearRun || 
+                            event.animation == AnimationState::ImperialSword || 
+                            event.animation == AnimationState::HeavenCast;
+            
+            if !is_special && impact.action_timer > 0.0 { continue; }
 
             match event.animation {
                 AnimationState::Hit => {
@@ -507,12 +535,11 @@ pub fn trigger_hit_feedback(
                     impact.offset_velocity = Vec3::new(20.0 * direction, 0.0, 0.0);
                 }
                 AnimationState::LinearRun => {
-                    // [新版御剑术] 纯净起步，严禁任何偏转
-                    let target_x = if direction < 0.0 { -2.0 } else { 2.0 };
+                    // [御剑术重构] 使用稳定跑步位移
+                    let target_x = if direction < 0.0 { -2.5 } else { 2.5 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
-                    impact.action_type = ActionType::Dash; 
-                    impact.action_timer = 0.8;
-                    impact.action_stage = 0;
+                    impact.action_type = ActionType::PlayerRun; 
+                    impact.action_timer = 1.2; 
                     impact.tilt_velocity = 0.0;
                     impact.offset_velocity = Vec3::ZERO; 
                     impact.special_rotation = 0.0;
@@ -555,12 +582,15 @@ pub fn trigger_hit_feedback(
                     impact.action_timer = 0.6; 
                 }
                 AnimationState::WolfAttack => {
+                    // [狼类专属修复] 恢复为直接扑咬，严禁旋转
                     let target_x = if direction < 0.0 { -2.0 } else { 2.0 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
-                    impact.action_type = ActionType::Dash; 
+                    impact.action_type = ActionType::WolfBite; 
                     impact.action_timer = 0.8;
-                    impact.tilt_velocity = -10.0 * direction;
-                    impact.offset_velocity = Vec3::new(18.0 * direction, 0.0, 0.0);
+                    impact.tilt_velocity = -25.0 * direction;
+                    impact.offset_velocity = Vec3::new(22.0 * direction, 0.0, 0.0);
+                    impact.special_rotation = 0.0;
+                    impact.special_rotation_velocity = 0.0;
                 }
                 AnimationState::WolfHowl => {
                     let target_x = if direction < 0.0 { -2.0 } else { 2.0 };
@@ -1540,7 +1570,7 @@ pub fn sync_player_skeletal_animation(
         let target_node = match sprite.state {
             AnimationState::LinearRun | AnimationState::WolfAttack => config.run_node,
             AnimationState::DemonAttack | AnimationState::ImperialSword | AnimationState::HeavenCast => config.kick_node,
-            AnimationState::Attack | AnimationState::Hit | AnimationState::WolfHowl => config.strike_node,
+            AnimationState::Attack | AnimationState::Hit | AnimationState::WolfHowl | AnimationState::BossFrenzy => config.strike_node,
             _ => config.idle_node,
         };
 
@@ -1560,7 +1590,12 @@ pub fn sync_player_skeletal_animation(
                         transitions.set_repeat(bevy::animation::RepeatAnimation::Forever);
                     } else {
                         transitions.set_repeat(bevy::animation::RepeatAnimation::Never);
-                        transitions.replay(); // 强制重新开始播放，解决“不播放”问题
+                        transitions.replay(); 
+                        
+                        // [优化] 如果是奔跑，稍微加快播放频率
+                        if sprite.state == AnimationState::LinearRun {
+                            transitions.set_speed(1.5);
+                        }
                     }
                     info!("【3D骨骼驱动】状态切换: {:?} -> 节点: {:?}", sprite.state, target_node);
                 }

@@ -2076,7 +2076,7 @@ fn handle_card_play(
                                 sprite.state = crate::components::sprite::AnimationState::ImperialSword;
                                 crate::components::sprite::AnimationState::ImperialSword
                             } else if card.name.contains("御剑术") {
-                                // 御剑术：重新设计的直线跑步冲刺
+                                // 御剑术：大作级跑动
                                 effect_events.send(SpawnEffectEvent::new(EffectType::SwordEnergy, Vec3::new(-3.5, 1.0, 0.2)));
                                 sprite.state = crate::components::sprite::AnimationState::LinearRun;
                                 crate::components::sprite::AnimationState::LinearRun
