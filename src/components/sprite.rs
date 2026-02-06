@@ -162,6 +162,8 @@ pub struct CharacterAssets {
     pub magic_circle: Handle<Image>,
     // --- 3D 模型资产 ---
     pub player_3d: Option<Handle<Scene>>,
+    /// [新增] 玩家动画剪辑
+    pub player_anims: Vec<Handle<AnimationClip>>,
     pub wolf_3d: Option<Handle<Scene>>,
     pub spider_3d: Option<Handle<Scene>>,
     pub spirit_3d: Option<Handle<Scene>>,
@@ -183,7 +185,11 @@ impl CharacterAssets {
             boss: asset_server.load("textures/enemies/boss.png"),
             magic_circle: asset_server.load("textures/magic_circle.png"),
             // 默认 3D 字段
-            player_3d: Some(asset_server.load("3d/stylized_warrior.glb#Scene0")),
+            player_3d: Some(asset_server.load("3d/player/warrior_main.glb#Scene0")),
+            player_anims: vec![
+                asset_server.load("3d/player/warrior_main.glb#Animation0"), // Idle
+                asset_server.load("3d/player/warrior_main.glb#Animation2"), // Attack (通常 GLB 索引 2 是攻击)
+            ],
             wolf_3d: None,
             spider_3d: None,
             spirit_3d: None,
@@ -207,6 +213,14 @@ pub struct Combatant3d {
     pub base_rotation: f32,
     /// [新增] 模型固有偏移量 (弧度)，用于纠正 Tripo3D 模型初始朝向不一的问题
     pub model_offset: f32,
+}
+
+/// [新增] 玩家骨骼动画配置
+#[derive(Component)]
+pub struct PlayerAnimationConfig {
+    pub graph: Handle<AnimationGraph>,
+    pub idle_node: AnimationNodeIndex,
+    pub attack_node: AnimationNodeIndex,
 }
 
 /// 呼吸动画组件

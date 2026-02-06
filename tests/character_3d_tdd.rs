@@ -19,13 +19,16 @@ fn test_character_3d_fallback_logic() {
     let character_assets = CharacterAssets {
         player_idle: Handle::<Image>::default(),
         wolf: Handle::<Image>::default(),
+        player_anims: vec![],
         // ... 其他 2D 贴图
         ..default()
     };
     app.insert_resource(character_assets);
 
     // --- 🔴 红区：模拟 3D 模型未加载 (句柄为 None) ---
-    app.world_mut().run_system_once(|mut commands: Commands, assets: Res<CharacterAssets>, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>| {
+    app.init_asset::<AnimationClip>();
+    app.init_asset::<AnimationGraph>();
+    app.world_mut().run_system_once(|mut commands: Commands, assets: Res<CharacterAssets>, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>, mut graphs: ResMut<Assets<AnimationGraph>>| {
         spawn_character_sprite(
             &mut commands,
             &assets,
@@ -36,6 +39,8 @@ fn test_character_3d_fallback_logic() {
             None,
             &mut meshes,
             &mut materials,
+            &mut graphs,
+            None,
         );
     });
 
@@ -54,7 +59,7 @@ fn test_character_3d_fallback_logic() {
         assets.player_3d = Some(mock_scene.clone()); // 注入模拟 3D 句柄
     }
 
-    app.world_mut().run_system_once(|mut commands: Commands, assets: Res<CharacterAssets>, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>| {
+    app.world_mut().run_system_once(|mut commands: Commands, assets: Res<CharacterAssets>, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>, mut graphs: ResMut<Assets<AnimationGraph>>| {
         spawn_character_sprite(
             &mut commands,
             &assets,
@@ -65,6 +70,8 @@ fn test_character_3d_fallback_logic() {
             None,
             &mut meshes,
             &mut materials,
+            &mut graphs,
+            None,
         );
     });
 

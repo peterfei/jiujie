@@ -11,7 +11,7 @@ use crate::resources::{ArenaAssets, PlayerAssets};
 use crate::components::sprite::{
     CharacterSprite, AnimationState, CharacterType,
     CharacterAnimationEvent, SpriteMarker, PlayerSpriteMarker, EnemySpriteMarker,
-    Combatant3d, BreathAnimation, PhysicalImpact, CharacterAssets, Rotating, Ghost, ActionType,
+    Combatant3d, PlayerAnimationConfig, BreathAnimation, PhysicalImpact, CharacterAssets, Rotating, Ghost, ActionType,
     MagicSealMarker, RelicVisualMarker, SpiritClone, CombatCamera,
     ArenaLantern, ArenaVegetation, ArenaSpiritStone, PlayerWeapon
 };
@@ -47,6 +47,7 @@ impl Plugin for SpritePlugin {
                 update_wind_sway, 
                 update_water, 
                 update_sprite_animations,
+                sync_player_skeletal_animation, // [新增] 骨骼动画同步
                 update_weapon_animation, // [新增]
             ).run_if(in_state(GameState::Combat))
         );
@@ -460,10 +461,10 @@ pub fn trigger_hit_feedback(
                 }
                 AnimationState::ImperialSword => {
                     impact.action_type = ActionType::None;
-                    let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
-                    impact.target_offset_dist = (target_x - impact.home_position.x).abs() * 0.5;
-                    impact.tilt_velocity = -25.0 * direction; 
-                    impact.offset_velocity = Vec3::new(15.0 * direction, 0.0, 0.0);
+                    // [关键修正] 万剑归宗期间，修行者原地施法，不再向前突进
+                    impact.target_offset_dist = 0.0;
+                    impact.tilt_velocity = 0.0; 
+                    impact.offset_velocity = Vec3::ZERO;
                     impact.special_rotation_velocity = 150.0 * direction; 
                 }
                                 AnimationState::HeavenCast => {
@@ -1310,6 +1311,7 @@ pub fn spawn_character_sprite(
     tint: Option<Color>, 
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
+    graphs: &mut Assets<AnimationGraph>,
     player_assets: Option<&PlayerAssets>,
 ) -> Entity {
     // 1. 资源准备
@@ -1322,6 +1324,25 @@ pub fn spawn_character_sprite(
         CharacterType::CursedSpirit => character_assets.spirit_3d.as_ref(),
         CharacterType::GreatDemon => character_assets.boss_3d.as_ref(),
     };
+
+    // [新增] 玩家骨骼动画初始化逻辑
+    let mut anim_config = None;
+    if character_type == CharacterType::Player {
+        let mut graph = AnimationGraph::new();
+        // 假设索引 0 为 Idle, 1 为 Attack (根据补充的模型路径加载的 Handle)
+        let idle_clip = character_assets.player_anims.get(0).cloned().unwrap_or_default();
+        let attack_clip = character_assets.player_anims.get(1).cloned().unwrap_or_default();
+        
+        let idle_node = graph.add_clip(idle_clip, 1.0, graph.root);
+        let attack_node = graph.add_clip(attack_clip, 1.0, graph.root);
+        
+        let graph_handle = graphs.add(graph);
+        anim_config = Some(PlayerAnimationConfig {
+            graph: graph_handle,
+            idle_node,
+            attack_node,
+        });
+    }
 
     let texture_2d = match character_type {
         CharacterType::Player => character_assets.player_idle.clone(),
@@ -1367,6 +1388,13 @@ pub fn spawn_character_sprite(
         BreathAnimation::default(),
         Combatant3d { facing_right, base_rotation, model_offset },
     ));
+
+    if let Some(config) = anim_config {
+        entity_cmd.insert((
+            AnimationGraphHandle(config.graph.clone()),
+            config,
+        ));
+    }
 
     if let Some(model_handle) = model_3d {
         // [AAA] 3D 分支：挂载模型
@@ -1478,6 +1506,43 @@ pub fn update_combatant_orientation(
             // [算法修正] 怪物也统一使用 (Target - Self)
             let dir = player_pos - enemy_transform.translation;
             enemy_combatant.base_rotation = dir.x.atan2(dir.z);
+        }
+    }
+}
+
+/// [新增] 修行者骨骼动画同步系统
+/// 
+/// 监听动画状态变更，通过 PlayerAnimationConfig 驱动 3D 模型内部的 AnimationPlayer。
+pub fn sync_player_skeletal_animation(
+    player_q: Query<(Entity, &CharacterSprite, &PlayerAnimationConfig, &Children), (With<PlayerSpriteMarker>, Changed<CharacterSprite>)>,
+    children_q: Query<&Children>,
+    mut anim_player_q: Query<&mut AnimationPlayer>,
+) {
+    for (_entity, sprite, config, children) in player_q.iter() {
+        // 在子实体树中递归查找 AnimationPlayer
+        let mut entities_to_check: Vec<Entity> = children.iter().cloned().collect();
+        while let Some(entity) = entities_to_check.pop() {
+            if let Ok(mut player) = anim_player_q.get_mut(entity) {
+                match sprite.state {
+                    AnimationState::Attack | AnimationState::ImperialSword | AnimationState::DemonAttack => {
+                        // 播放攻击动画
+                        player.play(config.attack_node)
+                            .set_repeat(bevy::animation::RepeatAnimation::Never)
+                            .replay();
+                    }
+                    AnimationState::Idle => {
+                        // 恢复待机动画
+                        player.play(config.idle_node)
+                            .set_repeat(bevy::animation::RepeatAnimation::Forever)
+                            .replay();
+                    }
+                    _ => {}
+                }
+            }
+            
+            if let Ok(sub_children) = children_q.get(entity) {
+                entities_to_check.extend(sub_children.iter().cloned());
+            }
         }
     }
 }

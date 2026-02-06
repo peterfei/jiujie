@@ -12,20 +12,22 @@ fn test_character_orientation_algorithm_v7() {
     app.init_asset::<Mesh>();
     app.init_asset::<StandardMaterial>();
     app.init_asset::<Scene>();
+    app.init_asset::<AnimationClip>();
+    app.init_asset::<AnimationGraph>();
 
     let assets = CharacterAssets::default();
     app.insert_resource(assets);
 
     // 1. 生成玩家和敌人
     {
-        let mut system_state: SystemState<(Commands, Res<CharacterAssets>, ResMut<Assets<Mesh>>, ResMut<Assets<StandardMaterial>>)> = SystemState::new(app.world_mut());
-        let (mut commands, assets, mut meshes, mut materials) = system_state.get_mut(app.world_mut());
+        let mut system_state: SystemState<(Commands, Res<CharacterAssets>, ResMut<Assets<Mesh>>, ResMut<Assets<StandardMaterial>>, ResMut<Assets<AnimationGraph>>)> = SystemState::new(app.world_mut());
+        let (mut commands, assets, mut meshes, mut materials, mut graphs) = system_state.get_mut(app.world_mut());
         
         // 玩家在左侧 (-350 -> -3.5)
-        spawn_character_sprite(&mut commands, &assets, CharacterType::Player, Vec3::new(-350.0, 0.0, 0.0), Vec2::splat(100.0), None, None, &mut *meshes, &mut *materials, None);
+        spawn_character_sprite(&mut commands, &assets, CharacterType::Player, Vec3::new(-350.0, 0.0, 0.0), Vec2::splat(100.0), None, None, &mut *meshes, &mut *materials, &mut *graphs, None);
         
         // 敌人在右侧 (350 -> 3.5)
-        spawn_character_sprite(&mut commands, &assets, CharacterType::DemonicWolf, Vec3::new(350.0, 0.0, 0.0), Vec2::splat(100.0), Some(1), None, &mut *meshes, &mut *materials, None);
+        spawn_character_sprite(&mut commands, &assets, CharacterType::DemonicWolf, Vec3::new(350.0, 0.0, 0.0), Vec2::splat(100.0), Some(1), None, &mut *meshes, &mut *materials, &mut *graphs, None);
         
         system_state.apply(app.world_mut());
     }

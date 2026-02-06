@@ -35,6 +35,8 @@ pub struct Particle {
     pub seed: f32,
     /// 特效类型
     pub effect_type: EffectType,
+    /// [新增] 关联的 3D 模型 (用于万剑归宗主剑)
+    pub model: Option<Handle<Scene>>,
 }
 
 impl Particle {
@@ -46,6 +48,7 @@ impl Particle {
             target: None, target_entity: None, target_group: None, target_index: None, lock_pos: None,
             start_pos: Vec2::ZERO, seed: rand::random::<f32>(),
             effect_type: EffectType::Hit,
+            model: None,
         }
     }
 
@@ -398,6 +401,8 @@ pub struct SpawnEffectEvent {
     pub target_group: Vec<(Entity, Vec2)>,
     /// 万剑归宗需要的个体索引
     pub target_index: usize,
+    /// [新增] 模型覆盖
+    pub model_override: Option<Handle<Scene>>,
 }
 
 impl SpawnEffectEvent {
@@ -411,11 +416,17 @@ impl SpawnEffectEvent {
             target_entity: None,
             target_group: Vec::new(),
             target_index: 0,
+            model_override: None,
         }
     }
     
     pub fn burst(mut self, count: u32) -> Self {
         self.count = count;
+        self
+    }
+
+    pub fn with_model(mut self, model: Handle<Scene>) -> Self {
+        self.model_override = Some(model);
         self
     }
 

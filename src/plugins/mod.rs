@@ -70,6 +70,9 @@ impl Plugin for CorePlugin {
 
         // [新增] 生命周期收尾
         app.add_systems(Update, check_wanjian_end.run_if(in_state(GameState::Combat)));
+        
+        // [新增] 万剑归宗触发响应
+        app.add_observer(handle_wanjian_trigger);
     }
 }
 
@@ -86,6 +89,27 @@ fn check_wanjian_end(
 
     if !has_wanjian && is_hidden {
         commands.trigger(WanJianTriggerEvent::End);
+    }
+}
+
+/// [新增] 处理万剑归宗触发事件：控制手中武器显隐
+fn handle_wanjian_trigger(
+    trigger: Trigger<WanJianTriggerEvent>,
+    mut weapon_q: Query<&mut Visibility, With<PlayerWeapon>>,
+) {
+    match trigger.event() {
+        WanJianTriggerEvent::Start => {
+            for mut vis in weapon_q.iter_mut() {
+                *vis = Visibility::Hidden;
+            }
+            info!("【万剑归宗】手中剑已离手，化作漫天剑影");
+        }
+        WanJianTriggerEvent::End => {
+            for mut vis in weapon_q.iter_mut() {
+                *vis = Visibility::Inherited;
+            }
+            info!("【万剑归宗】万剑归一，剑回手中");
+        }
     }
 }
 
@@ -458,7 +482,11 @@ pub fn preload_assets(
         boss: asset_server.load("textures/enemies/boss.png"),
         magic_circle: asset_server.load("textures/magic_circle.png"),
         // 注入 3D 模型
-        player_3d: Some(asset_server.load("3d/player.glb#Scene0")),
+        player_3d: Some(asset_server.load("3d/player/warrior_main.glb#Scene0")),
+        player_anims: vec![
+            asset_server.load("3d/player/warrior_main.glb#Animation0"),
+            asset_server.load("3d/player/warrior_main.glb#Animation1"),
+        ],
         wolf_3d: Some(asset_server.load("3d/fantasy_wolf.glb#Scene0")),
         spider_3d: Some(asset_server.load("3d/ornate_green_spider.glb#Scene0")),
         boss_3d: Some(asset_server.load("3d/fantasy_armored_warrior.glb#Scene0")),
@@ -856,6 +884,7 @@ fn setup_combat_ui(
     map_ui: Query<Entity, With<MapUiRoot>>, 
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
     let character_assets = if let Some(ca) = character_assets_opt { ca } else { error!("缺失 CharacterAssets"); return; };
     let player_deck = if let Some(pd) = player_deck_opt { pd } else { error!("缺失 PlayerDeck"); return; };
@@ -939,6 +968,7 @@ fn setup_combat_ui(
                 Some(gen_enemy.visual_color),
                 &mut *meshes,
                 &mut *materials,
+                &mut *graphs,
                 player_assets,
             );
 
@@ -1074,6 +1104,7 @@ fn setup_combat_ui(
         None, // 玩家无染色
         &mut *meshes,
         &mut *materials,
+        &mut *graphs,
         player_assets,
     );
 
@@ -2022,6 +2053,7 @@ fn handle_card_play(
     env: Option<Res<Environment>>,
     mut heavenly_cinematic: ResMut<HeavenlyStrikeCinematic>, 
     victory_delay: Res<VictoryDelay>, // 引入资源
+    player_assets_opt: Option<Res<PlayerAssets>>,
     queries: (
         Query<Entity, With<PlayerSpriteMarker>>,
         Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
@@ -2143,6 +2175,7 @@ fn handle_card_play(
                             env.as_ref().map(|r| r.as_ref()),
                             &mut heavenly_cinematic, // 传递演出资源
                             &mut sfx_events,
+                            player_assets_opt.as_ref().map(|r| r.as_ref()),
                         );
 
                     // 3. 移出手牌
@@ -2181,8 +2214,9 @@ fn apply_card_effect(
     enemy_impact_query: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &crate::components::sprite::PhysicalImpact)>,
     _camera_query: &Query<(&Camera, &GlobalTransform), With<Camera3d>>,
     environment: Option<&Environment>,
-    heavenly_cinematic: &mut HeavenlyStrikeCinematic, // 新增
+    heavenly_cinematic: &mut HeavenlyStrikeCinematic,
     sfx_events: &mut EventWriter<PlaySfxEvent>,
+    player_assets: Option<&PlayerAssets>,
 ) {
     let card_name = card.name.clone();
     match &card.effect {
@@ -2300,15 +2334,23 @@ fn apply_card_effect(
                     if !alive_enemies.is_empty() {
                         let total_swords = 80;
                         let swords_per_enemy = (total_swords / alive_enemies.len()) as u32;
+                        
+                        // 获取武器模型用于“飞剑夺路”
+                        let weapon_model = player_assets.map(|pa| pa.weapon.clone());
+
                         for (idx, (entity, _)) in alive_enemies.iter().enumerate() {
-                            effect_events.send(
-                                SpawnEffectEvent::new(EffectType::WanJian, Vec3::new(-350.0, -80.0, 0.5))
+                            let mut event = SpawnEffectEvent::new(EffectType::WanJian, Vec3::new(-350.0, -80.0, 0.5))
                                     .burst(swords_per_enemy)
                                     .with_target(alive_enemies[idx].1)
                                     .with_target_entity(*entity)
                                     .with_target_group(alive_enemies.clone())
-                                    .with_target_index(idx)
-                            );
+                                    .with_target_index(idx);
+                            
+                            if let Some(ref model) = weapon_model {
+                                event = event.with_model(model.clone());
+                            }
+                            
+                            effect_events.send(event);
                         }
                     }
                                 } else {

@@ -205,8 +205,11 @@ pub fn handle_effect_events(
 
                 // [核心进化] 万剑归宗优先使用 3D 模型渲染
                 if p.effect_type == EffectType::WanJian {
-                    if let Some(pa) = &player_assets_opt {
-                        spawn_3d_sword_particle(&mut commands, &assets, p, &pa.weapon);
+                    // 优先使用事件传入的模型，其次使用玩家资源中的武器
+                    let model_to_use = event.model_override.as_ref().or(player_assets_opt.as_ref().map(|pa| &pa.weapon));
+                    
+                    if let Some(model) = model_to_use {
+                        spawn_3d_sword_particle(&mut commands, &assets, p, model);
                         continue;
                     }
                 }
