@@ -187,8 +187,9 @@ impl CharacterAssets {
             // 默认 3D 字段
             player_3d: Some(asset_server.load("3d/player/warrior_main.glb#Scene0")),
             player_anims: vec![
-                asset_server.load("3d/player/warrior_main.glb#Animation0"), // Idle
-                asset_server.load("3d/player/warrior_main.glb#Animation2"), // Attack (通常 GLB 索引 2 是攻击)
+                asset_server.load("3d/player/warrior_main.glb#Animation1"), // Idle
+                asset_server.load("3d/player/warrior_main.glb#Animation2"), // Attack
+                asset_server.load("3d/player/warrior_main.glb#Animation3"), // Cast
             ],
             wolf_3d: None,
             spider_3d: None,
@@ -221,6 +222,7 @@ pub struct PlayerAnimationConfig {
     pub graph: Handle<AnimationGraph>,
     pub idle_node: AnimationNodeIndex,
     pub attack_node: AnimationNodeIndex,
+    pub cast_node: AnimationNodeIndex,
 }
 
 /// 呼吸动画组件

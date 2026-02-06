@@ -461,11 +461,12 @@ pub fn trigger_hit_feedback(
                 }
                 AnimationState::ImperialSword => {
                     impact.action_type = ActionType::None;
-                    // [关键修正] 万剑归宗期间，修行者原地施法，不再向前突进
+                    // [最终修复] 彻底锁定物理参数，仅保留呼吸，全力配合骨骼动画
                     impact.target_offset_dist = 0.0;
                     impact.tilt_velocity = 0.0; 
                     impact.offset_velocity = Vec3::ZERO;
-                    impact.special_rotation_velocity = 150.0 * direction; 
+                    impact.special_rotation = 0.0; // 锁定旋转
+                    impact.special_rotation_velocity = 0.0; // 停止转圈
                 }
                                 AnimationState::HeavenCast => {
                                     impact.action_type = ActionType::Ascend;
@@ -1332,15 +1333,18 @@ pub fn spawn_character_sprite(
         // 假设索引 0 为 Idle, 1 为 Attack (根据补充的模型路径加载的 Handle)
         let idle_clip = character_assets.player_anims.get(0).cloned().unwrap_or_default();
         let attack_clip = character_assets.player_anims.get(1).cloned().unwrap_or_default();
+        let cast_clip = character_assets.player_anims.get(2).cloned().unwrap_or_default();
         
         let idle_node = graph.add_clip(idle_clip, 1.0, graph.root);
         let attack_node = graph.add_clip(attack_clip, 1.0, graph.root);
+        let cast_node = graph.add_clip(cast_clip, 1.0, graph.root);
         
         let graph_handle = graphs.add(graph);
         anim_config = Some(PlayerAnimationConfig {
             graph: graph_handle,
             idle_node,
             attack_node,
+            cast_node,
         });
     }
 
@@ -1422,11 +1426,13 @@ pub fn spawn_character_sprite(
                 if let Some(pa) = player_assets {
                     parent.spawn((
                         SceneRoot(pa.weapon.clone()),
-                        // 修正：将剑从竖直状态旋转至斜指前方 (绕 Z 轴转 -90度指向右，再绕 Y 轴微调)
-                        // 假设剑原本朝上 (+Y)
-                        Transform::from_xyz(0.2, 0.8, 0.2) // 稍微提高一点位置
+                        // 修正：将剑从竖直状态旋转至斜指前方
+                        Transform::from_xyz(0.2, 0.8, 0.2) 
                             .with_rotation(Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2) * Quat::from_rotation_y(0.3)),
                         PlayerWeapon,
+                        Visibility::Visible,
+                        InheritedVisibility::default(),
+                        ViewVisibility::default(),
                     ));
                 }
             }
@@ -1512,9 +1518,9 @@ pub fn update_combatant_orientation(
 
 /// [新增] 修行者骨骼动画同步系统
 /// 
-/// 监听动画状态变更，通过 PlayerAnimationConfig 驱动 3D 模型内部的 AnimationPlayer。
+/// 持续监听动画状态，通过 PlayerAnimationConfig 驱动 3D 模型内部的 AnimationPlayer。
 pub fn sync_player_skeletal_animation(
-    player_q: Query<(Entity, &CharacterSprite, &PlayerAnimationConfig, &Children), (With<PlayerSpriteMarker>, Changed<CharacterSprite>)>,
+    player_q: Query<(Entity, &CharacterSprite, &PlayerAnimationConfig, &Children), With<PlayerSpriteMarker>>,
     children_q: Query<&Children>,
     mut anim_player_q: Query<&mut AnimationPlayer>,
 ) {
@@ -1523,20 +1529,25 @@ pub fn sync_player_skeletal_animation(
         let mut entities_to_check: Vec<Entity> = children.iter().cloned().collect();
         while let Some(entity) = entities_to_check.pop() {
             if let Ok(mut player) = anim_player_q.get_mut(entity) {
-                match sprite.state {
-                    AnimationState::Attack | AnimationState::ImperialSword | AnimationState::DemonAttack => {
-                        // 播放攻击动画
-                        player.play(config.attack_node)
-                            .set_repeat(bevy::animation::RepeatAnimation::Never)
-                            .replay();
+                let target_node = match sprite.state {
+                    AnimationState::Attack | AnimationState::DemonAttack => Some(config.attack_node),
+                    AnimationState::ImperialSword | AnimationState::HeavenCast | AnimationState::DemonCast => Some(config.cast_node),
+                    AnimationState::Idle => Some(config.idle_node),
+                    _ => Some(config.idle_node),
+                };
+
+                if let Some(node) = target_node {
+                    // [最终优化] 仅在节点变更或动画未活动时发起播放
+                    if !player.is_playing_animation(node) {
+                        let mut transitions = player.play(node);
+                        if sprite.state == AnimationState::Idle {
+                            transitions.set_repeat(bevy::animation::RepeatAnimation::Forever);
+                        } else {
+                            transitions.set_repeat(bevy::animation::RepeatAnimation::Never);
+                        }
+                        transitions.replay();
+                        info!("【骨骼动画驱动】实体已响应状态 {:?}, 播放节点 {:?}", sprite.state, node);
                     }
-                    AnimationState::Idle => {
-                        // 恢复待机动画
-                        player.play(config.idle_node)
-                            .set_repeat(bevy::animation::RepeatAnimation::Forever)
-                            .replay();
-                    }
-                    _ => {}
                 }
             }
             

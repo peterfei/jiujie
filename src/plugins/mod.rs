@@ -81,13 +81,14 @@ fn check_wanjian_end(
     mut commands: Commands,
     query: Query<&crate::components::particle::Particle>,
     weapon_query: Query<&Visibility, With<PlayerWeapon>>,
+    cinematic: Res<HeavenlyStrikeCinematic>,
 ) {
     use crate::components::particle::EffectType;
-    // 如果没有任何 WanJian 粒子，且武器还是 Hidden 状态，则恢复
+    // 如果没有任何 WanJian 粒子，且天象演出也已结束，且武器还是 Hidden 状态，则恢复
     let has_wanjian = query.iter().any(|p| p.effect_type == EffectType::WanJian);
     let is_hidden = weapon_query.iter().any(|v| matches!(*v, Visibility::Hidden));
 
-    if !has_wanjian && is_hidden {
+    if !has_wanjian && !cinematic.active && is_hidden {
         commands.trigger(WanJianTriggerEvent::End);
     }
 }
@@ -1415,6 +1416,8 @@ pub fn process_heavenly_strike_cinematic(
     if cinematic.timer.finished() {
         cinematic.active = false;
         cinematic.flash_count = 0;
+        // [新增] 引雷术结束：恢复武器
+        commands.trigger(WanJianTriggerEvent::End);
         info!("【天象演出】圆满结束");
     }
 }
@@ -2089,8 +2092,8 @@ fn handle_card_play(
                     // 1. 触发玩家动画 (精准隔离：御剑冲刺，天象原地)
                     if let Ok(player_entity) = player_sprite_query.get_single() {
                         if card.card_type == CardType::Attack {
-                            let anim = if card.name.contains("御剑术") {
-                                // 真正的御剑术：回旋冲刺
+                            let anim = if card.name.contains("御剑术") || card.name.contains("剑气斩") {
+                                // 远程/御剑攻击：回旋/剑气
                                 effect_events.send(SpawnEffectEvent::new(EffectType::SwordEnergy, Vec3::new(-3.5, 1.0, 0.2)));
                                 crate::components::sprite::AnimationState::ImperialSword
                             } else if card.name.contains("天象") {
@@ -2155,6 +2158,9 @@ fn handle_card_play(
                         }
                     }
 
+                        // 获取玩家实体 ID
+                        let player_entity = player_sprite_query.get_single().ok();
+
                         apply_card_effect(
                             &card,
                             &mut commands,
@@ -2176,6 +2182,7 @@ fn handle_card_play(
                             &mut heavenly_cinematic, // 传递演出资源
                             &mut sfx_events,
                             player_assets_opt.as_ref().map(|r| r.as_ref()),
+                            player_entity,
                         );
 
                     // 3. 移出手牌
@@ -2198,8 +2205,8 @@ fn handle_card_play(
 /// 应用卡牌效果
 fn apply_card_effect(
     card: &crate::components::cards::Card,
-    _commands: &mut Commands,
-    _asset_server: &Res<AssetServer>,
+    commands: &mut Commands,
+    asset_server: &Res<AssetServer>,
     player_query: &mut Query<(&mut Player, &crate::components::Cultivation)>,
     enemy_query: &mut Query<&mut Enemy>,
     draw_pile_query: &mut Query<&mut DrawPile>,
@@ -2212,11 +2219,12 @@ fn apply_card_effect(
     status_events: &mut EventWriter<StatusEffectEvent>,
     enemy_sprite_query: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &Transform)>,
     enemy_impact_query: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &crate::components::sprite::PhysicalImpact)>,
-    _camera_query: &Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    camera_query: &Query<(&Camera, &GlobalTransform), With<Camera3d>>,
     environment: Option<&Environment>,
     heavenly_cinematic: &mut HeavenlyStrikeCinematic,
     sfx_events: &mut EventWriter<PlaySfxEvent>,
     player_assets: Option<&PlayerAssets>,
+    player_entity: Option<Entity>,
 ) {
     let card_name = card.name.clone();
     match &card.effect {
@@ -2322,6 +2330,15 @@ fn apply_card_effect(
                 }
 
                 if card_name.contains("万剑归宗") {
+                    // [关键修复] 触发武器隐藏和防止位移的动画状态
+                    commands.trigger(WanJianTriggerEvent::Start);
+                    if let Some(target) = player_entity {
+                        anim_events.send(CharacterAnimationEvent {
+                            target,
+                            animation: crate::components::sprite::AnimationState::ImperialSword,
+                        });
+                    }
+
                     screen_events.send(ScreenEffectEvent::Shake { trauma: 1.0, decay: 0.45 });
                     let mut alive_enemies: Vec<(Entity, Vec2)> = Vec::new();
                     for (entity, marker, impact) in enemy_impact_query.iter() {
@@ -2375,15 +2392,17 @@ fn apply_card_effect(
         CardEffect::ChangeEnvironment { name } => {
             if card_name.contains("引雷术") {
                 info!("【卡牌】引动九天雷霆演出开始...");
+                // [新增] 引雷术开始：隐藏武器
+                commands.trigger(WanJianTriggerEvent::Start);
                 // 仅启动演出，不立即扣血或切换环境，基础伤害提升至 20
                 heavenly_cinematic.start(20, name.clone());
             } else {
                 info!("【卡牌】天象异变！环境变为: {}", name);
                 if name == "浓雾" {
-                    _commands.insert_resource(Environment::thick_fog());
+                    commands.insert_resource(Environment::thick_fog());
                     screen_events.send(ScreenEffectEvent::Flash { color: Color::srgba(0.7, 0.7, 0.7, 0.4), duration: 0.5 });
                 } else {
-                    _commands.insert_resource(Environment::default());
+                    commands.insert_resource(Environment::default());
                 }
                 if let Ok((mut player, _)) = player_query.get_single_mut() {
                     player.gain_block_with_env(5, environment);
