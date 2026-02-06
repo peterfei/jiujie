@@ -32,9 +32,10 @@ impl Plugin for SpritePlugin {
                 (
                     sync_2d_to_3d_render,
                     update_breath_animations,
+                    update_combatant_orientation, // [新增] 实时朝向算法
                     update_physical_impacts,
                 ).chain(),
-                update_combat_camera, // [新增] 交互摄像机
+                update_combat_camera, 
                 update_rotations,
                 update_magic_seal_pulse,
                 update_relic_floating,
@@ -414,10 +415,10 @@ pub fn update_physical_impacts(
         } else { 0.0 };
 
         // [关键修复] 改变旋转合成顺序：先应用 X 轴后仰，再应用 Y 轴转向
-        // 这样可以确保角色无论朝向左还是右，都是相对于自己的“正面”进行后仰
-        let base_y_rot = combatant.base_rotation;
+        // 叠加算法计算的 base_rotation 和模型固有的 model_offset
+        let final_y_rot = combatant.base_rotation + combatant.model_offset;
 
-        transform.rotation = Quat::from_rotation_y(base_y_rot + impact.special_rotation + action_tilt_offset + wolf_spin)
+        transform.rotation = Quat::from_rotation_y(final_y_rot + impact.special_rotation + action_tilt_offset + wolf_spin)
             * Quat::from_rotation_x(-0.2)
             * Quat::from_rotation_z(effective_tilt);
         
@@ -775,7 +776,7 @@ pub fn sync_2d_to_3d_render(
             let home_pos = Vec3::new(x_3d, 0.8, z_3d + 0.1);
             let mut entity_cmd = commands.entity(entity);
             entity_cmd.insert((
-                Combatant3d { facing_right: true, base_rotation: 0.0 },
+                Combatant3d { facing_right: true, base_rotation: 0.0, model_offset: 0.0 },
                 BreathAnimation::default(),
                 PhysicalImpact { home_position: home_pos, ..default() }, 
                 Mesh3d(mesh),
@@ -1339,12 +1340,18 @@ pub fn spawn_character_sprite(
     let z_3d = position.y / 100.0;
     let world_pos = Vec3::new(x_3d, 0.8, z_3d + 0.1);
 
-    // [关键修正] 统一所有敌人的朝向
-    // 1. 玩家: 设为 0.6，使其斜向右方 (面朝敌人且偏向镜头)
-    // 2. 所有敌人 (狼、蜘蛛、幽灵、BOSS): 统一设为 -PI/2，使其面向左方 (朝向玩家)
-    let base_rotation = match character_type {
-        CharacterType::Player => 0.6,
-        _ => -std::f32::consts::FRAC_PI_2, 
+    // [关键修正] 朝向现在由 update_combatant_orientation 系统通过算法实时计算
+    // 初始设为 0.0，系统会在第一帧自动纠正
+    let base_rotation = 0.0;
+    
+    // [新增] 针对 Tripo3D 导入模型的固有偏差补偿
+    // 修行者向左转 90 度 (PI/2)，怪物向右转 90 度 (-PI/2)
+    let model_offset = match character_type {
+        CharacterType::Player => std::f32::consts::PI + std::f32::consts::FRAC_PI_2, 
+        CharacterType::DemonicWolf => -std::f32::consts::FRAC_PI_2, 
+        CharacterType::PoisonSpider => -std::f32::consts::FRAC_PI_2,
+        CharacterType::CursedSpirit => -std::f32::consts::FRAC_PI_2,
+        CharacterType::GreatDemon => -std::f32::consts::FRAC_PI_2,
     };
 
     let is_player = character_type == CharacterType::Player;
@@ -1352,13 +1359,13 @@ pub fn spawn_character_sprite(
 
     // 2. 生成实体 (3D 优先)
     let mut entity_cmd = commands.spawn((
-        Transform::from_translation(world_pos).with_rotation(Quat::from_rotation_y(base_rotation) * Quat::from_rotation_x(-0.2)),
+        Transform::from_translation(world_pos).with_rotation(Quat::from_rotation_y(base_rotation + model_offset) * Quat::from_rotation_x(-0.2)),
         Visibility::default(), InheritedVisibility::default(), ViewVisibility::default(),
         SpriteMarker,
-        sprite, // 必须挂载，用于保存战斗状态 (AnimationState)
-        PhysicalImpact { home_position: world_pos, ..default() }, // 必须挂载，否则无法处理位移
-        BreathAnimation::default(), // 必须挂载，提供生命力
-        Combatant3d { facing_right, base_rotation },
+        sprite, 
+        PhysicalImpact { home_position: world_pos, ..default() }, 
+        BreathAnimation::default(),
+        Combatant3d { facing_right, base_rotation, model_offset },
     ));
 
     if let Some(model_handle) = model_3d {
@@ -1445,3 +1452,32 @@ pub fn spawn_character_sprite(
             entity
             
         }
+
+/// [新增] 实时朝向计算系统
+/// 
+/// 利用算法动态计算玩家与怪物之间的相对位置，确保它们始终面对面。
+pub fn update_combatant_orientation(
+    mut player_q: Query<(&Transform, &mut Combatant3d), (With<PlayerSpriteMarker>, Without<EnemySpriteMarker>)>,
+    mut enemy_q: Query<(&Transform, &mut Combatant3d), (With<EnemySpriteMarker>, Without<PlayerSpriteMarker>)>,
+) {
+    let enemy_positions: Vec<Vec3> = enemy_q.iter().map(|(t, _)| t.translation).collect();
+    if enemy_positions.is_empty() { return; }
+    
+    // 1. 玩家面向所有敌人的中心点
+    let enemy_center = enemy_positions.iter().sum::<Vec3>() / enemy_positions.len() as f32;
+    if let Ok((player_transform, mut player_combatant)) = player_q.get_single_mut() {
+        // [算法修正] 重新使用 (Target - Self) 逻辑，并确保模型正面 (+Z) 指向目标
+        let dir = enemy_center - player_transform.translation;
+        player_combatant.base_rotation = dir.x.atan2(dir.z);
+    }
+    
+    // 2. 每个怪物分别面向玩家
+    if let Ok((player_transform, _)) = player_q.get_single() {
+        let player_pos = player_transform.translation;
+        for (enemy_transform, mut enemy_combatant) in enemy_q.iter_mut() {
+            // [算法修正] 怪物也统一使用 (Target - Self)
+            let dir = player_pos - enemy_transform.translation;
+            enemy_combatant.base_rotation = dir.x.atan2(dir.z);
+        }
+    }
+}
