@@ -170,12 +170,12 @@ fn update_relic_floating(
 /// 更新物理冲击效果
 pub fn update_physical_impacts(
     time: Res<Time>,
-    mut query: Query<(&mut Transform, &mut PhysicalImpact, &BreathAnimation, &Combatant3d)>,
+    mut query: Query<(&mut Transform, &mut PhysicalImpact, &BreathAnimation, &Combatant3d, Option<&mut CharacterSprite>)>,
     mut effect_events: EventWriter<crate::components::particle::SpawnEffectEvent>,
     mut screen_events: EventWriter<crate::components::ScreenEffectEvent>,
 ) {
     let dt = time.delta_secs().min(0.033);
-    for (mut transform, mut impact, breath, combatant) in query.iter_mut() {
+    for (mut transform, mut impact, breath, combatant, mut sprite_opt) in query.iter_mut() {
         // 1. 模拟旋转弹簧力
         let spring_k = 25.0; 
         let damping = 6.0;
@@ -255,6 +255,42 @@ pub fn update_physical_impacts(
                 ActionType::SpiderWeb => {
                     pos_damping = 5.0;
                     impact.offset_velocity = Vec3::new(4.5 * dir, 0.0, 0.0);
+                },
+                ActionType::Dash => {
+                    // [御剑术重新设计] 纯净直线冲刺，严禁任何额外旋转
+                    let target_dist = impact.target_offset_dist;
+                    let current_dist = impact.current_offset.x.abs();
+                    let dist_left = (target_dist - current_dist).max(0.0);
+                    
+                    // 彻底清除所有程序化旋转和倾斜，确保原始骨骼动画的正直性
+                    impact.special_rotation = 0.0;
+                    impact.special_rotation_velocity = 0.0;
+                    impact.tilt_amount = 0.0;
+                    impact.tilt_velocity = 0.0;
+                    action_tilt_offset = 0.0;
+                    
+                    // 到位判定
+                    if dist_left < 0.5 && impact.action_stage == 0 {
+                        if let Some(ref mut sprite) = sprite_opt {
+                            if sprite.state == AnimationState::WolfAttack || sprite.state == AnimationState::LinearRun {
+                                sprite.state = AnimationState::Attack;
+                                
+                                use crate::components::particle::EffectType;
+                                let hit_pos = (impact.home_position + impact.current_offset) * 100.0;
+                                effect_events.send(crate::components::particle::SpawnEffectEvent::new(
+                                    EffectType::WolfSlash, hit_pos
+                                ).burst(3));
+                                
+                                info!("【3D重构】冲刺到位 -> 切换挥砍");
+                            }
+                        }
+                        impact.action_stage = 1;
+                    }
+
+                    // 稳定的直线速度 (优化: 25.0 兼顾动感与跑步展示)
+                    let speed = if dist_left < 1.0 { (dist_left / 1.0).max(0.3) * 25.0 } else { 25.0 };
+                    impact.offset_velocity = Vec3::new(speed * dir, 0.0, 0.0);
+                    pos_damping = 5.0; 
                 },
                 ActionType::WolfPounce => {
                     // 1. 狼扑动作终极版：蓄力 + 动态抛物线
@@ -387,10 +423,15 @@ pub fn update_physical_impacts(
             }
         }
 
-        let pos_force = -pos_spring_k * impact.current_offset;
-        impact.offset_velocity += pos_force * dt;
-        impact.offset_velocity *= 1.0 - (pos_damping * dt);
+        // 5. [物理核心修复] 弹簧回归力逻辑修正
+        // 如果正在执行特定动作 (如 Dash)，禁用向 home_position 的强力弹簧，直到动作结束
+        if impact.action_timer <= 0.0 {
+            let pos_force = -pos_spring_k * impact.current_offset;
+            impact.offset_velocity += pos_force * dt;
+        }
         
+        // 应用阻尼并积分
+        impact.offset_velocity *= 1.0 - (pos_damping * dt);
         let move_delta = impact.offset_velocity * dt;
         impact.current_offset += move_delta;
 
@@ -404,11 +445,16 @@ pub fn update_physical_impacts(
 
         impact.tilt_amount = impact.tilt_amount.clamp(-1.0, 1.0);
 
-        let is_acting = impact.action_timer > 0.0 || impact.current_offset.length() > 0.05 || impact.offset_velocity.length() > 0.5;
-        let breath_y = if is_acting { 0.0 } else { (breath.timer * breath.frequency).sin() * 0.02 };
+        let is_moving = impact.current_offset.length() > 0.1 || impact.offset_velocity.length() > 0.5;
+        let is_timer_active = impact.action_timer > 0.01; 
+        
+        let breath_y = if is_moving || is_timer_active { 0.0 } else { (breath.timer * breath.frequency).sin() * 0.02 };
 
-        let tilt_suppression = 1.0 / (1.0 + impact.special_rotation.abs() * 5.0);
-        let effective_tilt = impact.tilt_amount * tilt_suppression;
+        let is_dash = impact.action_timer > 0.0 && impact.action_type == ActionType::Dash;
+        let tilt_suppression = if is_dash { 0.0 } else { 1.0 / (1.0 + impact.special_rotation.abs() * 5.0) };
+        let effective_tilt = if is_dash { 0.0 } else { impact.tilt_amount * tilt_suppression };
+        
+        let effective_special_rot = if is_dash { 0.0 } else { impact.special_rotation };
 
         let wolf_spin = if impact.action_timer > 0.0 && impact.action_type == ActionType::WolfBite {
             let progress = (1.0 - (impact.action_timer / 1.0)).clamp(0.0, 1.0);
@@ -419,7 +465,7 @@ pub fn update_physical_impacts(
         // 叠加算法计算的 base_rotation 和模型固有的 model_offset
         let final_y_rot = combatant.base_rotation + combatant.model_offset;
 
-        transform.rotation = Quat::from_rotation_y(final_y_rot + impact.special_rotation + action_tilt_offset + wolf_spin)
+        transform.rotation = Quat::from_rotation_y(final_y_rot + effective_special_rot + action_tilt_offset + wolf_spin)
             * Quat::from_rotation_x(-0.2)
             * Quat::from_rotation_z(effective_tilt);
         
@@ -432,6 +478,7 @@ pub fn trigger_hit_feedback(
     mut commands: Commands,
     mut events: EventReader<CharacterAnimationEvent>,
     mut query: Query<(&mut PhysicalImpact, &CharacterSprite, Option<&PlayerSpriteMarker>)>,
+    mut effect_events: EventWriter<crate::components::particle::SpawnEffectEvent>,
 ) {
     for event in events.read() {
         if let Ok((mut impact, sprite, is_player)) = query.get_mut(event.target) {
@@ -459,38 +506,46 @@ pub fn trigger_hit_feedback(
                     impact.tilt_velocity = -40.0 * direction;
                     impact.offset_velocity = Vec3::new(20.0 * direction, 0.0, 0.0);
                 }
-                AnimationState::ImperialSword => {
+                AnimationState::LinearRun => {
+                    // [新版御剑术] 纯净起步，严禁任何偏转
+                    let target_x = if direction < 0.0 { -2.0 } else { 2.0 };
+                    impact.target_offset_dist = (target_x - impact.home_position.x).abs();
+                    impact.action_type = ActionType::Dash; 
+                    impact.action_timer = 0.8;
+                    impact.action_stage = 0;
+                    impact.tilt_velocity = 0.0;
+                    impact.offset_velocity = Vec3::ZERO; 
+                    impact.special_rotation = 0.0;
+                    impact.special_rotation_velocity = 0.0;
+                }
+                AnimationState::ImperialSword | AnimationState::DemonAttack => {
                     impact.action_type = ActionType::None;
-                    // [最终修复] 彻底锁定物理参数，仅保留呼吸，全力配合骨骼动画
                     impact.target_offset_dist = 0.0;
                     impact.tilt_velocity = 0.0; 
                     impact.offset_velocity = Vec3::ZERO;
-                    impact.special_rotation = 0.0; // 锁定旋转
-                    impact.special_rotation_velocity = 0.0; // 停止转圈
+                    impact.special_rotation = 0.0; 
+                    impact.special_rotation_velocity = 0.0; 
+
+                    if event.animation == AnimationState::DemonAttack {
+                        use crate::components::particle::EffectType;
+                        let spawn_pos = impact.home_position * 100.0 + Vec3::new(200.0 * direction, 0.0, 0.0);
+                        effect_events.send(crate::components::particle::SpawnEffectEvent::new(EffectType::WolfSlash, spawn_pos));
+                    }
                 }
-                                AnimationState::HeavenCast => {
-                                    impact.action_type = ActionType::Ascend;
-                                    impact.action_timer = 3.5; 
-                                    impact.tilt_velocity = 0.0;
-                 
+                AnimationState::HeavenCast => {
+                    impact.action_type = ActionType::Ascend;
+                    impact.action_timer = 3.5; 
+                    impact.tilt_velocity = 0.0;
                     impact.special_rotation = 0.0;
                     impact.special_rotation_velocity = 0.0; 
                     impact.offset_velocity = Vec3::ZERO;
                 }
                 AnimationState::Defense => {
                     impact.action_type = ActionType::None;
-                    // 防御功法：彻底静止，仅微调倾斜
                     impact.tilt_velocity = -5.0 * direction; 
                     impact.special_rotation = 0.0;
                     impact.special_rotation_velocity = 0.0;
                     impact.offset_velocity = Vec3::ZERO;
-                }
-                AnimationState::DemonAttack => {
-                    impact.action_type = ActionType::None;
-                    let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
-                    impact.target_offset_dist = (target_x - impact.home_position.x).abs();
-                    impact.tilt_velocity = -20.0 * direction;
-                    impact.offset_velocity = Vec3::new(12.0 * direction, 0.0, 0.0);
                 }
                 AnimationState::DemonCast => {
                     impact.action_type = ActionType::DemonCast;
@@ -500,20 +555,18 @@ pub fn trigger_hit_feedback(
                     impact.action_timer = 0.6; 
                 }
                 AnimationState::WolfAttack => {
-                    let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
+                    let target_x = if direction < 0.0 { -2.0 } else { 2.0 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
-                    impact.action_type = ActionType::WolfPounce;
-                    impact.tilt_velocity = -12.0 * direction;
-                    impact.offset_velocity = Vec3::new(15.0 * direction, 0.0, 0.0);
+                    impact.action_type = ActionType::Dash; 
                     impact.action_timer = 0.8;
+                    impact.tilt_velocity = -10.0 * direction;
+                    impact.offset_velocity = Vec3::new(18.0 * direction, 0.0, 0.0);
                 }
                 AnimationState::WolfHowl => {
                     let target_x = if direction < 0.0 { -2.0 } else { 2.0 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
                     impact.action_type = ActionType::SiriusFrenzy;
                     impact.action_timer = 0.9;
-                    impact.action_stage = 0;
-                    impact.trail_timer = 0.0; // 立即开始生成
                     impact.offset_velocity = Vec3::ZERO;
                     impact.tilt_velocity = 0.0;
                 }
@@ -521,7 +574,7 @@ pub fn trigger_hit_feedback(
                     let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
                     impact.action_type = ActionType::SkitterApproach;
-                    impact.tilt_velocity = -1.0 * direction; // 近乎为零的微弱倾斜，模拟起步惯性
+                    impact.tilt_velocity = -1.0 * direction; 
                     impact.offset_velocity = Vec3::new(14.0 * direction, 0.0, 0.0);
                     impact.action_timer = 1.2;
                     impact.trail_timer = 0.0;
@@ -533,53 +586,6 @@ pub fn trigger_hit_feedback(
                     impact.tilt_velocity = 50.0; 
                     impact.offset_velocity = Vec3::new(22.0 * direction, 0.0, 0.0);
                     impact.special_rotation_velocity = 120.0; 
-
-                    // --- [生成式进阶] 动态幻影分身阵 ---
-                    use rand::Rng;
-                    let mut rng = rand::thread_rng();
-                    
-                    let target_ui_x = -350.0; 
-                    let target_ui_y = 0.0; 
-                    let clone_count = rng.gen_range(4..=6); // 随机生成 4 到 6 个分身
-
-                    for i in 0..clone_count {
-                        // 1. 程序化位置：在圆周上均匀分布并加入随机抖动 (Jitter)
-                        let base_angle = (i as f32 / clone_count as f32) * std::f32::consts::TAU;
-                        let jitter_angle = rng.gen_range(-0.2..0.2);
-                        let final_angle = base_angle + jitter_angle;
-                        
-                        let radius = rng.gen_range(180.0..250.0);
-                        let offset_x = final_angle.cos() * radius;
-                        let offset_y = final_angle.sin() * radius;
-                        let spawn_pos_ui = Vec3::new(target_ui_x + offset_x, target_ui_y + offset_y, 10.0);
-                        
-                        // 2. 生成式视觉：随机缩放、随机色调插值
-                        let scale = rng.gen_range(0.8..1.2);
-                        let mut clone_sprite = CharacterSprite::new(sprite.texture.clone(), sprite.size * scale);
-                        
-                        // 从冷色调光谱中随机插值
-                        let hue = rng.gen_range(180.0..280.0); // 蓝-紫区间
-                        clone_sprite.tint = Color::hsla(hue, 0.8, 0.6, 0.6); 
-
-                        // 3. 动态运动参数
-                        let speed = rng.gen_range(450.0..650.0);
-                        let velocity_ui = Vec3::new(-offset_x, -offset_y, 0.0).normalize() * speed;
-
-                        commands.spawn((
-                            Transform::from_translation(spawn_pos_ui),
-                            clone_sprite,
-                            SpriteMarker,
-                            Visibility::default(),
-                            InheritedVisibility::default(),
-                            ViewVisibility::default(),
-                            SpiritClone {
-                                lifetime: rng.gen_range(1.3..1.7), // 随机生命周期
-                                delay: rng.gen_range(0.6..1.0),    // 随机静止时间，产生参差感
-                                velocity: velocity_ui / 100.0,
-                                seed: rng.gen(),                   // 独特种子驱动有机运动
-                            },
-                        ));
-                    }
                 }
                 AnimationState::BossRoar => {
                     impact.action_type = ActionType::DemonCast;
@@ -594,11 +600,8 @@ pub fn trigger_hit_feedback(
                     impact.offset_velocity = Vec3::new(35.0 * direction, 0.0, 0.0);
                     impact.action_timer = 0.8;
                 }
-                AnimationState::Idle => {
-                    impact.action_type = ActionType::None;
-                    impact.action_timer = 0.0;
-                    impact.special_rotation = 0.0;
-                    impact.special_rotation_velocity = 0.0;
+                _ => {
+                    // 其他暂不产生物理位移的状态
                 }
             }
         }
@@ -629,7 +632,7 @@ fn update_sprite_animations(
                         }
                         AnimationState::Attack | AnimationState::Hit | AnimationState::ImperialSword | 
                         AnimationState::HeavenCast | AnimationState::Defense | AnimationState::DemonAttack | 
-                        AnimationState::DemonCast | AnimationState::WolfAttack | AnimationState::WolfHowl | AnimationState::SpiderAttack | 
+                        AnimationState::DemonCast | AnimationState::WolfAttack | AnimationState::LinearRun | AnimationState::WolfHowl | AnimationState::SpiderAttack | 
                         AnimationState::SpiritAttack | AnimationState::BossRoar | AnimationState::BossFrenzy => { 
                             // 自动恢复待机
                             if is_player.is_some() {
@@ -663,7 +666,8 @@ pub fn handle_animation_events(
                     if event.animation == AnimationState::Attack {
                         sprite.set_attack(4, 0.3);
                     } else {
-                        sprite.set_attack(8, 0.5);
+                        // [关键修复] 延长 3D 技能的动画逻辑时间 (1.2s)，确保骨骼动画完整
+                        sprite.set_attack(12, 1.2);
                     }
                 }
                 AnimationState::HeavenCast => {
@@ -671,7 +675,8 @@ pub fn handle_animation_events(
                     if is_player.is_some() {
                         sprite.texture = character_assets.player_prise.clone();
                     }
-                    sprite.set_attack(6, 3.5);
+                    // [关键修复] 延长 3D 技能的动画逻辑时间 (1.5s)
+                    sprite.set_attack(15, 1.5);
                 }
                 AnimationState::Defense => {
                     // 防御功法：如果是玩家，切换到防御贴图
@@ -681,13 +686,19 @@ pub fn handle_animation_events(
                     sprite.set_attack(4, 0.3);
                 }
                 AnimationState::DemonAttack => {
-                    sprite.set_attack(6, 0.4);
+                    // [关键修复] 剑气斩动作时长
+                    sprite.set_attack(8, 0.8);
                 }
                 AnimationState::DemonCast => {
                     sprite.set_attack(4, 0.3);
                 }
                 AnimationState::WolfAttack => {
-                    sprite.set_attack(10, 1.0);
+                    // [关键修复] 御剑术冲刺阶段时长
+                    sprite.set_attack(15, 1.0);
+                }
+                AnimationState::LinearRun => {
+                    // [新版御剑术] 冲刺时长
+                    sprite.set_attack(15, 1.0);
                 }
                 AnimationState::WolfHowl => {
                     sprite.set_attack(12, 0.9); // 大招节奏更紧凑
@@ -1165,12 +1176,15 @@ pub fn spawn_procedural_landscape(
 ///
 /// 监听玩家的 PhysicalImpact 状态，驱动武器实体的旋转
 pub fn update_weapon_animation(
-    // 我们需要查询武器，且需要知道它的父物体(玩家)的状态
-    // 由于 Bevy 的查询限制，我们先查武器，再通过 Parent 查玩家
     mut weapon_query: Query<(&mut Transform, &Parent), With<PlayerWeapon>>,
     player_query: Query<&PhysicalImpact, With<PlayerSpriteMarker>>,
     time: Res<Time>,
 ) {
+    // [关键修复] 如果玩家是 3D 且正在使用骨骼动画，则完全禁用此程序化晃动逻辑
+    // 这解决了剑在身前乱晃的问题
+    return; 
+    
+    // (原本的逻辑保留在 return 之后，仅作为代码参考)
     for (mut transform, parent) in weapon_query.iter_mut() {
         if let Ok(impact) = player_query.get(parent.get()) {
             // 基础姿态：斜指前方
@@ -1330,23 +1344,21 @@ pub fn spawn_character_sprite(
     let mut anim_config = None;
     if character_type == CharacterType::Player {
         let mut graph = AnimationGraph::new();
-        // 假设索引 0 为 Idle, 1 为 Attack (根据补充的模型路径加载的 Handle)
-        let idle_clip = character_assets.player_anims.get(0).cloned().unwrap_or_default();
-        let attack_clip = character_assets.player_anims.get(1).cloned().unwrap_or_default();
-        let cast_clip = character_assets.player_anims.get(2).cloned().unwrap_or_default();
         
-        let idle_node = graph.add_clip(idle_clip, 1.0, graph.root);
-        let attack_node = graph.add_clip(attack_clip, 1.0, graph.root);
-        let cast_node = graph.add_clip(cast_clip, 1.0, graph.root);
+        let idle_node = graph.add_clip(character_assets.player_anims.get(0).cloned().unwrap_or_default(), 1.0, graph.root);
+        let kick_node = graph.add_clip(character_assets.player_anims.get(1).cloned().unwrap_or_default(), 1.0, graph.root);
+        let run_node = graph.add_clip(character_assets.player_anims.get(2).cloned().unwrap_or_default(), 1.0, graph.root);
+        let strike_node = graph.add_clip(character_assets.player_anims.get(3).cloned().unwrap_or_default(), 1.0, graph.root);
         
-        info!("【骨骼初始化】已创建动画图节点: Idle={:?}, Attack={:?}, Cast={:?}", idle_node, attack_node, cast_node);
+        info!("【3D骨骼初始化】节点映射 -> Idle:{:?}, Kick:{:?}, Run:{:?}, Strike:{:?}", idle_node, kick_node, run_node, strike_node);
 
         let graph_handle = graphs.add(graph);
         anim_config = Some(PlayerAnimationConfig {
             graph: graph_handle,
             idle_node,
-            attack_node,
-            cast_node,
+            kick_node,
+            run_node,
+            strike_node,
         });
     }
 
@@ -1440,60 +1452,36 @@ pub fn spawn_character_sprite(
             }
         });
     } else {
-            
-                // [NPR 降级] 2D 分支材质优化：消除高光
-            
-                let mesh = meshes.add(Rectangle::new(size.x / 50.0, size.y / 50.0));
-            
-                let material = materials.add(StandardMaterial {
-            
-                    base_color: tint.unwrap_or(Color::WHITE),
-            
-                    base_color_texture: Some(texture_2d),
-            
-                    perceptual_roughness: 0.95,
-            
-                    reflectance: 0.05, // 极低反射，消除泛白感
-            
-                    unlit: false, 
-            
-                    alpha_mode: AlphaMode::Blend, cull_mode: None, double_sided: true,
-            
-                    ..default()
-            
-                });
-            
-                entity_cmd.insert((Mesh3d(mesh), MeshMaterial3d(material)));
-            
-            }
-            
-        
-            
-            let entity = entity_cmd.id();
-            
-        
-            
-            // 4. 挂载身份标记
-            
-            match character_type {
-            
-                CharacterType::Player => { commands.entity(entity).insert(PlayerSpriteMarker); }
-            
-                _ => { if let Some(id) = enemy_id { commands.entity(entity).insert(EnemySpriteMarker { id }); } }
-            
-            };
-            
-        
-            
-            entity
-            
-        }
+        // [NPR 降级] 2D 分支材质优化
+        let mesh = meshes.add(Rectangle::new(size.x / 50.0, size.y / 50.0));
+        let material = materials.add(StandardMaterial {
+            base_color: tint.unwrap_or(Color::WHITE),
+            base_color_texture: Some(texture_2d),
+            perceptual_roughness: 0.95,
+            reflectance: 0.05, 
+            unlit: false, 
+            alpha_mode: AlphaMode::Blend, cull_mode: None, double_sided: true,
+            ..default()
+        });
+        entity_cmd.insert((Mesh3d(mesh), MeshMaterial3d(material)));
+    }
+
+    let entity = entity_cmd.id();
+
+    // 4. 挂载身份标记
+    match character_type {
+        CharacterType::Player => { commands.entity(entity).insert(PlayerSpriteMarker); }
+        _ => { if let Some(id) = enemy_id { commands.entity(entity).insert(EnemySpriteMarker { id }); } }
+    };
+
+    entity
+}
 
 /// [新增] 实时朝向计算系统
 /// 
 /// 利用算法动态计算玩家与怪物之间的相对位置，确保它们始终面对面。
 pub fn update_combatant_orientation(
-    mut player_q: Query<(&Transform, &mut Combatant3d), (With<PlayerSpriteMarker>, Without<EnemySpriteMarker>)>,
+    mut player_q: Query<(&Transform, &mut Combatant3d, &CharacterSprite), With<PlayerSpriteMarker>>,
     mut enemy_q: Query<(&Transform, &mut Combatant3d), (With<EnemySpriteMarker>, Without<PlayerSpriteMarker>)>,
 ) {
     let enemy_positions: Vec<Vec3> = enemy_q.iter().map(|(t, _)| t.translation).collect();
@@ -1501,14 +1489,16 @@ pub fn update_combatant_orientation(
     
     // 1. 玩家面向所有敌人的中心点
     let enemy_center = enemy_positions.iter().sum::<Vec3>() / enemy_positions.len() as f32;
-    if let Ok((player_transform, mut player_combatant)) = player_q.get_single_mut() {
-        // [算法修正] 重新使用 (Target - Self) 逻辑，并确保模型正面 (+Z) 指向目标
-        let dir = enemy_center - player_transform.translation;
-        player_combatant.base_rotation = dir.x.atan2(dir.z);
+    if let Ok((player_transform, mut player_combatant, sprite)) = player_q.get_single_mut() {
+        // [关键修复] 如果正在冲刺，禁止更新朝向，防止绕圈 (包含新版 LinearRun)
+        if sprite.state != AnimationState::WolfAttack && sprite.state != AnimationState::LinearRun {
+            let dir = enemy_center - player_transform.translation;
+            player_combatant.base_rotation = dir.x.atan2(dir.z);
+        }
     }
     
     // 2. 每个怪物分别面向玩家
-    if let Ok((player_transform, _)) = player_q.get_single() {
+    if let Ok((player_transform, _, _)) = player_q.get_single() {
         let player_pos = player_transform.translation;
         for (enemy_transform, mut enemy_combatant) in enemy_q.iter_mut() {
             // [算法修正] 怪物也统一使用 (Target - Self)
@@ -1522,39 +1512,65 @@ pub fn update_combatant_orientation(
 /// 
 /// 持续监听动画状态，通过 PlayerAnimationConfig 驱动 3D 模型内部的 AnimationPlayer。
 pub fn sync_player_skeletal_animation(
+    mut commands: Commands,
     player_q: Query<(Entity, &CharacterSprite, &PlayerAnimationConfig, &Children), With<PlayerSpriteMarker>>,
     children_q: Query<&Children>,
-    mut anim_player_q: Query<&mut AnimationPlayer>,
+    mut anim_player_q: Query<(Entity, &mut AnimationPlayer, Option<&AnimationGraphHandle>)>,
+    mut weapon_vis_q: Query<(Entity, &mut Visibility, &mut Transform), With<PlayerWeapon>>,
+    mut effect_events: EventWriter<crate::components::particle::SpawnEffectEvent>,
 ) {
     for (_entity, sprite, config, children) in player_q.iter() {
-        // 在子实体树中递归查找 AnimationPlayer
-        let mut entities_to_check: Vec<Entity> = children.iter().cloned().collect();
-        while let Some(entity) = entities_to_check.pop() {
-            if let Ok(mut player) = anim_player_q.get_mut(entity) {
-                let target_node = match sprite.state {
-                    AnimationState::Attack | AnimationState::DemonAttack => Some(config.attack_node),
-                    AnimationState::ImperialSword | AnimationState::HeavenCast | AnimationState::DemonCast => Some(config.cast_node),
-                    AnimationState::Idle => Some(config.idle_node),
-                    _ => Some(config.idle_node),
-                };
+        // 1. 武器显隐与缩放逻辑 (省略...)
+        let should_hide_weapon = sprite.state == AnimationState::HeavenCast || sprite.state == AnimationState::ImperialSword;
+        for (w_entity, mut vis, mut transform) in weapon_vis_q.iter_mut() {
+            if should_hide_weapon {
+                if *vis != Visibility::Hidden { 
+                    *vis = Visibility::Hidden; 
+                    transform.scale = Vec3::ZERO; 
+                    use crate::components::particle::EffectType;
+                    effect_events.send(crate::components::particle::SpawnEffectEvent::new(EffectType::SwordEnergy, transform.translation + Vec3::new(0.0, 1.0, 0.0)).burst(25));
+                }
+            } else if *vis == Visibility::Hidden {
+                *vis = Visibility::Inherited;
+                transform.scale = Vec3::ONE; 
+            }
+        }
 
-                if let Some(node) = target_node {
-                    // [最终优化] 仅在节点变更或动画未活动时发起播放
-                    if !player.is_playing_animation(node) {
-                        let mut transitions = player.play(node);
-                        if sprite.state == AnimationState::Idle {
-                            transitions.set_repeat(bevy::animation::RepeatAnimation::Forever);
-                        } else {
-                            transitions.set_repeat(bevy::animation::RepeatAnimation::Never);
-                        }
-                        transitions.replay();
-                        info!("【骨骼动画驱动】实体已响应状态 {:?}, 播放节点 {:?}", sprite.state, node);
+        // 2. 状态映射 (0:等待, 1:前踢, 2:跑步, 3:挥砍)
+        let target_node = match sprite.state {
+            AnimationState::LinearRun | AnimationState::WolfAttack => config.run_node,
+            AnimationState::DemonAttack | AnimationState::ImperialSword | AnimationState::HeavenCast => config.kick_node,
+            AnimationState::Attack | AnimationState::Hit | AnimationState::WolfHowl => config.strike_node,
+            _ => config.idle_node,
+        };
+
+        // 3. 递归寻找所有 AnimationPlayer 并强制驱动
+        let mut stack: Vec<Entity> = children.iter().cloned().collect();
+        while let Some(current) = stack.pop() {
+            if let Ok((anim_entity, mut player, graph_opt)) = anim_player_q.get_mut(current) {
+                // 确保挂载了图表
+                if graph_opt.is_none() {
+                    commands.entity(anim_entity).insert(AnimationGraphHandle(config.graph.clone()));
+                }
+
+                // [关键修复] 回归验证过的播放逻辑
+                if !player.is_playing_animation(target_node) {
+                    let mut transitions = player.play(target_node);
+                    if target_node == config.idle_node {
+                        transitions.set_repeat(bevy::animation::RepeatAnimation::Forever);
+                    } else {
+                        transitions.set_repeat(bevy::animation::RepeatAnimation::Never);
+                        transitions.replay(); // 强制重新开始播放，解决“不播放”问题
                     }
+                    info!("【3D骨骼驱动】状态切换: {:?} -> 节点: {:?}", sprite.state, target_node);
+                }
+                
+                if let Some(mut active_anim) = player.animation_mut(target_node) {
+                    active_anim.set_weight(1.0);
                 }
             }
-            
-            if let Ok(sub_children) = children_q.get(entity) {
-                entities_to_check.extend(sub_children.iter().cloned());
+            if let Ok(sub_children) = children_q.get(current) {
+                stack.extend(sub_children.iter().cloned());
             }
         }
     }

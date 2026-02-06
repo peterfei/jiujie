@@ -43,7 +43,14 @@ impl CharacterSprite {
     }
 
     pub fn set_attack(&mut self, frames: usize, duration: f32) {
-        self.state = AnimationState::Attack;
+        // 排除名单：万剑归宗(ImperialSword)、天象(HeavenCast)、御剑术(WolfAttack/LinearRun)、剑气斩(DemonAttack)
+        if self.state != AnimationState::ImperialSword && 
+           self.state != AnimationState::HeavenCast &&
+           self.state != AnimationState::WolfAttack &&
+           self.state != AnimationState::LinearRun &&
+           self.state != AnimationState::DemonAttack {
+            self.state = AnimationState::Attack;
+        }
         self.total_frames = frames;
         self.frame_duration = duration / frames as f32;
         self.current_frame = 0;
@@ -110,6 +117,8 @@ pub enum AnimationState {
     DemonAttack,
     /// 嗜血妖狼专属：奔袭撕咬
     WolfAttack,
+    /// [新增] 纯净直线冲刺 (新版御剑术)
+    LinearRun,
     /// [新增] 嗜血妖狼大招：天狼狂袭
     WolfHowl,
     /// 剧毒蛛专属：爬行吐丝
@@ -187,9 +196,10 @@ impl CharacterAssets {
             // 默认 3D 字段
             player_3d: Some(asset_server.load("3d/player/warrior_main.glb#Scene0")),
             player_anims: vec![
-                asset_server.load("3d/player/warrior_main.glb#Animation0"), // 尝试 0 作为 Idle
-                asset_server.load("3d/player/warrior_main.glb#Animation1"), // 尝试 1 作为 Attack
-                asset_server.load("3d/player/warrior_main.glb#Animation2"), // 尝试 2 作为 Cast
+                asset_server.load("3d/player/warrior_main.glb#Animation0"), // 0: 等待 (Idle)
+                asset_server.load("3d/player/warrior_main.glb#Animation1"), // 1: 前踢 (Kick)
+                asset_server.load("3d/player/warrior_main.glb#Animation2"), // 2: 跑步 (Run)
+                asset_server.load("3d/player/warrior_main.glb#Animation3"), // 3: 挥砍 (Strike)
             ],
             wolf_3d: None,
             spider_3d: None,
@@ -221,8 +231,9 @@ pub struct Combatant3d {
 pub struct PlayerAnimationConfig {
     pub graph: Handle<AnimationGraph>,
     pub idle_node: AnimationNodeIndex,
-    pub attack_node: AnimationNodeIndex,
-    pub cast_node: AnimationNodeIndex,
+    pub kick_node: AnimationNodeIndex,
+    pub run_node: AnimationNodeIndex,
+    pub strike_node: AnimationNodeIndex,
 }
 
 /// 呼吸动画组件

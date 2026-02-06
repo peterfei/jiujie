@@ -70,55 +70,25 @@ impl Plugin for CorePlugin {
 
         // [新增] 生命周期收尾
         app.add_systems(Update, check_wanjian_end.run_if(in_state(GameState::Combat)));
-        
-        // [新增] 万剑归宗触发响应
-        app.add_observer(handle_wanjian_trigger);
     }
 }
 
-/// [新增] 检查万剑归宗是否结束，并恢复武器可见性
+/// [新增] 检查万剑归宗是否结束
 fn check_wanjian_end(
-    mut commands: Commands,
     query: Query<&crate::components::particle::Particle>,
-    weapon_query: Query<&Visibility, With<PlayerWeapon>>,
     cinematic: Res<HeavenlyStrikeCinematic>,
     player_sprite_query: Query<&CharacterSprite, With<PlayerSpriteMarker>>,
 ) {
     use crate::components::particle::EffectType;
     use crate::components::sprite::AnimationState;
 
-    // 1. 检查粒子是否存在
+    // 只要没有粒子、没有演出、没有大招动作，就认为结束
     let has_wanjian = query.iter().any(|p| p.effect_type == EffectType::WanJian);
-    
-    // 2. 检查玩家是否还在释放大招的动作中
     let is_animating = player_sprite_query.iter().any(|s| s.state == AnimationState::ImperialSword || s.state == AnimationState::HeavenCast);
 
-    let is_hidden = weapon_query.iter().any(|v| matches!(*v, Visibility::Hidden));
-
-    // 只有当没有万剑粒子、没有天象演出、且玩家动作也已结束时，才恢复显示
-    if !has_wanjian && !cinematic.active && !is_animating && is_hidden {
-        commands.trigger(WanJianTriggerEvent::End);
-    }
-}
-
-/// [新增] 处理万剑归宗触发事件：控制手中武器显隐
-fn handle_wanjian_trigger(
-    trigger: Trigger<WanJianTriggerEvent>,
-    mut weapon_q: Query<&mut Visibility, With<PlayerWeapon>>,
-) {
-    match trigger.event() {
-        WanJianTriggerEvent::Start => {
-            for mut vis in weapon_q.iter_mut() {
-                *vis = Visibility::Hidden;
-            }
-            info!("【万剑归宗】手中剑已离手，化作漫天剑影");
-        }
-        WanJianTriggerEvent::End => {
-            for mut vis in weapon_q.iter_mut() {
-                *vis = Visibility::Inherited;
-            }
-            info!("【万剑归宗】万剑归一，剑回手中");
-        }
+    // 此系统现在仅用于打印日志或标记状态，显隐已由 sync 系统接管
+    if !has_wanjian && !cinematic.active && !is_animating {
+        // 可以做一些结束后的清理工作
     }
 }
 
@@ -495,6 +465,8 @@ pub fn preload_assets(
         player_anims: vec![
             asset_server.load("3d/player/warrior_main.glb#Animation0"),
             asset_server.load("3d/player/warrior_main.glb#Animation1"),
+            asset_server.load("3d/player/warrior_main.glb#Animation2"),
+            asset_server.load("3d/player/warrior_main.glb#Animation3"),
         ],
         wolf_3d: Some(asset_server.load("3d/fantasy_wolf.glb#Scene0")),
         spider_3d: Some(asset_server.load("3d/ornate_green_spider.glb#Scene0")),
@@ -1424,8 +1396,6 @@ pub fn process_heavenly_strike_cinematic(
     if cinematic.timer.finished() {
         cinematic.active = false;
         cinematic.flash_count = 0;
-        // [新增] 引雷术结束：恢复武器
-        commands.trigger(WanJianTriggerEvent::End);
         info!("【天象演出】圆满结束");
     }
 }
@@ -2100,11 +2070,21 @@ fn handle_card_play(
                     // 1. 触发玩家动画 (精准隔离：御剑冲刺，天象原地)
                     if let Ok((player_entity, mut sprite)) = player_sprite_query.get_single_mut() {
                         if card.card_type == CardType::Attack {
-                            let anim = if card.name.contains("御剑术") || card.name.contains("剑气斩") || card.name.contains("万剑归宗") {
-                                // 远程/御剑攻击：回旋/剑气/万剑
+                            let anim = if card.name.contains("万剑归宗") {
+                                // 万剑归宗：原地施法
                                 effect_events.send(SpawnEffectEvent::new(EffectType::SwordEnergy, Vec3::new(-3.5, 1.0, 0.2)));
                                 sprite.state = crate::components::sprite::AnimationState::ImperialSword;
                                 crate::components::sprite::AnimationState::ImperialSword
+                            } else if card.name.contains("御剑术") {
+                                // 御剑术：重新设计的直线跑步冲刺
+                                effect_events.send(SpawnEffectEvent::new(EffectType::SwordEnergy, Vec3::new(-3.5, 1.0, 0.2)));
+                                sprite.state = crate::components::sprite::AnimationState::LinearRun;
+                                crate::components::sprite::AnimationState::LinearRun
+                            } else if card.name.contains("剑气斩") {
+                                // 剑气斩：原地挥动
+                                effect_events.send(SpawnEffectEvent::new(EffectType::Slash, Vec3::new(-3.5, 1.0, 0.2)));
+                                sprite.state = crate::components::sprite::AnimationState::DemonAttack; // 复用 DemonAttack 作为前踢/挥动
+                                crate::components::sprite::AnimationState::DemonAttack
                             } else if card.name.contains("天象") {
                                 // 天象法术：原地施法
                                 sprite.state = crate::components::sprite::AnimationState::HeavenCast;
@@ -2155,9 +2135,6 @@ fn handle_card_play(
                                 // 3. 额外音效
                                 sfx_events.send(PlaySfxEvent::new(SfxType::LightningStrike)); 
 
-                                // [新增] 万剑归宗触发：隐藏手中武器
-                                commands.trigger(WanJianTriggerEvent::Start);
-                                
                                 // 4. 消耗所有剑意
                                 player.reset_sword_intent();
                             } else {
@@ -2342,8 +2319,7 @@ fn apply_card_effect(
                 }
 
                 if card_name.contains("万剑归宗") {
-                    // [关键修复] 触发武器隐藏和防止位移的动画状态
-                    commands.trigger(WanJianTriggerEvent::Start);
+                    // [关键修复] 触发防止位移的动画状态 (显隐已由状态同步接管)
                     if let Some(target) = player_entity {
                         anim_events.send(CharacterAnimationEvent {
                             target,
@@ -2404,8 +2380,6 @@ fn apply_card_effect(
         CardEffect::ChangeEnvironment { name } => {
             if card_name.contains("引雷术") {
                 info!("【卡牌】引动九天雷霆演出开始...");
-                // [新增] 引雷术开始：隐藏武器
-                commands.trigger(WanJianTriggerEvent::Start);
                 // 仅启动演出，不立即扣血或切换环境，基础伤害提升至 20
                 heavenly_cinematic.start(20, name.clone());
             } else {
