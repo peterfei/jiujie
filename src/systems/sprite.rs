@@ -398,8 +398,7 @@ pub fn update_physical_impacts(
                     pos_damping = 15.0; 
                 },
                 ActionType::CultivatorCombo => {
-                    // [大作级重构]：时序驱动平滑插值模型 (Timeline Driven)
-                    // Rush(0.5s) -> Attack x2(0.6s ea) -> Return(0.7s)
+                    // [顶级重构]：时序驱动 + 身体转体 (Body Twist)
                     let is_return = impact.action_stage == 3;
                     let to_enemy = impact.target_vector;
                     
@@ -409,33 +408,27 @@ pub fn update_physical_impacts(
                     
                     let elapsed = (phase_duration - impact.action_timer).max(0.0);
                     let t = (elapsed / phase_duration).clamp(0.0, 1.0);
-                    
-                    // 核心平滑曲线 (Smoothstep)
                     let smooth_t = t * t * (3.0 - 2.0 * t);
 
                     if impact.action_stage == 0 || impact.action_stage == 3 {
-                        // 强制维持跑动状态
                         if let Some(ref mut sprite) = sprite_opt {
-                            if sprite.state != AnimationState::LinearRun {
-                                sprite.state = AnimationState::LinearRun;
-                                sprite.looping = true;
-                            }
+                            sprite.state = AnimationState::LinearRun;
+                            sprite.looping = true;
                         }
 
-                        // 基于进度的侧向律动 (AAA 级细节)
+                        // [姿态修正]：去程微前倾，回程保持挺拔 (不弓腰)
+                        action_tilt_offset = if is_return { 0.0 } else { -0.15 }; 
+                        impact.special_rotation = 0.0; // 跑动时不自转
+
                         let side_vec = Vec3::new(-to_enemy.z, 0.0, to_enemy.x).normalize_or_zero();
                         let run_phase = t * 14.0; 
-                        let sway_power = if is_return { 0.25 } else { 0.35 };
-                        action_pos_offset = side_vec * run_phase.cos() * sway_power;
-                        action_pos_offset.y = run_phase.sin().abs() * 0.15;
+                        action_pos_offset = side_vec * run_phase.cos() * (if is_return { 0.2 } else { 0.3 });
+                        action_pos_offset.y = run_phase.sin().abs() * 0.12;
 
-                        // [核心位移插值]：基于 smooth_t 计算绝对 offset，杜绝闪现
                         let target_dist = impact.target_offset_dist - 0.8;
                         if is_return {
-                            // 从斩击点 (target_dist) 平滑回到 0
                             impact.current_offset = to_enemy * target_dist * (1.0 - smooth_t);
                         } else {
-                            // 从 0 平滑冲向斩击点
                             impact.current_offset = to_enemy * target_dist * smooth_t;
                         }
                         
@@ -453,27 +446,42 @@ pub fn update_physical_impacts(
                                     
                                     use crate::components::particle::EffectType;
                                     let hit_pos = (impact.home_position + impact.current_offset) * 100.0 + to_enemy * 60.0;
-                                    effect_events.send(crate::components::particle::SpawnEffectEvent::new(EffectType::WolfSlash, hit_pos).burst(6));
+                                    effect_events.send(crate::components::particle::SpawnEffectEvent::new(EffectType::WolfSlash, hit_pos).burst(8));
                                 }
                             } else {
-                                // 彻底回到原位
+                                // [彻底归位]
                                 impact.action_type = ActionType::None;
                                 impact.action_timer = 0.0;
+                                impact.action_stage = 0;
                                 impact.current_offset = Vec3::ZERO;
+                                impact.special_rotation = 0.0;
+                                impact.tilt_amount = 0.0;
                                 if let Some(ref mut sprite) = sprite_opt {
                                     sprite.state = AnimationState::Idle;
                                     sprite.looping = true;
+                                    sprite.current_frame = 0;
+                                    sprite.elapsed = 0.0;
                                 }
+                                info!("【御剑术】完美收招，归位待机");
                             }
                         }
                     } 
                     else if impact.action_stage == 1 || impact.action_stage == 2 {
-                        // [打击重心反馈]：前 0.2s 爆发性微冲，后 0.4s 缓慢回缩
-                        let attack_t = t;
-                        let kick = if attack_t < 0.2 { (attack_t/0.2) * 0.45 } 
-                                  else { 0.45 - (attack_t-0.2)/0.4 * 0.55 };
+                        // [270度挥剑动作设计]：身体配合剑招剧烈转动
+                        // Stage 1: 顺时针转体；Stage 2: 逆时针反切
+                        let rotation_direction = if impact.action_stage == 1 { 1.0 } else { -1.0 };
                         
-                        // 保持在斩击点附近微动
+                        // 准备(0.2s) -> 爆发旋转(0.3s) -> 收招(0.1s)
+                        let rotation_t = if t < 0.3 {
+                            -0.5 * (t / 0.3) // 向后蓄力转
+                        } else {
+                            -0.5 + (t - 0.3) / 0.3 * 2.0 // 爆发性向前大转体
+                        };
+                        impact.special_rotation = rotation_t * rotation_direction * std::f32::consts::PI * 0.75; // 约 135-270 度体感
+
+                        // 重心位移反馈
+                        let kick = if t < 0.2 { (t/0.2) * 0.5 } 
+                                  else { 0.5 - (t-0.2)/0.4 * 0.6 };
                         let base_offset = to_enemy * (impact.target_offset_dist - 0.8);
                         impact.current_offset = base_offset + to_enemy * kick;
                         impact.offset_velocity = Vec3::ZERO;
@@ -489,11 +497,12 @@ pub fn update_physical_impacts(
                                     
                                     use crate::components::particle::EffectType;
                                     let hit_pos = (impact.home_position + impact.current_offset) * 100.0 + to_enemy * 70.0;
-                                    effect_events.send(crate::components::particle::SpawnEffectEvent::new(EffectType::WolfSlash, hit_pos).burst(6));
+                                    effect_events.send(crate::components::particle::SpawnEffectEvent::new(EffectType::WolfSlash, hit_pos).burst(8));
                                 }
                             } else {
                                 impact.action_stage = 3;
-                                impact.action_timer = 0.7; // 返回分配更从容的时长
+                                impact.action_timer = 0.7; 
+                                impact.special_rotation = 0.0; // 返回前重置转体
                                 if let Some(ref mut sprite) = sprite_opt {
                                     sprite.state = AnimationState::LinearRun;
                                     sprite.looping = true;
@@ -657,11 +666,11 @@ pub fn trigger_hit_feedback(
                     let target_x = if direction < 0.0 { -2.5 } else { 2.5 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
                     impact.action_type = ActionType::CultivatorCombo; 
-                    impact.action_timer = 2.0; 
+                    impact.action_timer = 0.5; // [关键修正] 对齐 Rush 阶段时长 (0.5s)
                     impact.action_stage = 0; 
                     impact.target_vector = Vec3::ZERO; 
-                    impact.current_offset = Vec3::ZERO; // [核心修复] 强制重置位移
-                    impact.offset_velocity = Vec3::ZERO; // [核心修复] 强制重置速度
+                    impact.current_offset = Vec3::ZERO; 
+                    impact.offset_velocity = Vec3::ZERO; 
                     impact.tilt_velocity = 0.0;
                     impact.special_rotation = 0.0;
                     impact.special_rotation_velocity = 0.0;
@@ -1756,11 +1765,11 @@ pub fn sync_player_skeletal_animation(
                 // [关键修复] 只有 Idle 和 Run 节点需要 Forever 循环
                 let is_looping_node = target_node == config.idle_node || target_node == config.run_node;
                 
-                // [核心修复] 判定是否需要强制重播 (用于连斩)
-                // 窗口缩小到 0.59 ~ 0.60，确保 replay() 仅触发一次
+                // [核心修复] 判定是否需要强制重播 (用于连斩和回程转换)
+                // 窗口收窄到每个阶段启动的前 0.02s
                 let is_attacking = sprite.state == AnimationState::Attack;
-                let force_replay = (is_attacking && (impact.action_stage == 1 || impact.action_stage == 2) && impact.action_timer > 0.59)
-                                || (sprite.state == AnimationState::LinearRun && impact.action_stage == 3 && impact.action_timer > 1.98);
+                let force_replay = (is_attacking && (impact.action_stage == 1 || impact.action_stage == 2) && impact.action_timer > 0.58)
+                                || (sprite.state == AnimationState::LinearRun && impact.action_stage == 3 && impact.action_timer > 0.68);
 
                 if !player.is_playing_animation(target_node) || force_replay {
                     let mut transitions = player.play(target_node);
