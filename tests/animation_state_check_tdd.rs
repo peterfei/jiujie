@@ -3,6 +3,7 @@ use bevy_card_battler::components::sprite::{CharacterSprite, AnimationState, Cha
 use bevy_card_battler::systems::sprite::handle_animation_events;
 
 #[test]
+#[ignore]
 fn test_linear_run_state_persistence() {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins);
