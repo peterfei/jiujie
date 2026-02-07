@@ -398,33 +398,20 @@ pub fn update_physical_impacts(
                     pos_damping = 15.0; 
                 },
                 ActionType::CultivatorCombo => {
-                    // [大作级] 修行者突袭组合技：Rush -> Attack x2 -> Return
+                    // [大作级重构]：时序驱动平滑插值模型 (Timeline Driven)
+                    // Rush(0.5s) -> Attack x2(0.6s ea) -> Return(0.7s)
                     let is_return = impact.action_stage == 3;
+                    let to_enemy = impact.target_vector;
                     
-                    // 实时获取面向敌人的向量
-                    let to_enemy = if impact.target_vector == Vec3::ZERO {
-                        Vec3::new(1.0, 0.0, 0.0) // 兜底
-                    } else {
-                        impact.target_vector
-                    };
-
-                    let move_vec = if is_return { 
-                        // [倒退跑逻辑]：朝向原点移动
-                        -impact.current_offset.normalize_or_zero() 
-                    } else { 
-                        // [突进逻辑]：朝向敌人移动
-                        to_enemy 
-                    };
+                    let phase_duration = if impact.action_stage == 0 { 0.5 } 
+                                       else if is_return { 0.7 } 
+                                       else { 0.6 };
                     
-                    let dist_left = if is_return { 
-                        impact.current_offset.length() 
-                    } else { 
-                        // 距离怪面前 0.8 米的目标点的剩余距离
-                        let target_p = to_enemy * (impact.target_offset_dist - 0.8);
-                        (target_p - impact.current_offset).length()
-                    };
-
-                    let side_vec = Vec3::new(-to_enemy.z, 0.0, to_enemy.x).normalize_or_zero();
+                    let elapsed = (phase_duration - impact.action_timer).max(0.0);
+                    let t = (elapsed / phase_duration).clamp(0.0, 1.0);
+                    
+                    // 核心平滑曲线 (Smoothstep)
+                    let smooth_t = t * t * (3.0 - 2.0 * t);
 
                     if impact.action_stage == 0 || impact.action_stage == 3 {
                         // 强制维持跑动状态
@@ -435,61 +422,66 @@ pub fn update_physical_impacts(
                             }
                         }
 
-                        action_tilt_offset = -0.18 * (if is_return { -1.0 } else { 1.0 }); 
+                        // 基于进度的侧向律动 (AAA 级细节)
+                        let side_vec = Vec3::new(-to_enemy.z, 0.0, to_enemy.x).normalize_or_zero();
+                        let run_phase = t * 14.0; 
+                        let sway_power = if is_return { 0.25 } else { 0.35 };
+                        action_pos_offset = side_vec * run_phase.cos() * sway_power;
+                        action_pos_offset.y = run_phase.sin().abs() * 0.15;
 
-                        let run_phase = time.elapsed_secs() * 32.0; 
-                        let sway_amount = run_phase.cos() * 0.40;
-                        action_pos_offset = side_vec * sway_amount;
-                        action_pos_offset.y = run_phase.sin().abs() * 0.22; 
+                        // [核心位移插值]：基于 smooth_t 计算绝对 offset，杜绝闪现
+                        let target_dist = impact.target_offset_dist - 0.8;
+                        if is_return {
+                            // 从斩击点 (target_dist) 平滑回到 0
+                            impact.current_offset = to_enemy * target_dist * (1.0 - smooth_t);
+                        } else {
+                            // 从 0 平滑冲向斩击点
+                            impact.current_offset = to_enemy * target_dist * smooth_t;
+                        }
                         
-                        let base_speed = if is_return { 18.0 } else { 26.0 }; 
-                        let step_dist = base_speed * dt;
+                        impact.offset_velocity = Vec3::ZERO;
 
-                        // [精准到达判定]：步进距离足以覆盖剩余距离，或剩余距离极小
-                        if step_dist >= dist_left || dist_left < 0.15 {
+                        if t >= 1.0 {
                             if impact.action_stage == 0 {
                                 impact.action_stage = 1;
-                                impact.action_timer = 0.6; 
+                                impact.action_timer = 0.6;
                                 if let Some(ref mut sprite) = sprite_opt {
                                     sprite.state = AnimationState::Attack;
                                     sprite.looping = false;
-                                    sprite.current_frame = 0; 
+                                    sprite.current_frame = 0;
                                     sprite.elapsed = 0.0;
                                     
                                     use crate::components::particle::EffectType;
                                     let hit_pos = (impact.home_position + impact.current_offset) * 100.0 + to_enemy * 60.0;
-                                    effect_events.send(crate::components::particle::SpawnEffectEvent::new(EffectType::WolfSlash, hit_pos).burst(4));
+                                    effect_events.send(crate::components::particle::SpawnEffectEvent::new(EffectType::WolfSlash, hit_pos).burst(6));
                                 }
-                                impact.current_offset = to_enemy * (impact.target_offset_dist - 0.8);
                             } else {
-                                // 返回到达原点
+                                // 彻底回到原位
                                 impact.action_type = ActionType::None;
-                                impact.action_timer = 0.0; 
-                                impact.current_offset = Vec3::ZERO; 
+                                impact.action_timer = 0.0;
+                                impact.current_offset = Vec3::ZERO;
                                 if let Some(ref mut sprite) = sprite_opt {
                                     sprite.state = AnimationState::Idle;
                                     sprite.looping = true;
                                 }
                             }
-                            impact.offset_velocity = Vec3::ZERO;
-                        } else {
-                            // 主动驱动位移
-                            impact.current_offset += move_vec * step_dist;
-                            impact.offset_velocity = Vec3::ZERO; // 屏蔽通用系统
                         }
                     } 
                     else if impact.action_stage == 1 || impact.action_stage == 2 {
-                        // 连斩时的微弱打击颤动
-                        let slide_vec = to_enemy;
-                        let slide_time = impact.action_timer;
-                        let slide_speed = if impact.action_stage == 1 { 1.2 } else { 2.2 }; 
-                        impact.current_offset += slide_vec * slide_speed * (slide_time / 0.6) * dt;
+                        // [打击重心反馈]：前 0.2s 爆发性微冲，后 0.4s 缓慢回缩
+                        let attack_t = t;
+                        let kick = if attack_t < 0.2 { (attack_t/0.2) * 0.45 } 
+                                  else { 0.45 - (attack_t-0.2)/0.4 * 0.55 };
+                        
+                        // 保持在斩击点附近微动
+                        let base_offset = to_enemy * (impact.target_offset_dist - 0.8);
+                        impact.current_offset = base_offset + to_enemy * kick;
                         impact.offset_velocity = Vec3::ZERO;
 
                         if impact.action_timer <= 0.0 {
                             if impact.action_stage == 1 {
                                 impact.action_stage = 2;
-                                impact.action_timer = 0.6; 
+                                impact.action_timer = 0.6;
                                 if let Some(ref mut sprite) = sprite_opt {
                                     sprite.state = AnimationState::Attack;
                                     sprite.current_frame = 0;
@@ -497,14 +489,13 @@ pub fn update_physical_impacts(
                                     
                                     use crate::components::particle::EffectType;
                                     let hit_pos = (impact.home_position + impact.current_offset) * 100.0 + to_enemy * 70.0;
-                                    effect_events.send(crate::components::particle::SpawnEffectEvent::new(EffectType::WolfSlash, hit_pos).burst(4));
+                                    effect_events.send(crate::components::particle::SpawnEffectEvent::new(EffectType::WolfSlash, hit_pos).burst(6));
                                 }
                             } else {
-                                // 连斩结束，开始返回
                                 impact.action_stage = 3;
-                                impact.action_timer = 2.0; 
+                                impact.action_timer = 0.7; // 返回分配更从容的时长
                                 if let Some(ref mut sprite) = sprite_opt {
-                                    sprite.state = AnimationState::LinearRun; 
+                                    sprite.state = AnimationState::LinearRun;
                                     sprite.looping = true;
                                     sprite.current_frame = 0;
                                     sprite.elapsed = 0.0;
@@ -1684,10 +1675,21 @@ pub fn update_combatant_orientation(
                 impact.target_vector = from_home / total_dist;
                 impact.target_offset_dist = total_dist;
             }
-            
-            // 始终面向敌人中心 (响应用户反馈：不要背身)
-            if impact.target_vector != Vec3::ZERO {
-                player_combatant.base_rotation = impact.target_vector.x.atan2(impact.target_vector.z);
+
+            if impact.action_stage == 3 {
+                // [转身返回逻辑] 身体面向 Home 点跑回
+                let to_home = -impact.current_offset;
+                if to_home.length() > 0.15 {
+                    player_combatant.base_rotation = to_home.x.atan2(to_home.z);
+                } else {
+                    // 彻底回到原位后，转回来面向敌人
+                    player_combatant.base_rotation = impact.target_vector.x.atan2(impact.target_vector.z);
+                }
+            } else {
+                // 冲刺和攻击：始终面向敌人
+                if impact.target_vector != Vec3::ZERO {
+                    player_combatant.base_rotation = impact.target_vector.x.atan2(impact.target_vector.z);
+                }
             }
         } else if sprite.state != AnimationState::WolfAttack && sprite.state != AnimationState::LinearRun {
             // 普通状态：自动面向敌人中心
