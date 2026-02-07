@@ -400,6 +400,11 @@ pub fn update_physical_impacts(
                 ActionType::CultivatorCombo => {
                     // [大作级] 修行者突袭组合技：Rush -> Attack x2 -> Return
                     let is_return = impact.action_stage == 3;
+
+                    // [安全检查] 等待方向初始化
+                    if !is_return && impact.target_vector == Vec3::ZERO {
+                        return;
+                    }
                     let current_dist = impact.current_offset.length(); 
                     let target_dist = if is_return { 0.0 } else { impact.target_offset_dist - 0.8 };
                     let dist_left = (target_dist - current_dist).abs(); 
@@ -435,8 +440,9 @@ pub fn update_physical_impacts(
                         impact.offset_velocity = move_vec * base_speed * speed_pulse * speed_scalar;
                         pos_damping = 4.0; // 极低阻尼，让速度几乎完全体现
 
-                        // [过冲检测] 使用点积判断是否越过目标点 (比距离判断更稳)
-                        let target_offset = impact.target_vector * target_dist;
+                        // [过冲检测] 使用点积判断是否越过目标点
+                        // 目标点相对于 Home 的偏移量：去程是 target_vector * dist，回程是 ZERO
+                        let target_offset = if is_return { Vec3::ZERO } else { impact.target_vector * target_dist };
                         let to_target = target_offset - impact.current_offset;
                         let dot_prod = to_target.dot(move_vec);
 
@@ -470,9 +476,7 @@ pub fn update_physical_impacts(
                         impact.offset_velocity = impact.target_vector * slide_speed * (impact.action_timer / 0.6);
                         pos_damping = 10.0;
                         
-                        if let Some(ref mut sprite) = sprite_opt {
-                            sprite.state = AnimationState::Attack;
-                        }
+                        // [关键修复] 移除每帧动画状态强行设置，防止卡死在第一帧
 
                         if impact.action_timer <= 0.0 {
                             if impact.action_stage == 1 {
@@ -1644,19 +1648,19 @@ pub fn update_combatant_orientation(
     // 1. 玩家面向所有敌人的中心点
     let enemy_center = enemy_positions.iter().sum::<Vec3>() / enemy_positions.len() as f32;
     if let Ok((player_transform, mut player_combatant, sprite, mut impact)) = player_q.get_single_mut() {
-        // [新增] 如果是组合技刚开始 (Rush 阶段)，锁定目标向量
-        if impact.action_type == ActionType::CultivatorCombo && impact.action_stage == 0 && impact.target_vector == Vec3::ZERO {
+        // [优化] 实时追踪目标，不再锁死初始向量，防止打偏
+        if impact.action_type == ActionType::CultivatorCombo && impact.action_stage == 0 {
             let to_target = enemy_center - player_transform.translation;
             impact.target_vector = to_target.normalize_or_zero();
-            impact.target_offset_dist = to_target.length();
-            info!("【3D路径锁定】目标点: {:?}, 距离: {:.2}", enemy_center, impact.target_offset_dist);
+            impact.target_offset_dist = to_target.length(); // 注意：这是剩余距离
         }
 
         // [关键修复] 朝向控制逻辑重构
         if impact.action_type == ActionType::CultivatorCombo {
-            // 组合技期间，强制朝向目标向量（或反向）
+            // 组合技期间，强制朝向敌人 (不再反向)
             let is_return = impact.action_stage == 3;
-            let facing_vec = if is_return { -impact.target_vector } else { impact.target_vector };
+            // 即使是返回阶段，也始终面向敌人 (倒退跑)，响应用户反馈
+            let facing_vec = impact.target_vector; 
             if facing_vec != Vec3::ZERO {
                 player_combatant.base_rotation = facing_vec.x.atan2(facing_vec.z);
             }
