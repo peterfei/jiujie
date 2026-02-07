@@ -414,6 +414,14 @@ pub fn update_physical_impacts(
                     let side_vec = Vec3::new(-impact.target_vector.z, 0.0, impact.target_vector.x).normalize_or_zero();
 
                     if impact.action_stage == 0 || impact.action_stage == 3 {
+                        // [状态加固] 确保阶段内动画状态正确
+                        if let Some(ref mut sprite) = sprite_opt {
+                            if sprite.state != AnimationState::LinearRun {
+                                sprite.state = AnimationState::LinearRun;
+                                sprite.looping = true;
+                            }
+                        }
+
                         impact.tilt_amount = 0.0;
                         impact.tilt_velocity = 0.0;
                         action_tilt_offset = -0.18 * (if is_return { -1.0 } else { 1.0 }); 
@@ -486,9 +494,12 @@ pub fn update_physical_impacts(
                                 }
                             } else {
                                 impact.action_stage = 3;
+                                impact.action_timer = 2.0; // [核心修复] 为返回阶段设置保护计时器
                                 if let Some(ref mut sprite) = sprite_opt {
                                     sprite.state = AnimationState::LinearRun; 
                                     sprite.looping = true;
+                                    sprite.current_frame = 0;
+                                    sprite.elapsed = 0.0;
                                 }
                             }
                         }
@@ -1658,21 +1669,19 @@ pub fn update_combatant_orientation(
     // 1. 玩家面向所有敌人的中心点
     let enemy_center = enemy_positions.iter().sum::<Vec3>() / enemy_positions.len() as f32;
     if let Ok((player_transform, mut player_combatant, sprite, mut impact)) = player_q.get_single_mut() {
-        // [优化] 实时追踪目标，不再锁死初始向量，防止打偏
-        if impact.action_type == ActionType::CultivatorCombo && impact.action_stage == 0 {
-            let to_target = enemy_center - player_transform.translation;
-            impact.target_vector = to_target.normalize_or_zero();
-            impact.target_offset_dist = to_target.length(); // 注意：这是剩余距离
-        }
-
-        // [关键修复] 朝向控制逻辑重构
+        // [核心优化] 组合技全过程实时更新目标向量和距离，确保追踪精度
         if impact.action_type == ActionType::CultivatorCombo {
-            // 组合技期间，强制朝向敌人 (不再反向)
-            let is_return = impact.action_stage == 3;
-            // 即使是返回阶段，也始终面向敌人 (倒退跑)，响应用户反馈
-            let facing_vec = impact.target_vector; 
-            if facing_vec != Vec3::ZERO {
-                player_combatant.base_rotation = facing_vec.x.atan2(facing_vec.z);
+            let to_target = enemy_center - player_transform.translation;
+            let dist = to_target.length();
+            // 只要距离不是极近，就更新追踪向量
+            if dist > 0.1 {
+                impact.target_vector = to_target / dist;
+                impact.target_offset_dist = dist;
+            }
+            
+            // 始终面向敌人中心 (响应用户反馈：不要背身)
+            if impact.target_vector != Vec3::ZERO {
+                player_combatant.base_rotation = impact.target_vector.x.atan2(impact.target_vector.z);
             }
         } else if sprite.state != AnimationState::WolfAttack && sprite.state != AnimationState::LinearRun {
             // 普通状态：自动面向敌人中心
