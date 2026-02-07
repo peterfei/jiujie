@@ -444,6 +444,22 @@ pub fn update_physical_impacts(
                     pos_damping = 30.0;
                     impact.offset_velocity = Vec3::ZERO;
                 },
+                ActionType::SpiritMultiShadow => {
+                    // 怨灵多重影分身逻辑：高速突刺 + 随机轻微偏航
+                    let target_dist = impact.target_offset_dist;
+                    let current_dist = impact.current_offset.x.abs();
+                    let dist_left = (target_dist - current_dist).max(0.0);
+                    
+                    // 突刺速度极快
+                    let speed = if dist_left < 0.5 { 0.0 } else { 28.0 };
+                    impact.offset_velocity = Vec3::new(speed * dir, 0.0, 0.0);
+                    
+                    // 产生程序化抖动，模拟不稳定感
+                    action_pos_offset.y = (impact.action_timer * 25.0).sin() * 0.1;
+                    action_pos_offset.z = (impact.action_timer * 18.0).cos() * 0.15;
+                    
+                    pos_damping = 6.0;
+                },
                 _ => {}
             }
         }
@@ -540,6 +556,7 @@ pub fn trigger_hit_feedback(
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
                     impact.action_type = ActionType::PlayerRun; 
                     impact.action_timer = 1.2; 
+                    impact.action_stage = 0; // [修复] 重置阶段状态
                     impact.tilt_velocity = 0.0;
                     impact.offset_velocity = Vec3::ZERO; 
                     impact.special_rotation = 0.0;
@@ -547,6 +564,7 @@ pub fn trigger_hit_feedback(
                 }
                 AnimationState::ImperialSword | AnimationState::DemonAttack => {
                     impact.action_type = ActionType::None;
+                    impact.action_stage = 0; // [修复] 重置阶段状态
                     impact.target_offset_dist = 0.0;
                     impact.tilt_velocity = 0.0; 
                     impact.offset_velocity = Vec3::ZERO;
@@ -562,6 +580,7 @@ pub fn trigger_hit_feedback(
                 AnimationState::HeavenCast => {
                     impact.action_type = ActionType::Ascend;
                     impact.action_timer = 3.5; 
+                    impact.action_stage = 0; // [修复] 重置
                     impact.tilt_velocity = 0.0;
                     impact.special_rotation = 0.0;
                     impact.special_rotation_velocity = 0.0; 
@@ -569,6 +588,7 @@ pub fn trigger_hit_feedback(
                 }
                 AnimationState::Defense => {
                     impact.action_type = ActionType::None;
+                    impact.action_stage = 0; // [修复] 重置
                     impact.tilt_velocity = -5.0 * direction; 
                     impact.special_rotation = 0.0;
                     impact.special_rotation_velocity = 0.0;
@@ -576,6 +596,7 @@ pub fn trigger_hit_feedback(
                 }
                 AnimationState::DemonCast => {
                     impact.action_type = ActionType::DemonCast;
+                    impact.action_stage = 0; // [修复] 重置
                     impact.tilt_velocity = 0.0; 
                     impact.special_rotation = 0.0;
                     impact.special_rotation_velocity = 0.0; 
@@ -587,6 +608,7 @@ pub fn trigger_hit_feedback(
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
                     impact.action_type = ActionType::WolfBite; 
                     impact.action_timer = 0.8;
+                    impact.action_stage = 0; // [修复] 重置
                     impact.tilt_velocity = -25.0 * direction;
                     impact.offset_velocity = Vec3::new(22.0 * direction, 0.0, 0.0);
                     impact.special_rotation = 0.0;
@@ -597,6 +619,7 @@ pub fn trigger_hit_feedback(
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
                     impact.action_type = ActionType::SiriusFrenzy;
                     impact.action_timer = 0.9;
+                    impact.action_stage = 0; // [修复] 重置
                     impact.offset_velocity = Vec3::ZERO;
                     impact.tilt_velocity = 0.0;
                 }
@@ -604,6 +627,7 @@ pub fn trigger_hit_feedback(
                     let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
                     impact.action_type = ActionType::SkitterApproach;
+                    impact.action_stage = 0; // [修复] 重置
                     impact.tilt_velocity = -1.0 * direction; 
                     impact.offset_velocity = Vec3::new(14.0 * direction, 0.0, 0.0);
                     impact.action_timer = 1.2;
@@ -613,12 +637,14 @@ pub fn trigger_hit_feedback(
                     let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
                     impact.action_type = ActionType::SpiritMultiShadow;
+                    impact.action_stage = 0; // [修复] 重置
                     impact.tilt_velocity = 50.0; 
                     impact.offset_velocity = Vec3::new(22.0 * direction, 0.0, 0.0);
                     impact.special_rotation_velocity = 120.0; 
                 }
                 AnimationState::BossRoar => {
                     impact.action_type = ActionType::DemonCast;
+                    impact.action_stage = 0; // [修复] 重置
                     impact.tilt_velocity = 0.0;
                     impact.special_rotation_velocity = 100.0; 
                     impact.action_timer = 1.2; 
@@ -627,6 +653,7 @@ pub fn trigger_hit_feedback(
                     let target_x = if direction < 0.0 { -3.5 } else { 3.5 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
                     impact.action_type = ActionType::None;
+                    impact.action_stage = 0; // [修复] 重置
                     impact.offset_velocity = Vec3::new(35.0 * direction, 0.0, 0.0);
                     impact.action_timer = 0.8;
                 }
