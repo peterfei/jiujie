@@ -418,9 +418,7 @@ pub fn update_physical_impacts(
                         impact.tilt_amount = 0.0;
                         impact.tilt_velocity = 0.0;
                         action_tilt_offset = -0.18 * (if is_return { -1.0 } else { 1.0 }); 
-                        
-                        if is_return { impact.special_rotation = std::f32::consts::PI; }
-                        else { impact.special_rotation = 0.0; }
+                        impact.special_rotation = 0.0; // [修复] 移除 Hack，交由 combatant 系统
 
                         let run_phase = time.elapsed_secs() * 35.0; // 极高频
                         
@@ -437,21 +435,31 @@ pub fn update_physical_impacts(
                         impact.offset_velocity = move_vec * base_speed * speed_pulse * speed_scalar;
                         pos_damping = 4.0; // 极低阻尼，让速度几乎完全体现
 
-                        if dist_left < 0.3 {
+                        // [过冲检测] 使用点积判断是否越过目标点 (比距离判断更稳)
+                        let target_offset = impact.target_vector * target_dist;
+                        let to_target = target_offset - impact.current_offset;
+                        let dot_prod = to_target.dot(move_vec);
+
+                        if dot_prod <= 0.0 { // 已经越过或到达
                             if impact.action_stage == 0 {
                                 impact.action_stage = 1;
                                 impact.action_timer = 0.6; 
                                 if let Some(ref mut sprite) = sprite_opt {
                                     sprite.state = AnimationState::Attack;
                                     sprite.looping = false;
+                                    sprite.current_frame = 0; 
+                                    sprite.elapsed = 0.0;
                                 }
                                 impact.offset_velocity = Vec3::ZERO;
+                                impact.current_offset = target_offset; // [修正] 强制吸附到目标点
                             } else {
+                                // 彻底结束组合技
                                 impact.action_type = ActionType::None;
                                 impact.action_timer = 0.0; 
                                 impact.target_vector = Vec3::ZERO; 
                                 if let Some(ref mut sprite) = sprite_opt {
                                     sprite.state = AnimationState::Idle;
+                                    sprite.looping = true;
                                 }
                             }
                         }
@@ -1636,23 +1644,26 @@ pub fn update_combatant_orientation(
     // 1. 玩家面向所有敌人的中心点
     let enemy_center = enemy_positions.iter().sum::<Vec3>() / enemy_positions.len() as f32;
     if let Ok((player_transform, mut player_combatant, sprite, mut impact)) = player_q.get_single_mut() {
-        // [关键修复] 冲刺或组合技期间，禁止更新逻辑朝向，防止近身绕圈
-        let is_locked = sprite.state == AnimationState::WolfAttack || 
-                       sprite.state == AnimationState::LinearRun ||
-                       impact.action_type == ActionType::CultivatorCombo;
-
-        if !is_locked {
-            let dir = enemy_center - player_transform.translation;
-            player_combatant.base_rotation = dir.x.atan2(dir.z);
-        }
-
         // [新增] 如果是组合技刚开始 (Rush 阶段)，锁定目标向量
         if impact.action_type == ActionType::CultivatorCombo && impact.action_stage == 0 && impact.target_vector == Vec3::ZERO {
             let to_target = enemy_center - player_transform.translation;
             impact.target_vector = to_target.normalize_or_zero();
-            // 顺便更新距离
             impact.target_offset_dist = to_target.length();
             info!("【3D路径锁定】目标点: {:?}, 距离: {:.2}", enemy_center, impact.target_offset_dist);
+        }
+
+        // [关键修复] 朝向控制逻辑重构
+        if impact.action_type == ActionType::CultivatorCombo {
+            // 组合技期间，强制朝向目标向量（或反向）
+            let is_return = impact.action_stage == 3;
+            let facing_vec = if is_return { -impact.target_vector } else { impact.target_vector };
+            if facing_vec != Vec3::ZERO {
+                player_combatant.base_rotation = facing_vec.x.atan2(facing_vec.z);
+            }
+        } else if sprite.state != AnimationState::WolfAttack && sprite.state != AnimationState::LinearRun {
+            // 普通状态：自动面向敌人中心
+            let dir = enemy_center - player_transform.translation;
+            player_combatant.base_rotation = dir.x.atan2(dir.z);
         }
     }
     
