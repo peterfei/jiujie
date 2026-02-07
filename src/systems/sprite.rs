@@ -371,40 +371,145 @@ pub fn update_physical_impacts(
                     pos_damping = 4.5; 
                 },
                 ActionType::PlayerRun => {
-                    // [大作级跑动模拟] 
+                    // ... (保留旧逻辑作为备用或通用跑动) ...
                     let target_dist = impact.target_offset_dist;
                     let current_dist = impact.current_offset.x.abs();
                     let dist_left = (target_dist - current_dist).max(0.0);
                     
-                    // 1. 身体姿态优化：允许极微量的物理前倾以增加速度感
-                    // 之前的 "严禁" 导致了死板，现在引入 5度 (0.08弧度) 的动态前倾
                     impact.special_rotation = 0.0;
                     impact.special_rotation_velocity = 0.0;
                     impact.tilt_amount = 0.0; 
                     impact.tilt_velocity = 0.0;
-                    action_tilt_offset = -0.08 * dir; // 向冲刺方向前倾
+                    action_tilt_offset = -0.08 * dir; 
                     
-                    // 2. 模拟脚步律动：
-                    // [Y轴] 蹬地腾空感 (run_phase.sin().abs())
-                    // [Z轴] 左右重心转移 (run_phase.cos()) -> 这就是消除直线感的关键！
                     let run_phase = impact.action_timer * 18.0;
                     action_pos_offset.y = run_phase.sin().abs() * 0.06; 
                     action_pos_offset.z = run_phase.cos() * 0.08;
 
-                    // 3. 到位判定
                     if dist_left < 0.6 && impact.action_stage == 0 {
                         if let Some(ref mut sprite) = sprite_opt {
                             sprite.state = AnimationState::Attack;
-                            info!("【3D重构】跑动到位 -> 平滑变招: Attack");
                         }
                         impact.action_stage = 1;
                     }
 
-                    // 4. 恒定跑动速度 (不滑行)
-                    // 如果还没到位，保持恒速；如果已到位，迅速减速
                     let speed = if impact.action_stage == 0 { 11.5 } else { 0.0 };
                     impact.offset_velocity = Vec3::new(speed * dir, 0.0, 0.0);
-                    pos_damping = 15.0; // 极高阻尼配合恒定推力 = 匀速运动
+                    pos_damping = 15.0; 
+                },
+                ActionType::CultivatorCombo => {
+                    // [大作级] 修行者突袭组合技：Rush -> Attack x2 -> Return
+                    
+                    // 阶段 0: 突进 (Rush)
+                    // 阶段 3: 返回 (Return)
+                    let is_return = impact.action_stage == 3;
+                    let target_dist = if is_return { 0.0 } else { impact.target_offset_dist }; // 返回时目标是 home (dist=0)
+                    let current_dist = impact.current_offset.x.abs();
+                    let dist_left = (target_dist - current_dist).abs(); // 注意这里用 abs，因为 return 时 current > target
+                    
+                    // 动态计算方向：去程 dir，回程 -dir
+                    let move_dir = if is_return { -dir } else { dir };
+                    
+                    // --- 通用跑动动效 (参考蜘蛛) ---
+                    if impact.action_stage == 0 || impact.action_stage == 3 {
+                        // 1. 强制姿态修正
+                        impact.special_rotation = 0.0;
+                        impact.special_rotation_velocity = 0.0;
+                        impact.tilt_amount = 0.0;
+                        impact.tilt_velocity = 0.0;
+                        // 身体前倾：始终向运动方向前倾
+                        action_tilt_offset = -0.12 * move_dir; 
+                        
+                        // 2. 转身逻辑：如果是返回阶段，且处于 LinearRun 状态，我们需要手动控制 Y 轴旋转使其背对敌人
+                        // 正常 dir=1 (向右攻), 返回 move_dir=-1 (向左跑). Face Right = true.
+                        // 我们的模型：Right 对应 0 度。Left 对应 PI。
+                        if is_return {
+                            // 强制背身旋转 (叠加到 combatant.base_rotation 上? 不，base_rotation 由系统控制)
+                            // 这里我们利用 special_rotation 来 hack 转身？或者利用 update_combatant_orientation 的例外
+                            // 更好的方式：让 update_combatant_orientation 忽略 LinearRun，我们在这里完全控制 rotation
+                            // 既然 LinearRun 已经被忽略了，那这里的 transform.rotation 计算里：
+                            // let final_y_rot = combatant.base_rotation + combatant.model_offset;
+                            // 我们需要覆盖 base_rotation。但 base_rotation 是 Component 字段。
+                            // 暂时我们在最终计算前，利用 impact.special_rotation 来实现 180 度转身
+                            impact.special_rotation = std::f32::consts::PI; 
+                        }
+
+                        // 3. 步伐律动 (Y/Z 轴)
+                        // 使用全局时间或 timer 都可以，这里用 timer 倒排可能不连续，改用 elapsed_secs
+                        let run_phase = time.elapsed_secs() * 20.0; 
+                        action_pos_offset.y = run_phase.sin().abs() * 0.08; // 蹬地更用力
+                        action_pos_offset.z = run_phase.cos() * 0.15; // Z轴大幅摆动，规避直线感
+                        
+                        // 4. 非线性速度 (Pulse)
+                        let speed_pulse = (run_phase * 0.5).sin().abs() * 0.3 + 0.8; // 0.8 ~ 1.1 倍率
+                        
+                        // 5. 速度计算
+                        let braking_dist = 1.5;
+                        let speed_scalar = if dist_left < braking_dist { (dist_left / braking_dist).max(0.2) } else { 1.0 };
+                        let base_speed = 18.0; // 高速突进
+                        
+                        impact.offset_velocity = Vec3::new(base_speed * move_dir * speed_pulse * speed_scalar, 0.0, 0.0);
+                        pos_damping = 8.0;
+
+                        // 6. 状态切换判定
+                        if dist_left < 0.5 {
+                            if impact.action_stage == 0 {
+                                // Rush -> Attack 1
+                                impact.action_stage = 1;
+                                impact.action_timer = 0.4; // 第一刀时长
+                                if let Some(ref mut sprite) = sprite_opt {
+                                    sprite.state = AnimationState::Attack;
+                                    sprite.current_frame = 0; 
+                                    sprite.elapsed = 0.0;
+                                    info!("【组合技】突进到位 -> 第一斩");
+                                }
+                                impact.offset_velocity = Vec3::ZERO; // 刹车
+                            } else {
+                                // Return -> Finish
+                                impact.action_type = ActionType::None;
+                                if let Some(ref mut sprite) = sprite_opt {
+                                    sprite.state = AnimationState::Idle;
+                                }
+                                info!("【组合技】返回到位 -> 待机");
+                            }
+                        }
+                    } 
+                    // --- 攻击阶段 (两连斩) ---
+                    else if impact.action_stage == 1 || impact.action_stage == 2 {
+                        // 惯性滑步 (攻击时的前冲)
+                        let slide_speed = if impact.action_stage == 1 { 5.0 } else { 8.0 }; // 第二刀冲得更远
+                        impact.offset_velocity = Vec3::new(slide_speed * dir * (impact.action_timer / 0.4), 0.0, 0.0);
+                        pos_damping = 10.0;
+                        
+                        // 计时器检查
+                        if impact.action_timer <= 0.0 {
+                            if impact.action_stage == 1 {
+                                // Attack 1 -> Attack 2
+                                impact.action_stage = 2;
+                                impact.action_timer = 0.5; // 第二刀时长
+                                if let Some(ref mut sprite) = sprite_opt {
+                                    // 强制重播攻击动画
+                                    sprite.state = AnimationState::Attack;
+                                    sprite.current_frame = 0;
+                                    sprite.elapsed = 0.0;
+                                    info!("【组合技】第一斩结束 -> 第二斩");
+                                    
+                                    // 可以在这里加特效
+                                    use crate::components::particle::EffectType;
+                                    let hit_pos = (impact.home_position + impact.current_offset) * 100.0 + Vec3::new(50.0 * dir, 0.0, 0.0);
+                                    effect_events.send(crate::components::particle::SpawnEffectEvent::new(EffectType::WolfSlash, hit_pos));
+                                }
+                            } else {
+                                // Attack 2 -> Return
+                                impact.action_stage = 3;
+                                // 不需要 timer，靠距离判断
+                                if let Some(ref mut sprite) = sprite_opt {
+                                    sprite.state = AnimationState::LinearRun; // 切换回跑动状态
+                                    info!("【组合技】攻击结束 -> 转身返回");
+                                }
+                            }
+                        }
+                    }
                 },
                 ActionType::SkitterApproach => {
                     // 1. 真实多足爬行位移逻辑 (类大作实现)
@@ -555,12 +660,12 @@ pub fn trigger_hit_feedback(
                     impact.offset_velocity = Vec3::new(20.0 * direction, 0.0, 0.0);
                 }
                 AnimationState::LinearRun => {
-                    // [御剑术重构] 使用稳定跑步位移
+                    // [御剑术重构] 使用组合技逻辑：跑动 -> 两连斩 -> 返回
                     let target_x = if direction < 0.0 { -2.5 } else { 2.5 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
-                    impact.action_type = ActionType::PlayerRun; 
-                    impact.action_timer = 1.2; 
-                    impact.action_stage = 0; // [修复] 重置阶段状态
+                    impact.action_type = ActionType::CultivatorCombo; 
+                    impact.action_timer = 2.0; // 总超时保护，实际由 stage 控制
+                    impact.action_stage = 0; // 0:Rush, 1:Atk1, 2:Atk2, 3:Return
                     impact.tilt_velocity = 0.0;
                     impact.offset_velocity = Vec3::ZERO; 
                     impact.special_rotation = 0.0;

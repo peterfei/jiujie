@@ -295,6 +295,8 @@ pub enum ActionType {
     Ascend,
     /// [新增] 玩家跑步位移：平滑移动并保持动画
     PlayerRun,
+    /// [新增] 修行者突袭组合技：非线性跑动 -> 两连斩 -> 转身返回
+    CultivatorCombo,
     /// [新增] 蜘蛛急速爬行：向目标移动并伴随剧烈抖动与丝迹
     SkitterApproach,
     /// [新增] 怨灵大招：多重幻影分身冲击
