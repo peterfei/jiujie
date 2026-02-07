@@ -414,39 +414,25 @@ pub fn update_physical_impacts(
                     let side_vec = Vec3::new(-impact.target_vector.z, 0.0, impact.target_vector.x).normalize_or_zero();
 
                     if impact.action_stage == 0 || impact.action_stage == 3 {
-                        // 1. 强行锁定动画
-                        if let Some(ref mut sprite) = sprite_opt {
-                            sprite.state = AnimationState::LinearRun;
-                            sprite.looping = true;
-                        }
-
                         impact.tilt_amount = 0.0;
                         impact.tilt_velocity = 0.0;
                         action_tilt_offset = -0.18 * (if is_return { -1.0 } else { 1.0 }); 
-                        impact.special_rotation = 0.0; // [修复] 移除 Hack，交由 combatant 系统
+                        impact.special_rotation = 0.0;
 
-                        let run_phase = time.elapsed_secs() * 35.0; // 极高频
+                        // [关键优化] 参考蜘蛛，提高采样频率和随机摆动
+                        let run_phase = time.elapsed_secs() * 32.0; 
                         
-                        // [3D摆动] 增加随机感和幅度
-                        let sway_amount = run_phase.cos() * 0.28 + (run_phase * 2.2).sin() * 0.08;
+                        // [3D侧向律动] 显著增加幅度 (0.28 -> 0.4)
+                        let sway_amount = run_phase.cos() * 0.4 + (run_phase * 2.2).sin() * 0.1;
                         action_pos_offset = side_vec * sway_amount;
-                        action_pos_offset.y = run_phase.sin().abs() * 0.18; 
+                        action_pos_offset.y = run_phase.sin().abs() * 0.2; 
                         
-                        let braking_dist = 1.0;
-                        let speed_pulse = (run_phase * 0.5).sin().abs() * 0.6 + 0.8; 
-                        let speed_scalar = if dist_left < braking_dist { (dist_left / braking_dist).max(0.2) } else { 1.0 };
-                        let base_speed = 28.0; // 冲刺速度
-                        
-                        impact.offset_velocity = move_vec * base_speed * speed_pulse * speed_scalar;
-                        pos_damping = 4.0; // 极低阻尼，让速度几乎完全体现
+                        let base_speed = 26.0; 
+                        let speed_pulse = (run_phase * 0.45).sin().abs() * 0.5 + 0.8;
+                        let step_dist = base_speed * speed_pulse * dt;
 
-                        // [过冲检测] 使用点积判断是否越过目标点
-                        // 目标点相对于 Home 的偏移量：去程是 target_vector * dist，回程是 ZERO
-                        let target_offset = if is_return { Vec3::ZERO } else { impact.target_vector * target_dist };
-                        let to_target = target_offset - impact.current_offset;
-                        let dot_prod = to_target.dot(move_vec);
-
-                        if dot_prod <= 0.0 { // 已经越过或到达
+                        // [物理修复] 采用更激进的过冲吸附逻辑
+                        if step_dist >= dist_left || dist_left < 0.2 {
                             if impact.action_stage == 0 {
                                 impact.action_stage = 1;
                                 impact.action_timer = 0.6; 
@@ -457,17 +443,24 @@ pub fn update_physical_impacts(
                                     sprite.elapsed = 0.0;
                                 }
                                 impact.offset_velocity = Vec3::ZERO;
-                                impact.current_offset = target_offset; // [修正] 强制吸附到目标点
+                                // 强制校准位置，防止穿模
+                                if !is_return {
+                                    impact.current_offset = impact.target_vector * (impact.target_offset_dist - 0.8);
+                                }
                             } else {
                                 // 彻底结束组合技
                                 impact.action_type = ActionType::None;
                                 impact.action_timer = 0.0; 
+                                impact.current_offset = Vec3::ZERO; 
                                 impact.target_vector = Vec3::ZERO; 
                                 if let Some(ref mut sprite) = sprite_opt {
                                     sprite.state = AnimationState::Idle;
                                     sprite.looping = true;
                                 }
                             }
+                        } else {
+                            impact.offset_velocity = move_vec * base_speed * speed_pulse;
+                            pos_damping = 4.0; 
                         }
                     } 
                     // --- 攻击阶段 (两连斩) ---
@@ -654,12 +647,20 @@ pub fn trigger_hit_feedback(
                     let target_x = if direction < 0.0 { -2.5 } else { 2.5 };
                     impact.target_offset_dist = (target_x - impact.home_position.x).abs();
                     impact.action_type = ActionType::CultivatorCombo; 
-                    impact.action_timer = 2.0; // 总超时保护，实际由 stage 控制
-                    impact.action_stage = 0; // 0:Rush, 1:Atk1, 2:Atk2, 3:Return
+                    impact.action_timer = 2.0; 
+                    impact.action_stage = 0; 
+                    impact.target_vector = Vec3::ZERO; 
                     impact.tilt_velocity = 0.0;
                     impact.offset_velocity = Vec3::ZERO; 
                     impact.special_rotation = 0.0;
                     impact.special_rotation_velocity = 0.0;
+
+                    if let Some(ref mut sprite) = sprite_opt {
+                        sprite.state = AnimationState::LinearRun;
+                        sprite.looping = true;
+                        sprite.current_frame = 0;
+                        sprite.elapsed = 0.0;
+                    }
                 }
                 AnimationState::ImperialSword | AnimationState::DemonAttack => {
                     impact.action_type = ActionType::None;
@@ -849,13 +850,21 @@ pub fn handle_animation_events(
                     sprite.set_attack(4, 0.3);
                 }
                 AnimationState::WolfAttack => {
-                    // [关键修复] 御剑术冲刺阶段时长并设为循环
-                    sprite.set_attack(15, 1.0);
+                    // [关键修复] 直接设置状态，避免 set_attack 改写为 Attack
+                    sprite.state = AnimationState::WolfAttack;
+                    sprite.total_frames = 15;
+                    sprite.frame_duration = 1.0 / 15.0;
+                    sprite.current_frame = 0;
+                    sprite.elapsed = 0.0;
                     sprite.looping = true; 
                 }
                 AnimationState::LinearRun => {
-                    // [新版御剑术] 冲刺时长并设为循环
-                    sprite.set_attack(15, 1.0);
+                    // [新版御剑术] 跑动动画必须维持 LinearRun 状态
+                    sprite.state = AnimationState::LinearRun;
+                    sprite.total_frames = 15;
+                    sprite.frame_duration = 1.0 / 15.0;
+                    sprite.current_frame = 0;
+                    sprite.elapsed = 0.0;
                     sprite.looping = true;
                 }
                 AnimationState::WolfHowl => {
