@@ -1740,14 +1740,23 @@ pub fn sync_player_skeletal_animation(
 ) {
     for (_entity, mut sprite, config, impact, children) in player_q.iter_mut() {
         // [核心保底] 极致物理静止拦截器
-        // 只要位移归零且没有主动动作，强制将任何残留状态(如 LinearRun) 修正为 Idle
-        let is_physically_idle = impact.action_type == ActionType::None && impact.current_offset.length() < 0.15;
-        if is_physically_idle {
+        // 判定物理上是否归位且无动作
+        let is_physically_at_home = impact.action_type == ActionType::None && impact.current_offset.length() < 0.15;
+        
+        // [修复] 只有在非主动技能状态下，且物理归位时，才强制纠正状态机为 Idle
+        // 排除 ImperialSword, HeavenCast, DemonAttack 等原地施法状态，防止动画被拦截器秒杀
+        let is_action_state = matches!(sprite.state, 
+            AnimationState::Attack | AnimationState::Hit | AnimationState::HeavenCast | 
+            AnimationState::ImperialSword | AnimationState::DemonAttack | AnimationState::WolfHowl |
+            AnimationState::BossRoar | AnimationState::BossFrenzy | AnimationState::Defense
+        );
+
+        if is_physically_at_home && !is_action_state {
             if sprite.state != AnimationState::Idle {
                 sprite.state = AnimationState::Idle;
                 sprite.looping = true;
                 sprite.elapsed = 0.0;
-                info!("【终极归位】物理到位，强制纠正状态机为 Idle");
+                info!("【终极归位】物理到位且无技能，强制纠正状态机为 Idle");
             }
         }
 
@@ -1780,7 +1789,8 @@ pub fn sync_player_skeletal_animation(
         // 2. 状态映射
         let target_node = match sprite.state {
             AnimationState::LinearRun | AnimationState::WolfAttack => config.run_node,
-            AnimationState::DemonAttack | AnimationState::ImperialSword | AnimationState::HeavenCast => config.kick_node,
+            AnimationState::DemonAttack | AnimationState::ImperialSword => config.kick_node,
+            AnimationState::HeavenCast => config.idle_node,
             AnimationState::Attack | AnimationState::Hit | AnimationState::WolfHowl | AnimationState::BossFrenzy => config.strike_node,
             _ => config.idle_node,
         };
@@ -1798,8 +1808,8 @@ pub fn sync_player_skeletal_animation(
                 let mut should_replay = (is_attacking && (impact.action_stage == 1 || impact.action_stage == 2) && impact.action_timer > 0.55)
                                 || (sprite.state == AnimationState::LinearRun && impact.action_stage == 3 && impact.action_timer > 0.65);
                 
-                // 物理归位检测逻辑：只要位移归零且逻辑结束，强制切回并重播 Idle
-                if is_physically_idle && !player.is_playing_animation(config.idle_node) {
+                // 物理归位检测逻辑：只有在真正的空闲状态下，若没播放 Idle 才重播
+                if is_physically_at_home && !is_action_state && !player.is_playing_animation(config.idle_node) {
                     should_replay = true;
                 }
 
