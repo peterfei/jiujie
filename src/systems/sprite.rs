@@ -456,13 +456,17 @@ pub fn update_physical_impacts(
                                 impact.current_offset = Vec3::ZERO;
                                 impact.special_rotation = 0.0;
                                 impact.tilt_amount = 0.0;
+                                
                                 if let Some(ref mut sprite) = sprite_opt {
                                     sprite.state = AnimationState::Idle;
                                     sprite.looping = true;
                                     sprite.current_frame = 0;
                                     sprite.elapsed = 0.0;
                                 }
-                                info!("【御剑术】完美收招，归位待机");
+                                // 强制同步位置到原点
+                                transform.translation = impact.home_position;
+                                
+                                info!("【御剑术】物理流程结束，强制状态回归 Idle");
                             }
                         }
                     } 
@@ -500,15 +504,18 @@ pub fn update_physical_impacts(
                                     effect_events.send(crate::components::particle::SpawnEffectEvent::new(EffectType::WolfSlash, hit_pos).burst(8));
                                 }
                             } else {
+                                // [关键] 斩击结束，开始返回
                                 impact.action_stage = 3;
                                 impact.action_timer = 0.7; 
-                                impact.special_rotation = 0.0; // 返回前重置转体
+                                impact.special_rotation = 0.0; 
                                 if let Some(ref mut sprite) = sprite_opt {
+                                    // 强制切换到跑动状态，确保挺直腰背跑回
                                     sprite.state = AnimationState::LinearRun;
                                     sprite.looping = true;
                                     sprite.current_frame = 0;
                                     sprite.elapsed = 0.0;
                                 }
+                                info!("【御剑术】斩击完成，华丽转身返回");
                             }
                         }
                     }
@@ -1723,30 +1730,49 @@ pub fn update_combatant_orientation(
 /// 持续监听动画状态，通过 PlayerAnimationConfig 驱动 3D 模型内部的 AnimationPlayer。
 pub fn sync_player_skeletal_animation(
     mut commands: Commands,
-    player_q: Query<(Entity, &CharacterSprite, &PlayerAnimationConfig, &PhysicalImpact, &Children), With<PlayerSpriteMarker>>,
+    mut player_q: Query<(Entity, &mut CharacterSprite, &PlayerAnimationConfig, &PhysicalImpact, &Children), With<PlayerSpriteMarker>>,
     children_q: Query<&Children>,
     mut anim_player_q: Query<(Entity, &mut AnimationPlayer, Option<&AnimationGraphHandle>)>,
     mut weapon_vis_q: Query<(Entity, &mut Visibility, &mut Transform), With<PlayerWeapon>>,
     mut effect_events: EventWriter<crate::components::particle::SpawnEffectEvent>,
 ) {
-    for (_entity, sprite, config, impact, children) in player_q.iter() {
-        // 1. 武器显隐与缩放逻辑
-        let should_hide_weapon = sprite.state == AnimationState::HeavenCast || sprite.state == AnimationState::ImperialSword;
+    for (_entity, mut sprite, config, impact, children) in player_q.iter_mut() {
+        // [核心保底] 物理静止检测：如果位移已归零且没有动作
+        // 增加对 LinearRun 残留状态的强制清理
+        let is_physically_idle = impact.action_type == ActionType::None && impact.current_offset.length() < 0.1;
+        if is_physically_idle && (sprite.state == AnimationState::LinearRun || sprite.state == AnimationState::Attack) {
+            sprite.state = AnimationState::Idle;
+            sprite.looping = true;
+            sprite.elapsed = 0.0;
+        }
+
+        // 1. 武器显隐逻辑：仅在真正的战斗/施法状态显示
+        // 用户要求：跑动中和待机时不显示
+        let is_in_combat_action = matches!(sprite.state, 
+            AnimationState::Attack | 
+            AnimationState::Hit | 
+            AnimationState::HeavenCast | 
+            AnimationState::ImperialSword | 
+            AnimationState::DemonAttack |
+            AnimationState::WolfHowl
+        );
+        
         for (w_entity, mut vis, mut transform) in weapon_vis_q.iter_mut() {
-            if should_hide_weapon {
+            if !is_in_combat_action {
                 if *vis != Visibility::Hidden { 
                     *vis = Visibility::Hidden; 
                     transform.scale = Vec3::ZERO; 
-                    use crate::components::particle::EffectType;
-                    effect_events.send(crate::components::particle::SpawnEffectEvent::new(EffectType::SwordEnergy, transform.translation + Vec3::new(0.0, 1.0, 0.0)).burst(25));
                 }
             } else if *vis == Visibility::Hidden {
                 *vis = Visibility::Inherited;
                 transform.scale = Vec3::ONE; 
+                // 拔刀特效
+                use crate::components::particle::EffectType;
+                effect_events.send(crate::components::particle::SpawnEffectEvent::new(EffectType::SwordEnergy, transform.translation).burst(12));
             }
         }
 
-        // 2. 状态映射 (0:等待, 1:前踢, 2:跑步, 3:挥砍)
+        // 2. 状态映射
         let target_node = match sprite.state {
             AnimationState::LinearRun | AnimationState::WolfAttack => config.run_node,
             AnimationState::DemonAttack | AnimationState::ImperialSword | AnimationState::HeavenCast => config.kick_node,
@@ -1762,36 +1788,33 @@ pub fn sync_player_skeletal_animation(
                     commands.entity(anim_entity).insert(AnimationGraphHandle(config.graph.clone()));
                 }
 
-                // [关键修复] 只有 Idle 和 Run 节点需要 Forever 循环
                 let is_looping_node = target_node == config.idle_node || target_node == config.run_node;
                 
-                // [核心修复] 判定是否需要强制重播 (用于连斩和回程转换)
-                // 窗口收窄到每个阶段启动的前 0.02s
+                // [重置判定升级]
+                // 1. 动作阶段切换瞬间 (action_timer > 0.55 等)
+                // 2. 物理归位瞬间 (is_physically_idle 且当前没在播 Idle)
                 let is_attacking = sprite.state == AnimationState::Attack;
-                let force_replay = (is_attacking && (impact.action_stage == 1 || impact.action_stage == 2) && impact.action_timer > 0.58)
-                                || (sprite.state == AnimationState::LinearRun && impact.action_stage == 3 && impact.action_timer > 0.68);
+                let mut force_replay = (is_attacking && (impact.action_stage == 1 || impact.action_stage == 2) && impact.action_timer > 0.55)
+                                || (sprite.state == AnimationState::LinearRun && impact.action_stage == 3 && impact.action_timer > 0.65);
+                
+                if is_physically_idle && !player.is_playing_animation(config.idle_node) {
+                    force_replay = true;
+                }
 
                 if !player.is_playing_animation(target_node) || force_replay {
                     let mut transitions = player.play(target_node);
-                    if is_looping_node {
-                        transitions.set_repeat(bevy::animation::RepeatAnimation::Forever);
-                    } else {
-                        transitions.set_repeat(bevy::animation::RepeatAnimation::Never);
-                    }
+                    transitions.set_repeat(if is_looping_node { bevy::animation::RepeatAnimation::Forever } else { bevy::animation::RepeatAnimation::Never });
                     
-                    // 只要切换到非待机动作，或者强制重播，就执行 replay
-                    if target_node != config.idle_node {
+                    if target_node != config.idle_node || force_replay {
                         transitions.replay();
                     }
 
                     if sprite.state == AnimationState::LinearRun {
-                        transitions.set_speed(1.6); // 匹配冲刺速度
+                        transitions.set_speed(1.6);
                     }
                     
                     if force_replay {
-                        info!("【3D动画】强制重播动作: {:?}", sprite.state);
-                    } else {
-                        info!("【3D动画】切换动作: {:?}", sprite.state);
+                        info!("【3D同步】强制重置动作节点: {:?}", sprite.state);
                     }
                 }
                 
