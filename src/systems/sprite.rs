@@ -376,16 +376,20 @@ pub fn update_physical_impacts(
                     let current_dist = impact.current_offset.x.abs();
                     let dist_left = (target_dist - current_dist).max(0.0);
                     
-                    // 1. 强制身体姿态：严禁任何程序化倾斜或旋转
+                    // 1. 身体姿态优化：允许极微量的物理前倾以增加速度感
+                    // 之前的 "严禁" 导致了死板，现在引入 5度 (0.08弧度) 的动态前倾
                     impact.special_rotation = 0.0;
                     impact.special_rotation_velocity = 0.0;
-                    impact.tilt_amount = 0.0;
+                    impact.tilt_amount = 0.0; 
                     impact.tilt_velocity = 0.0;
-                    action_tilt_offset = 0.0;
+                    action_tilt_offset = -0.08 * dir; // 向冲刺方向前倾
                     
-                    // 2. 模拟脚步落地感：在 Y 轴增加极其微小的步进抖动 (0.01 级别)
-                    let run_phase = (impact.action_timer * 15.0).sin();
-                    action_pos_offset.y = run_phase.abs() * 0.05; 
+                    // 2. 模拟脚步律动：
+                    // [Y轴] 蹬地腾空感 (run_phase.sin().abs())
+                    // [Z轴] 左右重心转移 (run_phase.cos()) -> 这就是消除直线感的关键！
+                    let run_phase = impact.action_timer * 18.0;
+                    action_pos_offset.y = run_phase.sin().abs() * 0.06; 
+                    action_pos_offset.z = run_phase.cos() * 0.08;
 
                     // 3. 到位判定
                     if dist_left < 0.6 && impact.action_stage == 0 {
