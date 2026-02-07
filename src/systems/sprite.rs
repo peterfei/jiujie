@@ -400,72 +400,50 @@ pub fn update_physical_impacts(
                 ActionType::CultivatorCombo => {
                     // [大作级] 修行者突袭组合技：Rush -> Attack x2 -> Return
                     
-                    // 阶段 0: 突进 (Rush)
-                    // 阶段 3: 返回 (Return)
                     let is_return = impact.action_stage == 3;
-                    let target_dist = if is_return { 0.0 } else { impact.target_offset_dist }; // 返回时目标是 home (dist=0)
+                    let target_dist = if is_return { 0.0 } else { impact.target_offset_dist };
                     let current_dist = impact.current_offset.x.abs();
-                    let dist_left = (target_dist - current_dist).abs(); // 注意这里用 abs，因为 return 时 current > target
-                    
-                    // 动态计算方向：去程 dir，回程 -dir
+                    let dist_left = (target_dist - current_dist).abs(); 
                     let move_dir = if is_return { -dir } else { dir };
                     
-                    // --- 通用跑动动效 (参考蜘蛛) ---
+                    // --- 通用跑动动效 (参考蜘蛛实现) ---
                     if impact.action_stage == 0 || impact.action_stage == 3 {
-                        // 1. 强制姿态修正
                         impact.special_rotation = 0.0;
                         impact.special_rotation_velocity = 0.0;
                         impact.tilt_amount = 0.0;
                         impact.tilt_velocity = 0.0;
-                        // 身体前倾：始终向运动方向前倾
-                        action_tilt_offset = -0.12 * move_dir; 
+                        action_tilt_offset = -0.15 * move_dir; 
                         
-                        // 2. 转身逻辑：如果是返回阶段，且处于 LinearRun 状态，我们需要手动控制 Y 轴旋转使其背对敌人
-                        // 正常 dir=1 (向右攻), 返回 move_dir=-1 (向左跑). Face Right = true.
-                        // 我们的模型：Right 对应 0 度。Left 对应 PI。
                         if is_return {
-                            // 强制背身旋转 (叠加到 combatant.base_rotation 上? 不，base_rotation 由系统控制)
-                            // 这里我们利用 special_rotation 来 hack 转身？或者利用 update_combatant_orientation 的例外
-                            // 更好的方式：让 update_combatant_orientation 忽略 LinearRun，我们在这里完全控制 rotation
-                            // 既然 LinearRun 已经被忽略了，那这里的 transform.rotation 计算里：
-                            // let final_y_rot = combatant.base_rotation + combatant.model_offset;
-                            // 我们需要覆盖 base_rotation。但 base_rotation 是 Component 字段。
-                            // 暂时我们在最终计算前，利用 impact.special_rotation 来实现 180 度转身
                             impact.special_rotation = std::f32::consts::PI; 
                         }
 
-                        // 3. 步伐律动 (Y/Z 轴)
-                        // 使用全局时间或 timer 都可以，这里用 timer 倒排可能不连续，改用 elapsed_secs
-                        let run_phase = time.elapsed_secs() * 20.0; 
-                        action_pos_offset.y = run_phase.sin().abs() * 0.08; // 蹬地更用力
-                        action_pos_offset.z = run_phase.cos() * 0.15; // Z轴大幅摆动，规避直线感
+                        // [频率优化] 从 20.0 提高到 30.0，与蜘蛛一致
+                        let run_phase = time.elapsed_secs() * 30.0; 
+                        action_pos_offset.y = run_phase.sin().abs() * 0.1; 
+                        action_pos_offset.z = run_phase.cos() * 0.18; 
                         
-                        // 4. 非线性速度 (Pulse)
-                        let speed_pulse = (run_phase * 0.5).sin().abs() * 0.3 + 0.8; // 0.8 ~ 1.1 倍率
+                        let speed_pulse = (run_phase * 0.4).sin().abs() * 0.4 + 0.7; 
                         
-                        // 5. 速度计算
-                        let braking_dist = 1.5;
-                        let speed_scalar = if dist_left < braking_dist { (dist_left / braking_dist).max(0.2) } else { 1.0 };
-                        let base_speed = 18.0; // 高速突进
+                        let braking_dist = 1.2;
+                        let speed_scalar = if dist_left < braking_dist { (dist_left / braking_dist).max(0.1) } else { 1.0 };
+                        let base_speed = 20.0; 
                         
                         impact.offset_velocity = Vec3::new(base_speed * move_dir * speed_pulse * speed_scalar, 0.0, 0.0);
-                        pos_damping = 8.0;
+                        pos_damping = 12.0;
 
-                        // 6. 状态切换判定
-                        if dist_left < 0.5 {
+                        if dist_left < 0.4 {
                             if impact.action_stage == 0 {
-                                // Rush -> Attack 1
                                 impact.action_stage = 1;
-                                impact.action_timer = 0.4; // 第一刀时长
+                                impact.action_timer = 0.6; // 延长时长确保动画
                                 if let Some(ref mut sprite) = sprite_opt {
                                     sprite.state = AnimationState::Attack;
                                     sprite.current_frame = 0; 
                                     sprite.elapsed = 0.0;
                                     info!("【组合技】突进到位 -> 第一斩");
                                 }
-                                impact.offset_velocity = Vec3::ZERO; // 刹车
+                                impact.offset_velocity = Vec3::ZERO;
                             } else {
-                                // Return -> Finish
                                 impact.action_type = ActionType::None;
                                 if let Some(ref mut sprite) = sprite_opt {
                                     sprite.state = AnimationState::Idle;
@@ -476,36 +454,29 @@ pub fn update_physical_impacts(
                     } 
                     // --- 攻击阶段 (两连斩) ---
                     else if impact.action_stage == 1 || impact.action_stage == 2 {
-                        // 惯性滑步 (攻击时的前冲)
-                        let slide_speed = if impact.action_stage == 1 { 5.0 } else { 8.0 }; // 第二刀冲得更远
-                        impact.offset_velocity = Vec3::new(slide_speed * dir * (impact.action_timer / 0.4), 0.0, 0.0);
+                        let slide_speed = if impact.action_stage == 1 { 6.0 } else { 10.0 }; 
+                        impact.offset_velocity = Vec3::new(slide_speed * dir * (impact.action_timer / 0.6), 0.0, 0.0);
                         pos_damping = 10.0;
                         
-                        // 计时器检查
                         if impact.action_timer <= 0.0 {
                             if impact.action_stage == 1 {
-                                // Attack 1 -> Attack 2
                                 impact.action_stage = 2;
-                                impact.action_timer = 0.5; // 第二刀时长
+                                impact.action_timer = 0.6; 
                                 if let Some(ref mut sprite) = sprite_opt {
-                                    // 强制重播攻击动画
                                     sprite.state = AnimationState::Attack;
                                     sprite.current_frame = 0;
                                     sprite.elapsed = 0.0;
-                                    info!("【组合技】第一斩结束 -> 第二斩");
+                                    info!("【组合技】连斩切换 -> 第二斩");
                                     
-                                    // 可以在这里加特效
                                     use crate::components::particle::EffectType;
-                                    let hit_pos = (impact.home_position + impact.current_offset) * 100.0 + Vec3::new(50.0 * dir, 0.0, 0.0);
-                                    effect_events.send(crate::components::particle::SpawnEffectEvent::new(EffectType::WolfSlash, hit_pos));
+                                    let hit_pos = (impact.home_position + impact.current_offset) * 100.0 + Vec3::new(60.0 * dir, 0.0, 0.0);
+                                    effect_events.send(crate::components::particle::SpawnEffectEvent::new(EffectType::WolfSlash, hit_pos).burst(2));
                                 }
                             } else {
-                                // Attack 2 -> Return
                                 impact.action_stage = 3;
-                                // 不需要 timer，靠距离判断
                                 if let Some(ref mut sprite) = sprite_opt {
-                                    sprite.state = AnimationState::LinearRun; // 切换回跑动状态
-                                    info!("【组合技】攻击结束 -> 转身返回");
+                                    sprite.state = AnimationState::LinearRun; 
+                                    info!("【组合技】连斩完成 -> 转身返回");
                                 }
                             }
                         }
@@ -1656,8 +1627,9 @@ pub fn update_combatant_orientation(
     // 1. 玩家面向所有敌人的中心点
     let enemy_center = enemy_positions.iter().sum::<Vec3>() / enemy_positions.len() as f32;
     if let Ok((player_transform, mut player_combatant, sprite)) = player_q.get_single_mut() {
-        // [关键修复] 如果正在冲刺，禁止更新朝向，防止绕圈 (包含新版 LinearRun)
-        if sprite.state != AnimationState::WolfAttack && sprite.state != AnimationState::LinearRun {
+        // [关键修复] 如果正在冲刺或执行组合技，禁止更新朝向，防止绕圈 (包含新版 LinearRun 和 CultivatorCombo)
+        let is_running = sprite.state == AnimationState::WolfAttack || sprite.state == AnimationState::LinearRun;
+        if !is_running {
             let dir = enemy_center - player_transform.translation;
             player_combatant.base_rotation = dir.x.atan2(dir.z);
         }
@@ -1679,14 +1651,14 @@ pub fn update_combatant_orientation(
 /// 持续监听动画状态，通过 PlayerAnimationConfig 驱动 3D 模型内部的 AnimationPlayer。
 pub fn sync_player_skeletal_animation(
     mut commands: Commands,
-    player_q: Query<(Entity, &CharacterSprite, &PlayerAnimationConfig, &Children), With<PlayerSpriteMarker>>,
+    player_q: Query<(Entity, &CharacterSprite, &PlayerAnimationConfig, &PhysicalImpact, &Children), With<PlayerSpriteMarker>>,
     children_q: Query<&Children>,
     mut anim_player_q: Query<(Entity, &mut AnimationPlayer, Option<&AnimationGraphHandle>)>,
     mut weapon_vis_q: Query<(Entity, &mut Visibility, &mut Transform), With<PlayerWeapon>>,
     mut effect_events: EventWriter<crate::components::particle::SpawnEffectEvent>,
 ) {
-    for (_entity, sprite, config, children) in player_q.iter() {
-        // 1. 武器显隐与缩放逻辑 (省略...)
+    for (_entity, sprite, config, impact, children) in player_q.iter() {
+        // 1. 武器显隐与缩放逻辑
         let should_hide_weapon = sprite.state == AnimationState::HeavenCast || sprite.state == AnimationState::ImperialSword;
         for (w_entity, mut vis, mut transform) in weapon_vis_q.iter_mut() {
             if should_hide_weapon {
@@ -1714,13 +1686,15 @@ pub fn sync_player_skeletal_animation(
         let mut stack: Vec<Entity> = children.iter().cloned().collect();
         while let Some(current) = stack.pop() {
             if let Ok((anim_entity, mut player, graph_opt)) = anim_player_q.get_mut(current) {
-                // 确保挂载了图表
                 if graph_opt.is_none() {
                     commands.entity(anim_entity).insert(AnimationGraphHandle(config.graph.clone()));
                 }
 
-                // [关键修复] 回归验证过的播放逻辑
-                if !player.is_playing_animation(target_node) {
+                // [关键修复] 如果是攻击动作且 Stage 发生了变化 (连击中)，强制重播
+                let is_attacking = sprite.state == AnimationState::Attack;
+                let force_replay = is_attacking && (impact.action_stage == 1 || impact.action_stage == 2) && impact.action_timer > 0.55;
+
+                if !player.is_playing_animation(target_node) || force_replay {
                     let mut transitions = player.play(target_node);
                     if target_node == config.idle_node {
                         transitions.set_repeat(bevy::animation::RepeatAnimation::Forever);
@@ -1728,12 +1702,13 @@ pub fn sync_player_skeletal_animation(
                         transitions.set_repeat(bevy::animation::RepeatAnimation::Never);
                         transitions.replay(); 
                         
-                        // [优化] 如果是奔跑，稍微加快播放频率
                         if sprite.state == AnimationState::LinearRun {
-                            transitions.set_speed(1.5);
+                            transitions.set_speed(1.8); // 稍微加快跑动动画匹配高速冲刺
                         }
                     }
-                    info!("【3D骨骼驱动】状态切换: {:?} -> 节点: {:?}", sprite.state, target_node);
+                    if force_replay {
+                        info!("【3D连连看】检测到连斩 Stage 切换 -> 强制重播 Strike 动画");
+                    }
                 }
                 
                 if let Some(mut active_anim) = player.animation_mut(target_node) {
