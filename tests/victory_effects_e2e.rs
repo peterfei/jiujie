@@ -95,7 +95,6 @@ fn e2e_victory_201_spawn_effect_event_can_be_created() {
 
     assert_eq!(event.effect_type, EffectType::Victory);
     assert_eq!(event.count, 50);
-    assert!(event.burst, "应该是爆发模式");
 }
 
 #[test]

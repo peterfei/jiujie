@@ -49,32 +49,35 @@ fn e2e_delay_101_victory_events_have_correct_positions() {
     let event1 = SpawnEffectEvent {
         effect_type: EffectType::Victory,
         position: Vec3::new(0.0, 100.0, 999.0),
-        burst: true,
         count: 50,
-        target: None,
+        velocity_override: None,
+        target_pos: None,
         target_entity: None,
-        target_group: None,
-        target_index: None,
+        target_group: Vec::new(),
+        target_index: 0,
+        model_override: None,
     };
     let event2 = SpawnEffectEvent {
         effect_type: EffectType::Victory,
         position: Vec3::new(-50.0, 80.0, 999.0),
-        burst: true,
         count: 30,
-        target: None,
+        velocity_override: None,
+        target_pos: None,
         target_entity: None,
-        target_group: None,
-        target_index: None,
+        target_group: Vec::new(),
+        target_index: 0,
+        model_override: None,
     };
     let event3 = SpawnEffectEvent {
         effect_type: EffectType::Victory,
         position: Vec3::new(50.0, 80.0, 999.0),
-        burst: true,
         count: 30,
-        target: None,
+        velocity_override: None,
+        target_pos: None,
         target_entity: None,
-        target_group: None,
-        target_index: None,
+        target_group: Vec::new(),
+        target_index: 0,
+        model_override: None,
     };
 
     // 验证Y坐标是正值（在屏幕上方）
@@ -95,57 +98,61 @@ fn e2e_delay_102_victory_events_total_count() {
         SpawnEffectEvent {
             effect_type: EffectType::Victory,
             position: Vec3::new(0.0, 100.0, 999.0),
-            burst: true,
             count: 50,
-            target: None,
+            velocity_override: None,
+            target_pos: None,
             target_entity: None,
-            target_group: None,
-            target_index: None,
+            target_group: Vec::new(),
+            target_index: 0,
+            model_override: None,
         },
         SpawnEffectEvent {
             effect_type: EffectType::Victory,
             position: Vec3::new(-50.0, 80.0, 999.0),
-            burst: true,
             count: 30,
-            target: None,
+            velocity_override: None,
+            target_pos: None,
             target_entity: None,
-            target_group: None,
-            target_index: None,
+            target_group: Vec::new(),
+            target_index: 0,
+            model_override: None,
         },
         SpawnEffectEvent {
             effect_type: EffectType::Victory,
             position: Vec3::new(50.0, 80.0, 999.0),
-            burst: true,
             count: 30,
-            target: None,
+            velocity_override: None,
+            target_pos: None,
             target_entity: None,
-            target_group: None,
-            target_index: None,
+            target_group: Vec::new(),
+            target_index: 0,
+            model_override: None,
         },
     ];
 
-    let total: usize = events.iter().map(|e| e.count).sum();
+    let total: u32 = events.iter().map(|e| e.count).sum();
     assert_eq!(total, 110, "总共应该生成110个胜利粒子");
 }
 
 #[test]
 fn e2e_delay_103_victory_events_use_burst_mode() {
-    // 验证所有胜利事件都使用爆发模式
+    // 验证所有胜利事件都具有预期的粒子数量
     let events = vec![
         SpawnEffectEvent {
             effect_type: EffectType::Victory,
             position: Vec3::new(0.0, 100.0, 999.0),
-            burst: true,
             count: 50,
-            target: None,
+            velocity_override: None,
+            target_pos: None,
             target_entity: None,
-            target_group: None,
-            target_index: None,
+            target_group: Vec::new(),
+            target_index: 0,
+            model_override: None,
         },
     ];
 
     for event in events {
-        assert!(event.burst, "胜利事件应该使用爆发模式");
+        assert!(event.count >= 30, "胜利事件应该具有足够的粒子数量");
     }
 }
 

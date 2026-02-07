@@ -106,16 +106,16 @@ fn e2e_cleanup_301_spawn_effect_event_can_be_created() {
     let event = SpawnEffectEvent {
         effect_type: EffectType::Victory,
         position: Vec3::new(0.0, 100.0, 999.0),
-        burst: true,
         count: 50,
-        target: None,
+        velocity_override: None,
+        target_pos: None,
         target_entity: None,
-        target_group: None,
-        target_index: None,
+        target_group: Vec::new(),
+        target_index: 0,
+        model_override: None,
     };
 
     assert_eq!(event.count, 50, "事件应该记录粒子数量");
-    assert!(event.burst, "事件应该标记为爆发模式");
 }
 
 #[test]
@@ -196,15 +196,15 @@ fn e2e_cleanup_502_victory_particles_use_burst_mode() {
     let event = SpawnEffectEvent {
         effect_type: EffectType::Victory,
         position: Vec3::new(0.0, 100.0, 999.0),
-        burst: true,
         count: 50,
-        target: None,
+        velocity_override: None,
+        target_pos: None,
         target_entity: None,
-        target_group: None,
-        target_index: None,
+        target_group: Vec::new(),
+        target_index: 0,
+        model_override: None,
     };
 
-    assert!(event.burst, "胜利特效应该是爆发模式（非持续）");
     assert_eq!(event.count, 50, "爆发模式应该有固定粒子数");
 }
 

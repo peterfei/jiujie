@@ -38,7 +38,11 @@ mod tests {
             SpriteMarker,
             CharacterSprite::new(Handle::default(), Vec2::new(100.0, 100.0)),
             EnemySpriteMarker { id: 1 },
-            Combatant3d { facing_right: false }, 
+            Combatant3d { 
+                facing_right: false,
+                base_rotation: 0.0,
+                model_offset: 0.0,
+            }, 
         )).id();
 
         // 2. 发送事件

@@ -9,6 +9,10 @@ fn test_visibility_and_animation_lock() {
     app.add_plugins(AssetPlugin::default());
     app.init_asset::<AnimationClip>();
     app.init_asset::<AnimationGraph>();
+    app.add_event::<CharacterAnimationEvent>();
+    app.add_event::<bevy_card_battler::components::particle::SpawnEffectEvent>();
+    app.add_event::<bevy_card_battler::components::ScreenEffectEvent>();
+    app.insert_resource(bevy_card_battler::components::sprite::CharacterAssets::default());
 
     // 1. 设置资产
     let graph_handle = app.world_mut().resource_mut::<Assets<AnimationGraph>>().add(AnimationGraph::new());
@@ -23,8 +27,9 @@ fn test_visibility_and_animation_lock() {
         PlayerAnimationConfig {
             graph: graph_handle.clone(),
             idle_node,
-            hit_node,
-            attack_node,
+            kick_node: hit_node,
+            run_node: idle_node,
+            strike_node: attack_node,
         },
     )).id();
 
@@ -58,9 +63,9 @@ fn test_visibility_and_animation_lock() {
     app.add_systems(Update, sync_player_skeletal_animation);
     app.update();
 
-    // --- 🔴 核心验证：显隐锁死 ---
+    // --- 🔴 核心验证：拔刀逻辑 ---
     let vis = app.world().get::<Visibility>(weapon_entity).expect("武器应有 Visibility");
-    assert_eq!(*vis, Visibility::Hidden, "大招期间，深层嵌套的武器实体必须隐藏");
+    assert_eq!(*vis, Visibility::Inherited, "万剑归宗期间，深层嵌套的武器实体应当显示以配合特效");
 
     // --- 🟢 核心验证：动画驱动 ---
     let anim_player = app.world().get::<AnimationPlayer>(anim_player_entity).expect("应有播放器");

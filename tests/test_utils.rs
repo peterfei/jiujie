@@ -58,6 +58,9 @@ pub fn create_test_app() -> App {
     app.init_asset::<TextureAtlasLayout>();
     app.init_asset::<Mesh>();
     app.init_asset::<StandardMaterial>();
+    app.init_asset::<AnimationGraph>();
+    app.init_asset::<Scene>();
+    app.init_asset::<AnimationClip>();
 
     // 初始化游戏状态
     app.init_state::<GameState>();
@@ -72,6 +75,8 @@ pub fn create_test_app() -> App {
     app.add_event::<bevy_card_battler::components::DamageEffectEvent>();
     app.add_event::<bevy_card_battler::components::StatusEffectEvent>();
     app.add_event::<bevy::input::mouse::MouseWheel>(); // 新增滚轮事件
+    app.add_event::<bevy::input::mouse::MouseMotion>(); // 新增鼠标移动事件
+    app.add_event::<bevy::input::mouse::MouseButtonInput>(); // 新增鼠标按钮事件
 
     // 注册核心插件
     app.add_plugins(CorePlugin);

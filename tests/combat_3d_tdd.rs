@@ -15,7 +15,11 @@ fn test_3d_combatant_spawning() {
     let material_handle = Handle::<StandardMaterial>::default();
     
     let entity = app.world_mut().spawn((
-        Combatant3d { facing_right: true },
+        Combatant3d { 
+            facing_right: true,
+            base_rotation: 0.0,
+            model_offset: 0.0,
+        },
         Mesh3d(mesh_handle),
         MeshMaterial3d(material_handle),
         Transform::default(),
