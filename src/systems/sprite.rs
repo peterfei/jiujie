@@ -399,63 +399,69 @@ pub fn update_physical_impacts(
                 },
                 ActionType::CultivatorCombo => {
                     // [大作级] 修行者突袭组合技：Rush -> Attack x2 -> Return
-                    
                     let is_return = impact.action_stage == 3;
-                    let target_dist = if is_return { 0.0 } else { impact.target_offset_dist };
-                    let current_dist = impact.current_offset.x.abs();
+                    let current_dist = impact.current_offset.length(); // 改为 3D 长度
+                    let target_dist = if is_return { 0.0 } else { impact.target_offset_dist - 0.8 }; // 停在怪面前 0.8 米
                     let dist_left = (target_dist - current_dist).abs(); 
-                    let move_dir = if is_return { -dir } else { dir };
                     
-                    // --- 通用跑动动效 (参考蜘蛛实现) ---
+                    // 动态计算 3D 移动方向向量
+                    let move_vec = if is_return { -impact.target_vector } else { impact.target_vector };
+                    
+                    // --- 通用跑动动效 ---
                     if impact.action_stage == 0 || impact.action_stage == 3 {
-                        impact.special_rotation = 0.0;
-                        impact.special_rotation_velocity = 0.0;
                         impact.tilt_amount = 0.0;
                         impact.tilt_velocity = 0.0;
-                        action_tilt_offset = -0.15 * move_dir; 
                         
+                        // 1. 转身逻辑：利用 base_rotation 覆盖。
+                        // 如果是返回阶段，让 combatant 朝向反方向
                         if is_return {
-                            impact.special_rotation = std::f32::consts::PI; 
+                            impact.special_rotation = std::f32::consts::PI; // 继续保留这个 hack 直到重构旋转计算
+                        } else {
+                            impact.special_rotation = 0.0;
                         }
 
-                        // [频率优化] 从 20.0 提高到 30.0，与蜘蛛一致
+                        // 2. 步伐律动 (参考蜘蛛)
                         let run_phase = time.elapsed_secs() * 30.0; 
                         action_pos_offset.y = run_phase.sin().abs() * 0.1; 
+                        
+                        // Z 轴摆动：需要垂直于移动方向。
+                        // 这里我们暂时简化，因为 Z 轴摆动主要增加视觉丰富度
                         action_pos_offset.z = run_phase.cos() * 0.18; 
                         
+                        // 3. 速度计算
+                        let braking_dist = 1.5;
                         let speed_pulse = (run_phase * 0.4).sin().abs() * 0.4 + 0.7; 
-                        
-                        let braking_dist = 1.2;
                         let speed_scalar = if dist_left < braking_dist { (dist_left / braking_dist).max(0.1) } else { 1.0 };
-                        let base_speed = 20.0; 
+                        let base_speed = 22.0; 
                         
-                        impact.offset_velocity = Vec3::new(base_speed * move_dir * speed_pulse * speed_scalar, 0.0, 0.0);
+                        impact.offset_velocity = move_vec * base_speed * speed_pulse * speed_scalar;
                         pos_damping = 12.0;
 
-                        if dist_left < 0.4 {
+                        if dist_left < 0.3 {
                             if impact.action_stage == 0 {
                                 impact.action_stage = 1;
-                                impact.action_timer = 0.6; // 延长时长确保动画
+                                impact.action_timer = 0.6; 
                                 if let Some(ref mut sprite) = sprite_opt {
                                     sprite.state = AnimationState::Attack;
                                     sprite.current_frame = 0; 
                                     sprite.elapsed = 0.0;
-                                    info!("【组合技】突进到位 -> 第一斩");
                                 }
                                 impact.offset_velocity = Vec3::ZERO;
                             } else {
+                                // 彻底结束组合技，重置锁定状态
                                 impact.action_type = ActionType::None;
+                                impact.target_vector = Vec3::ZERO; 
                                 if let Some(ref mut sprite) = sprite_opt {
                                     sprite.state = AnimationState::Idle;
                                 }
-                                info!("【组合技】返回到位 -> 待机");
                             }
                         }
                     } 
                     // --- 攻击阶段 (两连斩) ---
                     else if impact.action_stage == 1 || impact.action_stage == 2 {
+                        // 向前惯性滑步 (沿着目标向量)
                         let slide_speed = if impact.action_stage == 1 { 6.0 } else { 10.0 }; 
-                        impact.offset_velocity = Vec3::new(slide_speed * dir * (impact.action_timer / 0.6), 0.0, 0.0);
+                        impact.offset_velocity = impact.target_vector * slide_speed * (impact.action_timer / 0.6);
                         pos_damping = 10.0;
                         
                         if impact.action_timer <= 0.0 {
@@ -466,17 +472,15 @@ pub fn update_physical_impacts(
                                     sprite.state = AnimationState::Attack;
                                     sprite.current_frame = 0;
                                     sprite.elapsed = 0.0;
-                                    info!("【组合技】连斩切换 -> 第二斩");
                                     
                                     use crate::components::particle::EffectType;
-                                    let hit_pos = (impact.home_position + impact.current_offset) * 100.0 + Vec3::new(60.0 * dir, 0.0, 0.0);
+                                    let hit_pos = (impact.home_position + impact.current_offset) * 100.0 + impact.target_vector * 60.0;
                                     effect_events.send(crate::components::particle::SpawnEffectEvent::new(EffectType::WolfSlash, hit_pos).burst(2));
                                 }
                             } else {
                                 impact.action_stage = 3;
                                 if let Some(ref mut sprite) = sprite_opt {
                                     sprite.state = AnimationState::LinearRun; 
-                                    info!("【组合技】连斩完成 -> 转身返回");
                                 }
                             }
                         }
@@ -1618,7 +1622,7 @@ pub fn spawn_character_sprite(
 /// 
 /// 利用算法动态计算玩家与怪物之间的相对位置，确保它们始终面对面。
 pub fn update_combatant_orientation(
-    mut player_q: Query<(&Transform, &mut Combatant3d, &CharacterSprite), With<PlayerSpriteMarker>>,
+    mut player_q: Query<(&Transform, &mut Combatant3d, &CharacterSprite, &mut PhysicalImpact), With<PlayerSpriteMarker>>,
     mut enemy_q: Query<(&Transform, &mut Combatant3d), (With<EnemySpriteMarker>, Without<PlayerSpriteMarker>)>,
 ) {
     let enemy_positions: Vec<Vec3> = enemy_q.iter().map(|(t, _)| t.translation).collect();
@@ -1626,17 +1630,29 @@ pub fn update_combatant_orientation(
     
     // 1. 玩家面向所有敌人的中心点
     let enemy_center = enemy_positions.iter().sum::<Vec3>() / enemy_positions.len() as f32;
-    if let Ok((player_transform, mut player_combatant, sprite)) = player_q.get_single_mut() {
-        // [关键修复] 如果正在冲刺或执行组合技，禁止更新朝向，防止绕圈 (包含新版 LinearRun 和 CultivatorCombo)
-        let is_running = sprite.state == AnimationState::WolfAttack || sprite.state == AnimationState::LinearRun;
-        if !is_running {
+    if let Ok((player_transform, mut player_combatant, sprite, mut impact)) = player_q.get_single_mut() {
+        // [关键修复] 冲刺或组合技期间，禁止更新逻辑朝向，防止近身绕圈
+        let is_locked = sprite.state == AnimationState::WolfAttack || 
+                       sprite.state == AnimationState::LinearRun ||
+                       impact.action_type == ActionType::CultivatorCombo;
+
+        if !is_locked {
             let dir = enemy_center - player_transform.translation;
             player_combatant.base_rotation = dir.x.atan2(dir.z);
+        }
+
+        // [新增] 如果是组合技刚开始 (Rush 阶段)，锁定目标向量
+        if impact.action_type == ActionType::CultivatorCombo && impact.action_stage == 0 && impact.target_vector == Vec3::ZERO {
+            let to_target = enemy_center - player_transform.translation;
+            impact.target_vector = to_target.normalize_or_zero();
+            // 顺便更新距离
+            impact.target_offset_dist = to_target.length();
+            info!("【3D路径锁定】目标点: {:?}, 距离: {:.2}", enemy_center, impact.target_offset_dist);
         }
     }
     
     // 2. 每个怪物分别面向玩家
-    if let Ok((player_transform, _, _)) = player_q.get_single() {
+    if let Ok((player_transform, _, _, _)) = player_q.get_single() {
         let player_pos = player_transform.translation;
         for (enemy_transform, mut enemy_combatant) in enemy_q.iter_mut() {
             // [算法修正] 怪物也统一使用 (Target - Self)

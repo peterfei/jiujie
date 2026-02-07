@@ -262,6 +262,8 @@ pub struct PhysicalImpact {
     pub action_type: ActionType,
     pub action_direction: f32, // 1.0 向右, -1.0 向左
     pub target_offset_dist: f32,
+    /// [新增] 冲刺的目标 3D 向量 (归一化)
+    pub target_vector: Vec3,
     pub action_stage: u32,
     pub special_rotation: f32,
     pub special_rotation_velocity: f32,
@@ -274,7 +276,8 @@ impl Default for PhysicalImpact {
         Self {
             home_position: Vec3::ZERO, current_offset: Vec3::ZERO, offset_velocity: Vec3::ZERO,
             tilt_amount: 0.0, tilt_velocity: 0.0, action_timer: 0.0, action_type: ActionType::None,
-            action_direction: 1.0, target_offset_dist: 0.0, action_stage: 0,
+            action_direction: 1.0, target_offset_dist: 0.0, 
+            target_vector: Vec3::ZERO, action_stage: 0,
             special_rotation: 0.0, special_rotation_velocity: 0.0,
             trail_timer: 0.0,
         }
