@@ -27,29 +27,31 @@ impl Plugin for SpritePlugin {
         app.add_systems(
             Update,
             (
-                handle_animation_events,
-                trigger_hit_feedback,
                 (
+                    handle_animation_events,
+                    trigger_hit_feedback,
                     sync_2d_to_3d_render,
                     update_breath_animations,
-                    update_combatant_orientation, // [新增] 实时朝向算法
+                    update_combatant_orientation,
                     update_physical_impacts,
                 ).chain(),
-                update_combat_camera, 
-                update_rotations,
-                update_magic_seal_pulse,
-                update_relic_floating,
-                spawn_ghosts,
-                cleanup_ghosts,
-                update_spirit_clones,
-                update_clouds, 
-                update_mist, 
-                update_wind_sway, 
-                update_water, 
-                update_sprite_animations,
-                sync_player_skeletal_animation, // [新增] 骨骼动画同步
-                update_weapon_animation, // [新增]
-            ).run_if(in_state(GameState::Combat))
+                (
+                    update_combat_camera, 
+                    update_rotations,
+                    update_magic_seal_pulse,
+                    update_relic_floating,
+                    spawn_ghosts,
+                    cleanup_ghosts,
+                    update_spirit_clones,
+                    update_clouds, 
+                    update_mist, 
+                    update_wind_sway, 
+                    update_water, 
+                    update_sprite_animations,
+                ),
+                sync_player_skeletal_animation, // 确保在所有状态修改系统之后执行
+                update_weapon_animation,
+            ).chain().run_if(in_state(GameState::Combat))
         );
     }
 }
@@ -1737,13 +1739,16 @@ pub fn sync_player_skeletal_animation(
     mut effect_events: EventWriter<crate::components::particle::SpawnEffectEvent>,
 ) {
     for (_entity, mut sprite, config, impact, children) in player_q.iter_mut() {
-        // [核心保底] 物理静止检测：如果位移已归零且没有动作
-        // 增加对 LinearRun 残留状态的强制清理
-        let is_physically_idle = impact.action_type == ActionType::None && impact.current_offset.length() < 0.1;
-        if is_physically_idle && (sprite.state == AnimationState::LinearRun || sprite.state == AnimationState::Attack) {
-            sprite.state = AnimationState::Idle;
-            sprite.looping = true;
-            sprite.elapsed = 0.0;
+        // [核心保底] 极致物理静止拦截器
+        // 只要位移归零且没有主动动作，强制将任何残留状态(如 LinearRun) 修正为 Idle
+        let is_physically_idle = impact.action_type == ActionType::None && impact.current_offset.length() < 0.15;
+        if is_physically_idle {
+            if sprite.state != AnimationState::Idle {
+                sprite.state = AnimationState::Idle;
+                sprite.looping = true;
+                sprite.elapsed = 0.0;
+                info!("【终极归位】物理到位，强制纠正状态机为 Idle");
+            }
         }
 
         // 1. 武器显隐逻辑：仅在真正的战斗/施法状态显示
@@ -1788,38 +1793,32 @@ pub fn sync_player_skeletal_animation(
                     commands.entity(anim_entity).insert(AnimationGraphHandle(config.graph.clone()));
                 }
 
-                let is_looping_node = target_node == config.idle_node || target_node == config.run_node;
-                
-                // [重置判定升级]
-                // 1. 动作阶段切换瞬间 (action_timer > 0.55 等)
-                // 2. 物理归位瞬间 (is_physically_idle 且当前没在播 Idle)
+                // [核心修复] 判定是否需要执行切换或重播
                 let is_attacking = sprite.state == AnimationState::Attack;
-                let mut force_replay = (is_attacking && (impact.action_stage == 1 || impact.action_stage == 2) && impact.action_timer > 0.55)
+                let mut should_replay = (is_attacking && (impact.action_stage == 1 || impact.action_stage == 2) && impact.action_timer > 0.55)
                                 || (sprite.state == AnimationState::LinearRun && impact.action_stage == 3 && impact.action_timer > 0.65);
                 
+                // 物理归位检测逻辑：只要位移归零且逻辑结束，强制切回并重播 Idle
                 if is_physically_idle && !player.is_playing_animation(config.idle_node) {
-                    force_replay = true;
+                    should_replay = true;
                 }
 
-                if !player.is_playing_animation(target_node) || force_replay {
-                    let mut transitions = player.play(target_node);
-                    transitions.set_repeat(if is_looping_node { bevy::animation::RepeatAnimation::Forever } else { bevy::animation::RepeatAnimation::Never });
-                    
-                    if target_node != config.idle_node || force_replay {
-                        transitions.replay();
-                    }
-
-                    if sprite.state == AnimationState::LinearRun {
-                        transitions.set_speed(1.6);
-                    }
-                    
-                    if force_replay {
-                        info!("【3D同步】强制重置动作节点: {:?}", sprite.state);
-                    }
+                // 执行播放
+                let mut transitions = player.play(target_node);
+                if should_replay {
+                    transitions.replay();
+                    info!("【3D同步】强制重置动作节点: {:?}", sprite.state);
                 }
                 
-                if let Some(mut active_anim) = player.animation_mut(target_node) {
-                    active_anim.set_weight(1.0);
+                let is_looping = target_node == config.idle_node || target_node == config.run_node;
+                transitions.set_repeat(if is_looping { bevy::animation::RepeatAnimation::Forever } else { bevy::animation::RepeatAnimation::Never });
+                transitions.set_speed(if sprite.state == AnimationState::LinearRun { 1.6 } else { 1.0 });
+
+                // [权重互斥保底] 显式管理所有节点的权重，防止多节点同时播放
+                for node in [config.idle_node, config.run_node, config.strike_node, config.kick_node] {
+                    if let Some(mut anim) = player.animation_mut(node) {
+                        anim.set_weight(if node == target_node { 1.0 } else { 0.0 });
+                    }
                 }
             }
             if let Ok(sub_children) = children_q.get(current) {
