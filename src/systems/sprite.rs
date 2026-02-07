@@ -608,11 +608,11 @@ pub fn update_physical_impacts(
 pub fn trigger_hit_feedback(
     mut commands: Commands,
     mut events: EventReader<CharacterAnimationEvent>,
-    mut query: Query<(&mut PhysicalImpact, &CharacterSprite, Option<&PlayerSpriteMarker>)>,
+    mut query: Query<(&mut PhysicalImpact, &mut CharacterSprite, Option<&PlayerSpriteMarker>)>,
     mut effect_events: EventWriter<crate::components::particle::SpawnEffectEvent>,
 ) {
     for event in events.read() {
-        if let Ok((mut impact, sprite, is_player)) = query.get_mut(event.target) {
+        if let Ok((mut impact, mut sprite, is_player)) = query.get_mut(event.target) {
             let direction = if is_player.is_some() { 1.0 } else { -1.0 };
             impact.action_direction = direction; 
             
@@ -649,18 +649,19 @@ pub fn trigger_hit_feedback(
                     impact.action_type = ActionType::CultivatorCombo; 
                     impact.action_timer = 2.0; 
                     impact.action_stage = 0; 
-                    impact.target_vector = Vec3::ZERO; 
+                    impact.target_vector = Vec3::ZERO; // [关键] 强制重置以重新锁定
                     impact.tilt_velocity = 0.0;
                     impact.offset_velocity = Vec3::ZERO; 
                     impact.special_rotation = 0.0;
                     impact.special_rotation_velocity = 0.0;
 
-                    if let Some(ref mut sprite) = sprite_opt {
-                        sprite.state = AnimationState::LinearRun;
-                        sprite.looping = true;
-                        sprite.current_frame = 0;
-                        sprite.elapsed = 0.0;
-                    }
+                    // 显式重置动画状态，触发 Change Detection
+                    sprite.state = AnimationState::LinearRun;
+                    sprite.looping = true;
+                    sprite.current_frame = 0;
+                    sprite.elapsed = 0.0;
+                    
+                    info!("【御剑术启动】锁定敌人并开始冲刺");
                 }
                 AnimationState::ImperialSword | AnimationState::DemonAttack => {
                     impact.action_type = ActionType::None;
@@ -1735,24 +1736,34 @@ pub fn sync_player_skeletal_animation(
                     commands.entity(anim_entity).insert(AnimationGraphHandle(config.graph.clone()));
                 }
 
-                // [关键修复] 如果是攻击动作且 Stage 发生了变化 (连击中)，强制重播
+                // [关键修复] 只有 Idle 和 Run 节点需要 Forever 循环
+                let is_looping_node = target_node == config.idle_node || target_node == config.run_node;
+                
+                // [核心修复] 判定是否需要强制重播 (用于连斩)
                 let is_attacking = sprite.state == AnimationState::Attack;
                 let force_replay = is_attacking && (impact.action_stage == 1 || impact.action_stage == 2) && impact.action_timer > 0.55;
 
                 if !player.is_playing_animation(target_node) || force_replay {
                     let mut transitions = player.play(target_node);
-                    if target_node == config.idle_node {
+                    if is_looping_node {
                         transitions.set_repeat(bevy::animation::RepeatAnimation::Forever);
                     } else {
                         transitions.set_repeat(bevy::animation::RepeatAnimation::Never);
-                        transitions.replay(); 
-                        
-                        if sprite.state == AnimationState::LinearRun {
-                            transitions.set_speed(1.8); // 稍微加快跑动动画匹配高速冲刺
-                        }
                     }
+                    
+                    // 只要切换到非待机动作，或者强制重播，就执行 replay
+                    if target_node != config.idle_node {
+                        transitions.replay();
+                    }
+
+                    if sprite.state == AnimationState::LinearRun {
+                        transitions.set_speed(1.6); // 匹配冲刺速度
+                    }
+                    
                     if force_replay {
-                        info!("【3D连连看】检测到连斩 Stage 切换 -> 强制重播 Strike 动画");
+                        info!("【3D动画】强制重播动作: {:?}", sprite.state);
+                    } else {
+                        info!("【3D动画】切换动作: {:?}", sprite.state);
                     }
                 }
                 
