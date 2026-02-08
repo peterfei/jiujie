@@ -3,7 +3,7 @@ setlocal
 
 :: ================= 配置项目信息 =================
 set APP_NAME=jiujie
-set VERSION=0.0.1
+set VERSION=0.2.0
 set TARGET_ARCH=x86_64-pc-windows-msvc
 set TARGET_DIR=target\%TARGET_ARCH%\release
 set WIX_OBJ_DIR=target\wix
