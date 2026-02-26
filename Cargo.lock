@@ -189,6 +189,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5192cca8006f1fd4f7237516f40fa183bb07f8fbdfedaa0036de5ea9b0b45e78"
 
 [[package]]
+name = "anyhow"
+version = "1.0.102"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
+
+[[package]]
 name = "approx"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -475,9 +481,10 @@ dependencies = [
 
 [[package]]
 name = "bevy_card_battler"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bevy",
+ "bevy_hanabi",
  "criterion",
  "directories",
  "image",
@@ -700,6 +707,29 @@ dependencies = [
  "serde",
  "serde_json",
  "smallvec",
+]
+
+[[package]]
+name = "bevy_hanabi"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1d854ac83aaba8e9bf5cb67c46cdaebddc00ff73417cb927292fd36a81f568f"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bitflags 2.10.0",
+ "bytemuck",
+ "copyless",
+ "fixedbitset 0.5.7",
+ "naga",
+ "naga_oil",
+ "rand",
+ "rand_pcg",
+ "ron",
+ "serde",
+ "thiserror 1.0.69",
+ "typetag",
+ "wgpu",
 ]
 
 [[package]]
@@ -1691,6 +1721,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "copyless"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2df960f5d869b2dd8532793fde43eb5427cceb126c929747a26823ab0eeb536"
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2640,6 +2676,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e05c02b5e89bff3b946cedeca278abc628fe811e604f027c45a8aa3cf793d0eb"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "inventory"
+version = "0.3.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "009ae045c87e7082cb72dab0ccd01ae075dd00141ddc108f43a0ea150a9e7227"
+dependencies = [
+ "rustversion",
 ]
 
 [[package]]
@@ -3738,6 +3783,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_pcg"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59cad018caf63deb318e5a4586d99a24424a364f40f1e5778c29aca23f4fc73e"
+dependencies = [
+ "rand_core",
+]
+
+[[package]]
 name = "range-alloc"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4604,6 +4658,30 @@ name = "typeid"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc7d623258602320d5c55d1bc22793b57daff0ec7efc270ea7d55ce1d5f5471c"
+
+[[package]]
+name = "typetag"
+version = "0.2.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be2212c8a9b9bcfca32024de14998494cf9a5dfa59ea1b829de98bac374b86bf"
+dependencies = [
+ "erased-serde",
+ "inventory",
+ "once_cell",
+ "serde",
+ "typetag-impl",
+]
+
+[[package]]
+name = "typetag-impl"
+version = "0.2.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27a7a9b72ba121f6f1f6c3632b85604cac41aedb5ddc70accbebb6cac83de846"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "typewit"

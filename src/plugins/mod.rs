@@ -238,6 +238,7 @@ impl Plugin for GamePlugin {
             crate::systems::screen_effect::ScreenEffectPlugin,
             crate::systems::sprite::SpritePlugin,
             crate::systems::particle::ParticlePlugin, // 补齐粒子插件
+            crate::systems::gpu_particle::GpuParticlePlugin, // GPU 粒子插件
             crate::systems::ui::UiPlugin,
             crate::systems::map::MapPlugin,
             crate::systems::background_music::BackgroundMusicPlugin, // 背景音乐插件

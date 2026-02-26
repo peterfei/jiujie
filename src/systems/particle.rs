@@ -173,10 +173,18 @@ pub fn handle_effect_events(
     player_assets_opt: Option<Res<crate::resources::PlayerAssets>>,
 ) {
     for event in events.read() {
-        if event.effect_type == EffectType::Lightning {
-            spawn_real_lightning(&mut commands, &mut meshes, &mut materials, event.position, &assets);
-            // 关键：雷击现在完全由程序化 3D 闪电和残痕负责，不再生成通用粒子点
-            continue;
+        // --- [GPU 迁移] 优先交由 GPU 粒子系统处理的部分 ---
+        match event.effect_type {
+            EffectType::DemonAura | EffectType::Fire | EffectType::Ice | 
+            EffectType::ImpactSpark | EffectType::SwordEnergy => {
+                // 这些特效已在 GpuParticlePlugin 中处理，此处直接跳过 CPU 生成
+                continue;
+            }
+            EffectType::Lightning => {
+                spawn_real_lightning(&mut commands, &mut meshes, &mut materials, event.position, &assets);
+                continue;
+            }
+            _ => {}
         }
 
         let config = event.effect_type.config();
