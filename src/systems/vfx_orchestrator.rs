@@ -299,11 +299,14 @@ fn spawn_real_lightning(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh
             );
             points.push(interp);
             
-            // 核心升级：概率分叉
-            let branch_prob = if level == 0 { 0.28 } else { 0.12 };
+            // 核心修复：分叉概率随层级下降
+            let branch_prob = if level == 0 { 0.22 } else { 0.08 };
             if rng.gen_bool(branch_prob) {
-                let branch_dir = Vec3::new(rng.gen_range(-5.0..5.0), -1.2, rng.gen_range(-5.0..5.0)).normalize();
-                let branch_length = p_start.distance(p_end) * rng.gen_range(0.2..0.45) / (level as f32 + 1.0);
+                // 侧枝带有更强的横向分形偏移
+                let branch_dir = Vec3::new(rng.gen_range(-5.0..5.0), -1.0, rng.gen_range(-5.0..5.0)).normalize();
+                // 核心修复：分支长度基于局部路径剩余长度的比例，并随层级剧烈缩短
+                let current_path_len = p_start.distance(p_end);
+                let branch_length = current_path_len * rng.gen_range(0.15..0.3) / (level as f32 + 1.5);
                 to_process.push((interp, interp + branch_dir * branch_length, level + 1));
             }
         }
