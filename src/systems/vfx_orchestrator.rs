@@ -86,15 +86,34 @@ pub fn handle_vfx_events(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     player_assets_opt: Option<Res<crate::resources::PlayerAssets>>,
+    enemy_query: Query<(Entity, &Transform), With<EnemySpriteMarker>>,
 ) {
+    let mut rng = rand::thread_rng();
+    let enemies: Vec<(Entity, Vec3)> = enemy_query.iter().map(|(e, t)| (e, t.translation)).collect();
+
     for event in events.read() {
         match event.effect_type {
             EffectType::Lightning => { spawn_real_lightning(&mut commands, &mut meshes, &mut materials, event.position, &assets); }
             EffectType::WanJian => {
                 let config = event.effect_type.config();
-                for _ in 0..event.count {
+                for i in 0..event.count {
                     let mut p = config.spawn_particle(event.position, event.effect_type);
-                    p.target = event.target_pos; p.target_entity = event.target_entity; p.target_index = Some(event.target_index);
+                    
+                    // 核心分流逻辑：如果场上有敌人，自动分配
+                    if !enemies.is_empty() {
+                        let target_idx = (i as usize) % enemies.len();
+                        let (ent, pos) = enemies[target_idx];
+                        p.target_entity = Some(ent);
+                        // 增加导弹式散布感：转换为粒子内部坐标 (x100) 并增加随机偏移
+                        use rand::Rng;
+                        let offset = Vec2::new(rng.gen_range(-150.0..150.0), rng.gen_range(-150.0..150.0));
+                        p.target = Some(Vec2::new(pos.x * 100.0, -pos.z * 100.0) + offset);
+                    } else {
+                        p.target = event.target_pos; 
+                        p.target_entity = event.target_entity;
+                    }
+
+                    p.target_index = Some(i as usize);
                     p.target_group = if event.target_group.is_empty() { None } else { Some(event.target_group.clone()) };
                     p.start_pos = event.position.truncate();
                     let model = event.model_override.as_ref().or(player_assets_opt.as_ref().map(|pa| &pa.weapon));
@@ -279,20 +298,34 @@ fn phase_four_mach_piercing(p: &mut Particle, lp: f32, ev: &mut EventWriter<Spaw
 /// [核心辅助] 万剑归宗智能寻敌算法
 pub fn update_wanjian_target(p: &mut Particle, eq: &Query<(Entity, &Transform), With<EnemySpriteMarker>>) {
     let mut found = false;
-    if let Some(te) = p.target_entity { if let Ok((_, tr)) = eq.get(te) { p.target = Some(tr.translation.truncate()); found = true; } }
+    if let Some(te) = p.target_entity { 
+        if let Ok((_, tr)) = eq.get(te) { 
+            // 核心修复：转换为粒子内部坐标 (x100)
+            let world_pos = tr.translation;
+            p.target = Some(Vec2::new(world_pos.x * 100.0, -world_pos.z * 100.0)); 
+            found = true; 
+        } 
+    }
     if !found {
         let mut best: Option<(f32, Vec2, Entity)> = None;
         for (e, tr) in eq.iter() {
-            let d = p.position.distance(tr.translation.truncate());
-            if best.is_none() || d < best.unwrap().0 { best = Some((d, tr.translation.truncate(), e)); }
+            let world_pos = tr.translation;
+            let p_internal = Vec2::new(world_pos.x * 100.0, -world_pos.z * 100.0);
+            let d = p.position.distance(p_internal);
+            if best.is_none() || d < best.unwrap().0 { 
+                best = Some((d, p_internal, e)); 
+            }
         }
-        if let Some((_, pos, e)) = best { p.target = Some(pos); p.target_entity = Some(e); }
+        if let Some((_, pos, e)) = best { 
+            p.target = Some(pos); 
+            p.target_entity = Some(e); 
+        }
     }
 }
 
 pub fn update_lightning_bolts(mut commands: Commands, time: Res<Time>, mut query: Query<(Entity, &mut LightningBolt, Option<&MeshMaterial3d<StandardMaterial>>, &mut Transform, Option<&mut PointLight>)>, mut materials: ResMut<Assets<StandardMaterial>>) {
-    for (entity, mut bolt, mat, mut transform, mut light) in query.iter_mut() {
-        bolt.ttl -= time.delta_secs(); if bolt.ttl <= 0.0 { if let Some(mut e) = commands.get_entity(entity) { e.despawn_recursive(); } continue; }
+    for (entity, mut bolt, mat, transform, light) in query.iter_mut() {
+        bolt.ttl -= time.delta_secs(); if bolt.ttl <= 0.0 { if let Some(e) = commands.get_entity(entity) { e.despawn_recursive(); } continue; }
         let prog = bolt.ttl / bolt.max_ttl;
         if let Some(h) = mat { if let Some(m) = materials.get_mut(h) { m.base_color.set_alpha(prog); } }
         if let Some(mut pl) = light { pl.intensity *= 0.8; }
@@ -301,7 +334,7 @@ pub fn update_lightning_bolts(mut commands: Commands, time: Res<Time>, mut query
 
 pub fn update_decals(mut commands: Commands, time: Res<Time>, mut query: Query<(Entity, &mut Decal, &MeshMaterial3d<StandardMaterial>)>, mut materials: ResMut<Assets<StandardMaterial>>) {
     for (entity, mut decal, mat) in query.iter_mut() {
-        decal.ttl -= time.delta_secs(); if decal.ttl <= 0.0 { if let Some(mut e) = commands.get_entity(entity) { e.despawn_recursive(); } continue; }
+        decal.ttl -= time.delta_secs(); if decal.ttl <= 0.0 { if let Some(e) = commands.get_entity(entity) { e.despawn_recursive(); } continue; }
         if let Some(m) = materials.get_mut(mat) { m.base_color.set_alpha((decal.ttl/decal.max_ttl).min(1.0)*0.8); }
     }
 }
