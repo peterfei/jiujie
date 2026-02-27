@@ -46,7 +46,7 @@ fn setup_vfx_assets(mut commands: Commands, asset_server: Res<AssetServer>, mut 
     textures.insert(EffectType::WebShot, asset_server.load("textures/web_effect.png"));
     textures.insert(EffectType::SwordEnergy, asset_server.load("textures/cards/sword.png"));
     
-    // --- [程序化贴图生成] 保留原有优秀算法 ---
+    // --- [程序化贴图生成] ---
     let width = 128;
     let height = 128;
     
@@ -54,8 +54,7 @@ fn setup_vfx_assets(mut commands: Commands, asset_server: Res<AssetServer>, mut 
     let mut ink_data = vec![255; width * height * 4];
     for y in 0..height {
         for x in 0..width {
-            let dx = x as f32 - 63.5;
-            let dy = y as f32 - 63.5;
+            let dx = x as f32 - 63.5; let dy = y as f32 - 63.5;
             let dist = (dx*dx + dy*dy).sqrt() / 64.0;
             let angle = dy.atan2(dx);
             let noise = (angle * 4.0).sin() * 0.12 + (angle * 7.0).cos() * 0.08;
@@ -68,8 +67,7 @@ fn setup_vfx_assets(mut commands: Commands, asset_server: Res<AssetServer>, mut 
     }
     use bevy::render::render_asset::RenderAssetUsages;
     use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-    let cloud_image = Image::new(Extent3d { width: width as u32, height: height as u32, depth_or_array_layers: 1 }, TextureDimension::D2, ink_data, TextureFormat::Rgba8UnormSrgb, RenderAssetUsages::default());
-    textures.insert(EffectType::CloudMist, images.add(cloud_image));
+    textures.insert(EffectType::CloudMist, images.add(Image::new(Extent3d { width: width as u32, height: height as u32, depth_or_array_layers: 1 }, TextureDimension::D2, ink_data, TextureFormat::Rgba8UnormSrgb, RenderAssetUsages::default())));
 
     // 2. 雷击焦痕贴图
     let mut scorch_data = vec![0; width * height * 4];
@@ -105,11 +103,9 @@ pub fn handle_vfx_events(
 ) {
     for event in events.read() {
         match event.effect_type {
-            // 编排器处理类型 1: 3D 真实闪电 (涉及程序化网格和光源)
             EffectType::Lightning => {
                 spawn_real_lightning(&mut commands, &mut meshes, &mut materials, event.position, &assets);
             }
-            // 编排器处理类型 2: 万剑归宗 (涉及复杂四阶段状态机和多实体编排)
             EffectType::WanJian => {
                 let config = event.effect_type.config();
                 for _ in 0..event.count {
@@ -128,7 +124,6 @@ pub fn handle_vfx_events(
                     }
                 }
             }
-            // 其余所有类型均由 GpuParticlePlugin (bevy_hanabi) 处理
             _ => continue,
         }
     }
@@ -185,7 +180,6 @@ pub fn update_vfx_logic(
             else if local_prog < 0.55 { phase_three_ominous_pause(&mut p, local_prog, &mut screen_events, &enemy_query); }
             else { phase_four_mach_piercing(&mut p, local_prog, &mut events, &mut screen_events, &enemy_query, &enemy_impact_query, &camera_query, &mut commands); }
 
-            // 同步渲染 (UI 或 3D)
             let current_size = p.current_size();
             if let Some(mut node) = node_opt {
                 let (w, h) = (current_size * 1.83, current_size);
@@ -193,30 +187,23 @@ pub fn update_vfx_logic(
                 node.width = Val::Px(w); node.height = Val::Px(h);
                 transform.rotation = Quat::from_rotation_z(p.rotation);
             } else {
-                // 3D 路径已在相位逻辑或此处同步
                 sync_3d_sword_transform(&mut p, global_prog, &mut transform, &mut visibility);
             }
         }
-
         if p.is_dead() { commands.entity(entity).despawn_recursive(); }
     }
 }
 
 fn sync_3d_sword_transform(p: &mut Particle, global_prog: f32, transform: &mut Transform, visibility: &mut Visibility) {
     let local_prog = (global_prog * 1.6 - p.seed * 0.6).clamp(0.0, 1.0);
-    let dive_start = 0.5 + p.seed * 0.2; 
-    let is_diving = local_prog > dive_start + 0.1;
-
+    let dive_start = 0.5 + p.seed * 0.2; let is_diving = local_prog > dive_start + 0.1;
     let prev_pos_3d = transform.translation;
     let mut next_pos_3d = Vec3::new(p.position.x / 100.0, 0.0, -p.position.y / 100.0);
     let sky_height = 5.0 + (p.seed - 0.5) * 1.5;
-    
     next_pos_3d.y = if local_prog < 0.15 { 0.8 + (local_prog / 0.15) * (sky_height - 0.8) }
                     else if !is_diving { sky_height + (p.elapsed * 4.0 + p.seed * 30.0).sin() * 0.1 }
                     else { sky_height * (1.0 - ((local_prog - (dive_start + 0.1)) / (1.0 - (dive_start + 0.1))).powi(3)) + 0.2 };
-    
-    transform.translation = next_pos_3d;
-    transform.scale = Vec3::splat(0.32); 
+    transform.translation = next_pos_3d; transform.scale = Vec3::splat(0.32); 
     let velocity_vec = (next_pos_3d - prev_pos_3d).normalize_or(Vec3::Y);
     transform.rotation = Quat::from_rotation_arc(Vec3::Y, velocity_vec);
     if is_diving { transform.scale.y *= 1.4; }
@@ -279,192 +266,78 @@ fn phase_four_mach_piercing(p: &mut Particle, local_prog: f32, events: &mut Even
     }
 }
 
+// === 真实闪电系统 (大作级分形算法) ===
+
 fn spawn_real_lightning(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, target_pos: Vec3, assets: &ParticleAssets) {
-    // 1. 物理冲击感同步
     commands.trigger(ScreenEffectEvent::impact(Vec2::new(0.0, -10.0), 0.3));
-    
     let mut rng = rand::thread_rng();
     
-    // 生成闪电节点数据的结构
-    struct BoltSegment {
-        start: Vec3,
-        end: Vec3,
-        level: u32,
-    }
-    
+    struct BoltSegment { start: Vec3, end: Vec3, level: u32 }
     let mut segments = Vec::new();
     let mut to_process = Vec::new();
     
-    // 初始主干起点：高空随机位置
     let start_pos = Vec3::new(target_pos.x + rng.gen_range(-1.0..1.0), 12.0, target_pos.z);
-    to_process.push((start_pos, target_pos, 0)); // (起点, 终点, 树层级)
+    to_process.push((start_pos, target_pos, 0));
     
-    // 生成随机树状结构
     while let Some((p_start, p_end, level)) = to_process.pop() {
-        if level > 2 { continue; } // 最大 3 级分支
-        
+        if level > 2 { continue; }
         let mut points = vec![p_start];
-        let num_nodes = if level == 0 { 8 } else { 5 }; // 主干节点多，分支节点少
-        
+        let num_nodes = if level == 0 { 8 } else { 5 };
         for i in 1..num_nodes {
             let t = i as f32 / num_nodes as f32;
             let mut interp = p_start.lerp(p_end, t);
-            
-            // 随层级增加的抖动 (中点位移)
             let jitter_amt = (1.0 - t) * (1.5 / (level as f32 + 1.0));
             interp += Vec3::new(rng.gen_range(-jitter_amt..jitter_amt), 0.0, rng.gen_range(-jitter_amt..jitter_amt));
             points.push(interp);
-            
-            // 以一定概率生成侧枝
             let branch_prob = if level == 0 { 0.35 } else { 0.15 };
             if rng.gen_bool(branch_prob) {
                 let branch_dir = Vec3::new(rng.gen_range(-2.0..2.0), -1.0, rng.gen_range(-2.0..2.0)).normalize();
                 let branch_length = p_start.distance(p_end) * rng.gen_range(0.3..0.6) / (level as f32 + 1.0);
-                let branch_end = interp + branch_dir * branch_length;
-                to_process.push((interp, branch_end, level + 1));
+                to_process.push((interp, interp + branch_dir * branch_length, level + 1));
             }
         }
         points.push(p_end);
-        
-        for i in 0..points.len()-1 {
-            segments.push(BoltSegment { start: points[i], end: points[i+1], level });
-        }
+        for i in 0..points.len()-1 { segments.push(BoltSegment { start: points[i], end: points[i+1], level }); }
     }
 
-    // 2. 核心性能优化：整条闪电仅生成一个中心点光源
     let mid_point = Vec3::new(target_pos.x, target_pos.y + 6.0, target_pos.z);
-    commands.spawn((
-        PointLight { 
-            color: Color::srgba(0.8, 0.8, 1.0, 1.0), 
-            intensity: 800_000.0, // 增强中心亮度
-            range: 15.0, 
-            shadows_enabled: false, 
-            ..default() 
-        }, 
-        Transform::from_translation(mid_point), 
-        CombatUiRoot, 
-        LightningBolt::new(vec![], 0.12, true) // 仅作为光源销毁器，is_light = true
-    ));
+    commands.spawn((PointLight { color: Color::srgba(0.8, 0.8, 1.0, 1.0), intensity: 800_000.0, range: 15.0, shadows_enabled: false, ..default() }, Transform::from_translation(mid_point), CombatUiRoot, LightningBolt::new(vec![], 0.12, true)));
 
-    // 3. 地面残痕 (Decal)
     let scorch_handle = assets.textures.get(&EffectType::Lightning).cloned().unwrap_or(assets.default_texture.clone());
-    let rot = rand::random::<f32>() * 6.28; 
-    let sc = 1.5 + rand::random::<f32>() * 1.5;
-    
-    // 底层紫色晕染
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(1.0, 1.0))), 
-        MeshMaterial3d(materials.add(StandardMaterial { base_color: Color::srgba(0.3, 0.1, 0.6, 0.2), base_color_texture: Some(scorch_handle.clone()), alpha_mode: AlphaMode::Blend, unlit: true, ..default() })), 
-        Transform::from_translation(target_pos + Vec3::new(0.0, 0.005, 0.0)).with_rotation(Quat::from_rotation_y(rot + 0.5)).with_scale(Vec3::splat(sc * 1.8)), 
-        Decal::new(3.0), 
-        ParticleMarker, 
-        CombatUiRoot
-    ));
-    
-    // 顶层核心焦痕
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(1.0, 1.0))), 
-        MeshMaterial3d(materials.add(StandardMaterial { base_color_texture: Some(scorch_handle), emissive: LinearRgba::new(0.5, 0.2, 1.0, 1.0) * 0.1, alpha_mode: AlphaMode::Blend, ..default() })), 
-        Transform::from_translation(target_pos + Vec3::new(0.0, 0.01, 0.0)).with_rotation(Quat::from_rotation_y(rot)).with_scale(Vec3::splat(sc)), 
-        Decal::new(4.0), 
-        ParticleMarker, 
-        CombatUiRoot
-    ));
+    let rot = rand::random::<f32>() * 6.28; let sc = 1.5 + rand::random::<f32>() * 1.5;
+    commands.spawn((Mesh3d(meshes.add(Plane3d::default().mesh().size(1.0, 1.0))), MeshMaterial3d(materials.add(StandardMaterial { base_color: Color::srgba(0.3, 0.1, 0.6, 0.2), base_color_texture: Some(scorch_handle.clone()), alpha_mode: AlphaMode::Blend, unlit: true, ..default() })), Transform::from_translation(target_pos + Vec3::new(0.0, 0.005, 0.0)).with_rotation(Quat::from_rotation_y(rot + 0.5)).with_scale(Vec3::splat(sc * 1.8)), Decal::new(3.0), ParticleMarker, CombatUiRoot));
+    commands.spawn((Mesh3d(meshes.add(Plane3d::default().mesh().size(1.0, 1.0))), MeshMaterial3d(materials.add(StandardMaterial { base_color_texture: Some(scorch_handle), emissive: LinearRgba::new(0.5, 0.2, 1.0, 1.0) * 0.1, alpha_mode: AlphaMode::Blend, ..default() })), Transform::from_translation(target_pos + Vec3::new(0.0, 0.01, 0.0)).with_rotation(Quat::from_rotation_y(rot)).with_scale(Vec3::splat(sc)), Decal::new(4.0), ParticleMarker, CombatUiRoot));
 
-    // 4. 生成闪电实体
-    // 显著减细半径，使闪电看起来更锐利，不再像固体冰雹
-    let trunk_mesh = meshes.add(Cylinder::new(0.025, 0.025)); 
-    let branch_mesh = meshes.add(Cylinder::new(0.012, 0.012)); 
-    let branch2_mesh = meshes.add(Cylinder::new(0.006, 0.006)); 
-
-    let trunk_mat = materials.add(StandardMaterial { 
-        base_color: Color::srgba(3.0, 3.0, 6.0, 1.0), 
-        emissive: LinearRgba::new(80.0, 80.0, 150.0, 1.0), 
-        ..default() 
-    });
-    let branch_mat = materials.add(StandardMaterial { 
-        base_color: Color::srgba(2.0, 2.5, 5.0, 1.0), 
-        emissive: LinearRgba::new(40.0, 45.0, 100.0, 1.0), 
-        ..default() 
-    });
+    // 修复高度：基准高度设为 1.0，以便 Y 轴缩放能正确拉伸
+    let trunk_mesh = meshes.add(Cylinder::new(0.05, 1.0)); 
+    let branch_mesh = meshes.add(Cylinder::new(0.025, 1.0)); 
+    let branch2_mesh = meshes.add(Cylinder::new(0.012, 1.0)); 
+    let trunk_mat = materials.add(StandardMaterial { base_color: Color::srgba(3.0, 3.0, 6.0, 1.0), emissive: LinearRgba::new(100.0, 100.0, 200.0, 1.0), ..default() });
+    let branch_mat = materials.add(StandardMaterial { base_color: Color::srgba(2.0, 2.5, 5.0, 1.0), emissive: LinearRgba::new(50.0, 55.0, 120.0, 1.0), ..default() });
 
     for seg in segments {
-        let dir_vec = seg.end - seg.start; 
-        let length = dir_vec.length();
-        if length < 0.001 { continue; }
-        
-        let direction = dir_vec.normalize();
-        
-        let (mesh, mat, ttl) = match seg.level {
-            0 => (trunk_mesh.clone(), trunk_mat.clone(), 0.35),
-            1 => (branch_mesh.clone(), branch_mat.clone(), 0.20),
-            _ => (branch2_mesh.clone(), branch_mat.clone(), 0.12),
-        };
-        
-        // 核心修复：圆柱体默认是沿 Y 轴的，我们需要将 Y 轴旋转到 direction 方向
-        let rotation = Quat::from_rotation_arc(Vec3::Y, direction);
-        
-        commands.spawn((
-            Mesh3d(mesh), 
-            MeshMaterial3d(mat), 
-            Transform {
-                translation: seg.start + dir_vec * 0.5, // 放置在中点
-                rotation,
-                scale: Vec3::new(1.0, length, 1.0), // 在 Y 轴上缩放长度
-            },
-            LightningBolt::new(vec![], ttl, false).with_branch_level(seg.level),
-            ParticleMarker, 
-            CombatUiRoot
-        ));
+        let dir_vec = seg.end - seg.start; let length = dir_vec.length(); if length < 0.001 { continue; }
+        let (mesh, mat, ttl) = match seg.level { 0 => (trunk_mesh.clone(), trunk_mat.clone(), 0.35), 1 => (branch_mesh.clone(), branch_mat.clone(), 0.20), _ => (branch2_mesh.clone(), branch_mat.clone(), 0.12) };
+        commands.spawn((Mesh3d(mesh), MeshMaterial3d(mat), Transform { translation: seg.start + dir_vec * 0.5, rotation: Quat::from_rotation_arc(Vec3::Y, dir_vec.normalize()), scale: Vec3::new(1.0, length, 1.0) }, LightningBolt::new(vec![], ttl, false).with_branch_level(seg.level), ParticleMarker, CombatUiRoot));
     }
 }
-}
-    fn update_lightning_bolts(mut commands: Commands, time: Res<Time>, mut query: Query<(Entity, &mut LightningBolt, Option<&MeshMaterial3d<StandardMaterial>>, &mut Transform, Option<&mut PointLight>)>, mut materials: ResMut<Assets<StandardMaterial>>) {
-        let delta = time.delta_secs();
-        for (entity, mut bolt, mat, mut transform, mut light) in query.iter_mut() {
-            bolt.ttl -= delta; 
-            if bolt.ttl <= 0.0 { 
-                // 修复重复销毁警告：先检查实体是否存在
-                if let Some(mut e) = commands.get_entity(entity) {
-                    e.despawn_recursive();
-                }
-                continue; 
-            }
-            
-            // 优化闪烁算法：使用 TTL 百分比
-            let progress = bolt.ttl / bolt.max_ttl;
-            bolt.alpha = progress * if rand::random::<f32>() < 0.2 { 0.3 } else { 1.0 };
-            
-            // 缓慢缩窄而不是极速消失
-            transform.scale.x *= 0.92; 
-            transform.scale.y *= 0.92;
-            
-            // 材质更新性能优化：只有作为网格时才更新材质
-            if let Some(h) = mat { 
-                if let Some(m) = materials.get_mut(h) { 
-                    m.base_color.set_alpha(bolt.alpha); 
-                    let e = 30.0 * progress; // 增强动态发光衰减起点
-                    m.emissive = LinearRgba::new(e, e, e * 2.0, 1.0); 
-                } 
-            }
-            
-            // 光源同步
-            if let Some(mut pl) = light { 
-                pl.intensity = 800_000.0 * progress; 
-            }
-        }
+
+fn update_lightning_bolts(mut commands: Commands, time: Res<Time>, mut query: Query<(Entity, &mut LightningBolt, Option<&MeshMaterial3d<StandardMaterial>>, &mut Transform, Option<&mut PointLight>)>, mut materials: ResMut<Assets<StandardMaterial>>) {
+    let delta = time.delta_secs();
+    for (entity, mut bolt, mat, mut transform, mut light) in query.iter_mut() {
+        bolt.ttl -= delta; 
+        if bolt.ttl <= 0.0 { if let Some(mut e) = commands.get_entity(entity) { e.despawn_recursive(); } continue; }
+        let progress = bolt.ttl / bolt.max_ttl;
+        bolt.alpha = progress * if rand::random::<f32>() < 0.2 { 0.3 } else { 1.0 };
+        transform.scale.x *= 0.92; transform.scale.y *= 0.92;
+        if let Some(h) = mat { if let Some(m) = materials.get_mut(h) { m.base_color.set_alpha(bolt.alpha); let e = 30.0 * progress; m.emissive = LinearRgba::new(e, e, e * 2.0, 1.0); } }
+        if let Some(mut pl) = light { pl.intensity = 800_000.0 * progress; }
     }
-    
-    pub fn update_decals(mut commands: Commands, time: Res<Time>, mut query: Query<(Entity, &mut Decal, &MeshMaterial3d<StandardMaterial>)>, mut materials: ResMut<Assets<StandardMaterial>>) {
-        for (entity, mut decal, mat) in query.iter_mut() {
-            decal.ttl -= time.delta_secs(); 
-            if decal.ttl <= 0.0 {
-                if let Some(mut e) = commands.get_entity(entity) {
-                    e.despawn_recursive();
-                }
-                continue;
-            }
-    
+}
+
+pub fn update_decals(mut commands: Commands, time: Res<Time>, mut query: Query<(Entity, &mut Decal, &MeshMaterial3d<StandardMaterial>)>, mut materials: ResMut<Assets<StandardMaterial>>) {
+    for (entity, mut decal, mat) in query.iter_mut() {
+        decal.ttl -= time.delta_secs(); if decal.ttl <= 0.0 { if let Some(mut e) = commands.get_entity(entity) { e.despawn_recursive(); } continue; }
         if let Some(m) = materials.get_mut(mat) { m.base_color.set_alpha((decal.ttl / decal.max_ttl).min(1.0) * 0.8); }
     }
 }

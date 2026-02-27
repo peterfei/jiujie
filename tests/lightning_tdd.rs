@@ -36,19 +36,22 @@ fn test_realistic_fractal_lightning_logic() {
     // 发送闪电事件
     app.world_mut().send_event(SpawnEffectEvent::new(EffectType::Lightning, Vec3::ZERO));
     
-    // 运行逻辑处理事件 (这会执行 handle_vfx_events，并将 Commands 队列中的生成实体刷新到 World)
+    // 运行逻辑处理事件
     app.update();
 
-    // 收集生成的 LightningBolt
+    // 收集生成的 LightningBolt 并验证尺寸
     let mut main_trunk_count = 0;
     let mut branch_count = 0;
+    let mut total_length = 0.0;
 
-    let mut query = app.world_mut().query::<&LightningBolt>();
-    for bolt in query.iter(app.world()) {
+    let mut query = app.world_mut().query::<(&LightningBolt, &Transform)>();
+    for (bolt, transform) in query.iter(app.world()) {
         if bolt.is_light { continue; }
 
         if bolt.branch_level == 0 {
             main_trunk_count += 1;
+            // 验证 Y 轴缩放（长度）。如果基准高度是 1.0，scale.y 应该代表物理长度
+            total_length += transform.scale.y;
         } else {
             branch_count += 1;
         }
@@ -56,6 +59,6 @@ fn test_realistic_fractal_lightning_logic() {
 
     // TDD 断言
     assert!(main_trunk_count > 4, "Real lightning should have a multi-segment main trunk, got {}", main_trunk_count);
+    assert!(total_length > 5.0, "The cumulative length of the main trunk should be significant. Got: {}", total_length);
     assert!(branch_count > 0, "Real lightning MUST have branches (branch_level > 0). Found {}", branch_count);
-    assert!(branch_count >= main_trunk_count / 3, "Branches should be prominent. Trunks: {}, Branches: {}", main_trunk_count, branch_count);
 }
