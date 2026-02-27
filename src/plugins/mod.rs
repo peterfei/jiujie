@@ -237,7 +237,7 @@ impl Plugin for GamePlugin {
             crate::systems::animation::AnimationPlugin,
             crate::systems::screen_effect::ScreenEffectPlugin,
             crate::systems::sprite::SpritePlugin,
-            crate::systems::particle::ParticlePlugin, // 补齐粒子插件
+            crate::systems::vfx_orchestrator::VfxOrchestratorPlugin, // 补齐粒子插件
             crate::systems::gpu_particle::GpuParticlePlugin, // GPU 粒子插件
             crate::systems::ui::UiPlugin,
             crate::systems::map::MapPlugin,
