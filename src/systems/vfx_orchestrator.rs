@@ -333,67 +333,77 @@ fn spawn_real_lightning(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh
         CombatUiRoot
     ));
 
-    // 4. 生成闪电实体
-    let bolt_mesh = meshes.add(Cylinder::new(0.04, 0.04)); // 稍微变细更具写意感
-    let bolt_material = materials.add(StandardMaterial { 
-        base_color: Color::srgba(2.0, 2.0, 3.5, 1.0), 
-        emissive: LinearRgba::new(20.0, 20.0, 40.0, 1.0), 
-        ..default() 
-    });
-
-    for i in 0..points.len() - 1 {
-        let (p1, p2) = (points[i], points[i+1]); 
-        let dir = p2 - p1; 
-        let length = dir.length();
-        if length < 0.01 { continue; }
-        
-        commands.spawn((
-            Mesh3d(bolt_mesh.clone()), 
-            MeshMaterial3d(bolt_material.clone()), 
-            Transform::from_translation(p1 + dir * 0.5).looking_at(p2, Vec3::Y).with_scale(Vec3::new(1.0, 1.0, length)), 
-            LightningBolt::new(points.clone(), 0.15, true), 
-            ParticleMarker, 
-            CombatUiRoot
-        ));
-    }
-}
-
-fn update_lightning_bolts(mut commands: Commands, time: Res<Time>, mut query: Query<(Entity, &mut LightningBolt, Option<&MeshMaterial3d<StandardMaterial>>, &mut Transform, Option<&mut PointLight>)>, mut materials: ResMut<Assets<StandardMaterial>>) {
-    let delta = time.delta_secs();
-    for (entity, mut bolt, mat, mut transform, mut light) in query.iter_mut() {
-        bolt.ttl -= delta; 
-        if bolt.ttl <= 0.0 { 
-            commands.entity(entity).despawn_recursive(); 
-            continue; 
-        }
-        
-        // 优化闪烁算法：使用 TTL 百分比
-        let progress = bolt.ttl / bolt.max_ttl;
-        bolt.alpha = progress * if rand::random::<f32>() < 0.25 { 0.4 } else { 1.0 };
-        
-        // 整体缩窄
-        transform.scale.x *= 0.88; 
-        transform.scale.y *= 0.88;
-        
-        // 材质更新性能优化：只有作为网格时才更新材质
-        if let Some(h) = mat { 
-            if let Some(m) = materials.get_mut(h) { 
-                m.base_color.set_alpha(bolt.alpha); 
-                let e = 15.0 * progress; 
-                m.emissive = LinearRgba::new(e, e, e * 2.0, 1.0); 
-            } 
-        }
-        
-        // 光源同步
-        if let Some(mut pl) = light { 
-            pl.intensity = 800_000.0 * progress; 
+        // 4. 生成闪电实体
+        let bolt_mesh = meshes.add(Cylinder::new(0.12, 0.12)); // 加粗：从 0.04 -> 0.12
+        let bolt_material = materials.add(StandardMaterial { 
+            base_color: Color::srgba(2.5, 2.5, 5.0, 1.0), // 更亮的电蓝色
+            emissive: LinearRgba::new(50.0, 50.0, 100.0, 1.0), // 显著增强发光
+            ..default() 
+        });
+    
+        for i in 0..points.len() - 1 {
+            let (p1, p2) = (points[i], points[i+1]); 
+            let dir = p2 - p1; 
+            let length = dir.length();
+            if length < 0.01 { continue; }
+            
+            commands.spawn((
+                Mesh3d(bolt_mesh.clone()), 
+                MeshMaterial3d(bolt_material.clone()), 
+                Transform::from_translation(p1 + dir * 0.5).looking_at(p2, Vec3::Y).with_scale(Vec3::new(1.0, 1.0, length)), 
+                LightningBolt::new(points.clone(), 0.35, true), // 延长寿命：从 0.15 -> 0.35
+                ParticleMarker, 
+                CombatUiRoot
+            ));
         }
     }
-}
-
-pub fn update_decals(mut commands: Commands, time: Res<Time>, mut query: Query<(Entity, &mut Decal, &MeshMaterial3d<StandardMaterial>)>, mut materials: ResMut<Assets<StandardMaterial>>) {
-    for (entity, mut decal, mat) in query.iter_mut() {
-        decal.ttl -= time.delta_secs(); if decal.ttl <= 0.0 { commands.entity(entity).despawn_recursive(); continue; }
+    
+    fn update_lightning_bolts(mut commands: Commands, time: Res<Time>, mut query: Query<(Entity, &mut LightningBolt, Option<&MeshMaterial3d<StandardMaterial>>, &mut Transform, Option<&mut PointLight>)>, mut materials: ResMut<Assets<StandardMaterial>>) {
+        let delta = time.delta_secs();
+        for (entity, mut bolt, mat, mut transform, mut light) in query.iter_mut() {
+            bolt.ttl -= delta; 
+            if bolt.ttl <= 0.0 { 
+                // 修复重复销毁警告：先检查实体是否存在
+                if let Some(mut e) = commands.get_entity(entity) {
+                    e.despawn_recursive();
+                }
+                continue; 
+            }
+            
+            // 优化闪烁算法：使用 TTL 百分比
+            let progress = bolt.ttl / bolt.max_ttl;
+            bolt.alpha = progress * if rand::random::<f32>() < 0.2 { 0.3 } else { 1.0 };
+            
+            // 缓慢缩窄而不是极速消失
+            transform.scale.x *= 0.92; 
+            transform.scale.y *= 0.92;
+            
+            // 材质更新性能优化：只有作为网格时才更新材质
+            if let Some(h) = mat { 
+                if let Some(m) = materials.get_mut(h) { 
+                    m.base_color.set_alpha(bolt.alpha); 
+                    let e = 30.0 * progress; // 增强动态发光衰减起点
+                    m.emissive = LinearRgba::new(e, e, e * 2.0, 1.0); 
+                } 
+            }
+            
+            // 光源同步
+            if let Some(mut pl) = light { 
+                pl.intensity = 800_000.0 * progress; 
+            }
+        }
+    }
+    
+    pub fn update_decals(mut commands: Commands, time: Res<Time>, mut query: Query<(Entity, &mut Decal, &MeshMaterial3d<StandardMaterial>)>, mut materials: ResMut<Assets<StandardMaterial>>) {
+        for (entity, mut decal, mat) in query.iter_mut() {
+            decal.ttl -= time.delta_secs(); 
+            if decal.ttl <= 0.0 {
+                if let Some(mut e) = commands.get_entity(entity) {
+                    e.despawn_recursive();
+                }
+                continue;
+            }
+    
         if let Some(m) = materials.get_mut(mat) { m.base_color.set_alpha((decal.ttl / decal.max_ttl).min(1.0) * 0.8); }
     }
 }
