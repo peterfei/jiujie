@@ -15,6 +15,8 @@ use crate::components::sprite::{
     MagicSealMarker, RelicVisualMarker, SpiritClone, CombatCamera,
     ArenaLantern, ArenaVegetation, ArenaSpiritStone, PlayerWeapon
 };
+use crate::components::after_image::{AfterImageConfig, TrailSource};
+use crate::systems::after_image::LastPosition;
 use crate::components::CombatUiRoot;
 
 pub struct SpritePlugin;
@@ -1663,7 +1665,28 @@ pub fn spawn_character_sprite(
 
     // 4. 挂载身份标记
     match character_type {
-        CharacterType::Player => { commands.entity(entity).insert(PlayerSpriteMarker); }
+        CharacterType::Player => { 
+            commands.entity(entity).insert((
+                PlayerSpriteMarker,
+                AfterImageConfig {
+                    speed_threshold: 12.0, // 略高于普通跑动，仅冲刺时触发
+                    snapshot_interval: 0.08,
+                    ghost_ttl: 0.4,
+                    color: Color::srgba(0.0, 0.8, 1.0, 0.5),
+                    ..default()
+                },
+                LastPosition::default(),
+            )); 
+
+            // 在玩家身上挂载一个拖尾点
+            commands.entity(entity).with_children(|parent| {
+                parent.spawn((
+                    TrailSource,
+                    Transform::from_xyz(0.0, 1.0, 0.0), // 位于腰部重心
+                    Visibility::Hidden,
+                ));
+            });
+        }
         _ => { if let Some(id) = enemy_id { commands.entity(entity).insert(EnemySpriteMarker { id }); } }
     };
 

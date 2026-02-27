@@ -1,6 +1,7 @@
 //! ECS组件定义汇聚模块
 
 pub mod animation;
+pub mod after_image;
 pub mod audio;
 pub mod background_music;
 pub mod cards;

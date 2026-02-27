@@ -357,7 +357,7 @@ impl EmitterConfig {
 pub enum ParticleShape { Circle, Square, Line, Triangle, Star }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum EffectType { Fire, Ice, Poison, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit, SwordEnergy, DemonAura, WebShot, WanJian, ImpactSpark, Slash, Shield, CloudMist, SilkTrail, WolfSlash }
+pub enum EffectType { Fire, Ice, Poison, Hit, Lightning, Victory, ManaFlow, Heal, Coin, AmbientSpirit, SwordEnergy, DemonAura, WebShot, WanJian, ImpactSpark, Slash, Shield, CloudMist, SilkTrail, WolfSlash, MovementTrail }
 
 impl EffectType {
     pub fn config(&self) -> EmitterConfig {
@@ -382,6 +382,7 @@ impl EffectType {
             EffectType::CloudMist => EmitterConfig::cloud_mist(),
             EffectType::SilkTrail => EmitterConfig::silk_trail(),
             EffectType::WolfSlash => EmitterConfig::wolf_slash(),
+            EffectType::MovementTrail => EmitterConfig::silk_trail(), // 暂时复用丝绸
         }
     }
 }

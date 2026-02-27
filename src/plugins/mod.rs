@@ -239,6 +239,7 @@ impl Plugin for GamePlugin {
             crate::systems::sprite::SpritePlugin,
             crate::systems::vfx_orchestrator::VfxOrchestratorPlugin, // 补齐粒子插件
             crate::systems::gpu_particle::GpuParticlePlugin, // GPU 粒子插件
+            crate::systems::after_image::AfterImagePlugin, // 新增残影与拖尾插件
             crate::systems::ui::UiPlugin,
             crate::systems::map::MapPlugin,
             crate::systems::background_music::BackgroundMusicPlugin, // 背景音乐插件

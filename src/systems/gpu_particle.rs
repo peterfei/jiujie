@@ -354,6 +354,34 @@ fn setup_gpu_effects(
     );
     gpu_assets.effects.insert(EffectType::WolfSlash, effect_wolf);
 
+    // --- 11. 身法拖尾 (MovementTrail) ---
+    let mut writer = ExprWriter::new();
+    let mut color_gradient_trail = Gradient::new();
+    color_gradient_trail.add_key(0.0, Vec4::new(0.0, 0.8, 1.5, 0.8)); // 高亮度蓝
+    color_gradient_trail.add_key(1.0, Vec4::new(0.5, 0.0, 1.0, 0.0)); // 消失于紫色
+
+    let mut size_gradient_trail = Gradient::new();
+    size_gradient_trail.add_key(0.0, Vec3::splat(0.15));
+    size_gradient_trail.add_key(1.0, Vec3::splat(0.0)); // 随时间变细
+
+    let init_lifetime_trail = SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(0.6).expr());
+    
+    let effect_trail = effects.add(
+        EffectAsset::new(2048, SpawnerSettings::rate(100.0.into()), writer.finish())
+            .with_name("MovementTrail")
+            .init(init_lifetime_trail)
+            .render(ColorOverLifetimeModifier { 
+                gradient: color_gradient_trail, 
+                blend: ColorBlendMode::Add, 
+                mask: ColorBlendMask::RGBA 
+            })
+            .render(SizeOverLifetimeModifier { 
+                gradient: size_gradient_trail, 
+                screen_space_size: false 
+            }),
+    );
+    gpu_assets.effects.insert(EffectType::MovementTrail, effect_trail);
+
     commands.insert_resource(gpu_assets);
 }
 
