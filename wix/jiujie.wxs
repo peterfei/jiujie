@@ -5,7 +5,7 @@
 -->
 
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
-    <Product Id='*' Name='!(loc.ProductName)' UpgradeCode='F50F4705-932B-4FF5-A3E6-34285FC6E6BD' Manufacturer='!(loc.Manufacturer)' Language='2052' Codepage='936' Version='0.1.0'>
+    <Product Id='*' Name='!(loc.ProductName)' UpgradeCode='F50F4705-932B-4FF5-A3E6-34285FC6E6BD' Manufacturer='!(loc.Manufacturer)' Language='2052' Codepage='936' Version='0.3.0'>
         <Package Id='*' Keywords='!(loc.Keywords)' Description='!(loc.Description)' Manufacturer='!(loc.Manufacturer)' InstallerVersion='450' Languages='2052' Compressed='yes' InstallScope='perMachine' SummaryCodepage='936' Platform='x64'/>
 
         <MajorUpgrade Schedule='afterInstallInitialize' DowngradeErrorMessage='!(loc.DowngradeErrorMessage)'/>
