@@ -57,7 +57,7 @@ fn setup_gpu_effects(
     };
 
     // --- 1. 墨色爆发 (DemonAura / Armor Break) ---
-    let mut writer = ExprWriter::new();
+    let writer = ExprWriter::new();
     let mut color_gradient_ink = Gradient::new();
     color_gradient_ink.add_key(0.0, Vec4::new(0.0, 0.0, 0.0, 1.0));
     color_gradient_ink.add_key(0.7, Vec4::new(0.1, 0.1, 0.1, 0.6));
@@ -98,7 +98,7 @@ fn setup_gpu_effects(
     gpu_assets.effects.insert(EffectType::DemonAura, effect_ink);
 
     // --- 2. 真火特效 (Fire) ---
-    let mut writer = ExprWriter::new();
+    let writer = ExprWriter::new();
     let mut color_gradient_fire = Gradient::new();
     color_gradient_fire.add_key(0.0, Vec4::new(1.0, 0.9, 0.2, 1.0));
     color_gradient_fire.add_key(0.4, Vec4::new(1.0, 0.4, 0.0, 1.0));
@@ -136,7 +136,7 @@ fn setup_gpu_effects(
     gpu_assets.effects.insert(EffectType::Fire, effect_fire);
 
     // --- 3. 寒霜特效 (Ice) ---
-    let mut writer = ExprWriter::new();
+    let writer = ExprWriter::new();
     let mut color_gradient_ice = Gradient::new();
     color_gradient_ice.add_key(0.0, Vec4::new(0.8, 0.9, 1.0, 1.0));
     color_gradient_ice.add_key(1.0, Vec4::new(0.4, 0.6, 1.0, 0.0));
@@ -171,7 +171,7 @@ fn setup_gpu_effects(
     gpu_assets.effects.insert(EffectType::Ice, effect_ice);
 
     // --- 4. 冲击火花 (ImpactSpark) ---
-    let mut writer = ExprWriter::new();
+    let writer = ExprWriter::new();
     let mut color_gradient_spark = Gradient::new();
     color_gradient_spark.add_key(0.0, Vec4::new(1.5, 1.5, 1.0, 1.0));
     color_gradient_spark.add_key(0.3, Vec4::new(1.0, 0.8, 0.2, 1.0));
@@ -209,7 +209,7 @@ fn setup_gpu_effects(
     gpu_assets.effects.insert(EffectType::ImpactSpark, effect_spark);
 
     // --- 5. 剑气震荡 (SwordEnergy) ---
-    let mut writer = ExprWriter::new();
+    let writer = ExprWriter::new();
     let mut color_gradient_sword = Gradient::new();
     color_gradient_sword.add_key(0.0, Vec4::new(0.6, 0.9, 1.0, 1.0));
     color_gradient_sword.add_key(1.0, Vec4::new(0.2, 0.4, 0.8, 0.0));
@@ -244,7 +244,7 @@ fn setup_gpu_effects(
     gpu_assets.effects.insert(EffectType::SwordEnergy, effect_sword);
 
     // --- 6. 灵山云雾 (CloudMist) ---
-    let mut writer = ExprWriter::new();
+    let writer = ExprWriter::new();
     let mut color_gradient_mist = Gradient::new();
     color_gradient_mist.add_key(0.0, Vec4::new(0.05, 0.05, 0.05, 0.0));
     color_gradient_mist.add_key(0.2, Vec4::new(0.08, 0.08, 0.08, 0.25));
@@ -286,7 +286,7 @@ fn setup_gpu_effects(
     gpu_assets.effects.insert(EffectType::CloudMist, effect_mist);
 
     // --- 7. 毒雾 (Poison) ---
-    let mut writer = ExprWriter::new();
+    let writer = ExprWriter::new();
     let mut color_gradient_poison = Gradient::new();
     color_gradient_poison.add_key(0.0, Vec4::new(0.2, 0.8, 0.2, 0.0));
     color_gradient_poison.add_key(0.3, Vec4::new(0.1, 0.5, 0.1, 0.4));
@@ -306,7 +306,7 @@ fn setup_gpu_effects(
     gpu_assets.effects.insert(EffectType::Poison, effect_poison);
 
     // --- 8. 蛛丝喷射 (WebShot) ---
-    let mut writer = ExprWriter::new();
+    let writer = ExprWriter::new();
     let init_pos_web = SetPositionSphereModifier { center: writer.lit(Vec3::ZERO).expr(), radius: writer.lit(0.1).expr(), dimension: ShapeDimension::Volume };
     let init_vel_web = SetVelocitySphereModifier { center: writer.lit(Vec3::new(-1.0, 0.0, 0.0)).expr(), speed: writer.lit(8.0).expr() };
     let init_lifetime_web = SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(0.6).expr());
@@ -322,7 +322,7 @@ fn setup_gpu_effects(
     gpu_assets.effects.insert(EffectType::WebShot, effect_web);
 
     // --- 9. 丝绸尾迹 (SilkTrail) ---
-    let mut writer = ExprWriter::new();
+    let writer = ExprWriter::new();
     let init_pos_silk = SetPositionSphereModifier { center: writer.lit(Vec3::ZERO).expr(), radius: writer.lit(0.05).expr(), dimension: ShapeDimension::Surface };
     let init_lifetime_silk = SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(1.2).expr());
     let effect_silk = effects.add(
@@ -336,7 +336,7 @@ fn setup_gpu_effects(
     gpu_assets.effects.insert(EffectType::SilkTrail, effect_silk);
 
     // --- 10. 狼魂斩 (WolfSlash) ---
-    let mut writer = ExprWriter::new();
+    let writer = ExprWriter::new();
     let mut color_gradient_wolf = Gradient::new();
     color_gradient_wolf.add_key(0.0, Vec4::new(1.5, 0.1, 0.1, 1.0));
     color_gradient_wolf.add_key(1.0, Vec4::new(0.4, 0.0, 0.0, 0.0));
@@ -355,7 +355,7 @@ fn setup_gpu_effects(
     gpu_assets.effects.insert(EffectType::WolfSlash, effect_wolf);
 
     // --- 11. 身法拖尾 (MovementTrail) ---
-    let mut writer = ExprWriter::new();
+    let writer = ExprWriter::new();
     let mut color_gradient_trail = Gradient::new();
     color_gradient_trail.add_key(0.0, Vec4::new(0.0, 0.8, 1.5, 0.8)); // 高亮度蓝
     color_gradient_trail.add_key(1.0, Vec4::new(0.5, 0.0, 1.0, 0.0)); // 消失于紫色
@@ -364,11 +364,17 @@ fn setup_gpu_effects(
     size_gradient_trail.add_key(0.0, Vec3::splat(0.15));
     size_gradient_trail.add_key(1.0, Vec3::splat(0.0)); // 随时间变细
 
+    let init_pos_trail = SetPositionSphereModifier { 
+        center: writer.lit(Vec3::ZERO).expr(), 
+        radius: writer.lit(0.01).expr(), 
+        dimension: ShapeDimension::Volume 
+    };
     let init_lifetime_trail = SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(0.6).expr());
     
     let effect_trail = effects.add(
         EffectAsset::new(2048, SpawnerSettings::rate(100.0.into()), writer.finish())
             .with_name("MovementTrail")
+            .init(init_pos_trail)
             .init(init_lifetime_trail)
             .render(ColorOverLifetimeModifier { 
                 gradient: color_gradient_trail, 

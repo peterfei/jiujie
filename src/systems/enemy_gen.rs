@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use rand::Rng;
-use crate::components::combat::{Enemy, EnemyType, EnemyIntent, AiPattern, EnemyAffix};
+use crate::components::combat::{Enemy, EnemyType, EnemyAffix};
 
 /// 生成的敌人结果，包含组件数据和视觉配置
 pub struct GeneratedEnemy {

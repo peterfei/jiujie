@@ -269,6 +269,8 @@ pub struct PhysicalImpact {
     pub special_rotation_velocity: f32,
     /// [新增] 丝迹生成计时器 (用于蜘蛛爬行)
     pub trail_timer: f32,
+    /// [新增] 顿帧触发标记，防止在一次动作中多次触发打击感缩放
+    pub hit_stop_triggered: bool,
 }
 
 impl Default for PhysicalImpact {
@@ -280,6 +282,7 @@ impl Default for PhysicalImpact {
             target_vector: Vec3::ZERO, action_stage: 0,
             special_rotation: 0.0, special_rotation_velocity: 0.0,
             trail_timer: 0.0,
+            hit_stop_triggered: false,
         }
     }
 }

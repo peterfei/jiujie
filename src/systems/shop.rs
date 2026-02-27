@@ -3,7 +3,6 @@
 use bevy::prelude::*;
 use bevy::text::TextFont;
 use crate::components::*;
-use crate::components::shop::*;
 use crate::components::relic::RelicCollection;
 use crate::components::map::MapProgress;
 use crate::states::GameState;

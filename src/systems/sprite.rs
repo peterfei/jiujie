@@ -5,15 +5,14 @@
 
 use bevy::prelude::*;
 use bevy::scene::SceneRoot; 
-use bevy::pbr::{DistanceFog, FogFalloff}; 
+ 
 use crate::states::GameState;
 use crate::resources::{ArenaAssets, PlayerAssets};
 use crate::components::sprite::{
     CharacterSprite, AnimationState, CharacterType,
     CharacterAnimationEvent, SpriteMarker, PlayerSpriteMarker, EnemySpriteMarker,
     Combatant3d, PlayerAnimationConfig, BreathAnimation, PhysicalImpact, CharacterAssets, Rotating, Ghost, ActionType,
-    MagicSealMarker, RelicVisualMarker, SpiritClone, CombatCamera,
-    ArenaLantern, ArenaVegetation, ArenaSpiritStone, PlayerWeapon
+    MagicSealMarker, RelicVisualMarker, SpiritClone, CombatCamera, PlayerWeapon
 };
 use crate::components::after_image::{AfterImageConfig, TrailSource};
 use crate::systems::after_image::LastPosition;
@@ -171,12 +170,15 @@ fn update_relic_floating(
     }
 }
 
+use crate::components::hit_stop::HitStopEvent;
+
 /// 更新物理冲击效果
 pub fn update_physical_impacts(
     time: Res<Time>,
     mut query: Query<(&mut Transform, &mut PhysicalImpact, &BreathAnimation, &Combatant3d, Option<&mut CharacterSprite>)>,
     mut effect_events: EventWriter<crate::components::particle::SpawnEffectEvent>,
     mut screen_events: EventWriter<crate::components::ScreenEffectEvent>,
+    mut hit_stop_events: EventWriter<HitStopEvent>,
 ) {
     let dt = time.delta_secs().min(0.033);
     for (mut transform, mut impact, breath, combatant, mut sprite_opt) in query.iter_mut() {
@@ -235,15 +237,47 @@ pub fn update_physical_impacts(
                     // [狼类扑咬逻辑修复] 纯正直线位移，配合骨骼动画，严禁绕圈旋转
                     let action_phase = impact.action_timer * 12.5;
                     action_tilt_offset = action_phase.sin() * 0.4; // 减小身体抖动
-                    action_pos_offset.y = (progress * std::f32::consts::PI).sin() * 1.0; // 稍微跃起
+                    
+                    // 蓄力与冲刺曲线
+                    let pre_attack_window = 0.25; // 前 25% 时间用于蓄力
+                    let effective_progress = if progress < pre_attack_window {
+                        // 阶段 1: 蓄力后撤 (产生弹缩感)
+                        let p = progress / pre_attack_window;
+                        action_pos_offset.x = -0.3 * (p * std::f32::consts::PI).sin();
+                        0.0
+                    } else {
+                        // 阶段 2: 爆发冲刺
+                        (progress - pre_attack_window) / (1.0 - pre_attack_window)
+                    };
+
+                    action_pos_offset.y = (effective_progress * std::f32::consts::PI).sin() * 1.2; // 跳跃高度
                     
                     let target_dist = impact.target_offset_dist;
                     let current_dist = impact.current_offset.x.abs();
                     let dist_left = (target_dist - current_dist).max(0.0);
-                    let speed_scalar = if dist_left < 1.0 { dist_left.max(0.2) } else { 1.0 };
                     
-                    pos_damping = 8.0;
-                    impact.offset_velocity = Vec3::new(12.0 * dir * speed_scalar, 0.0, 0.0); 
+                    // [大作级优化] 打击感顿帧触发 + 视觉反馈
+                    if dist_left < 0.5 && !impact.hit_stop_triggered {
+                        hit_stop_events.send(HitStopEvent { duration: 0.3, speed: 0.01 }); // 0.3s 的极度重击停顿
+                        
+                        // 产生海量火花：30 枚粒子爆发
+                        use crate::components::particle::EffectType;
+                        let hit_pos = (impact.home_position + impact.current_offset) * 100.0;
+                        effect_events.send(crate::components::particle::SpawnEffectEvent::new(
+                            EffectType::ImpactSpark, hit_pos
+                        ).burst(30));
+
+                        // 强烈抖动
+                        screen_events.send(crate::components::ScreenEffectEvent::Shake { trauma: 0.8, decay: 4.0 });
+                        
+                        impact.hit_stop_triggered = true;
+                    }
+
+                    pos_damping = if progress < pre_attack_window { 20.0 } else { 8.0 };
+                    let speed_scalar = if dist_left < 1.0 { dist_left.max(0.2) } else { 1.0 };
+                    let forward_speed = if progress < pre_attack_window { 0.0 } else { 15.0 };
+                    
+                    impact.offset_velocity = Vec3::new(forward_speed * dir * speed_scalar, 0.0, 0.0); 
                     
                     // 强制清零旋转，双重保险
                     impact.special_rotation = 0.0;
@@ -268,6 +302,12 @@ pub fn update_physical_impacts(
                     
                     // 到位判定
                     if dist_left < 0.5 && impact.action_stage == 0 {
+                        // [大作级优化] 御剑术打击感
+                        if !impact.hit_stop_triggered {
+                            hit_stop_events.send(HitStopEvent { duration: 0.15, speed: 0.08 });
+                            impact.hit_stop_triggered = true;
+                        }
+
                         if let Some(ref mut sprite) = sprite_opt {
                             if sprite.state == AnimationState::WolfAttack || sprite.state == AnimationState::LinearRun {
                                 sprite.state = AnimationState::Attack;
@@ -614,6 +654,11 @@ pub fn update_physical_impacts(
         let breath_y = if is_moving || is_timer_active { 0.0 } else { (breath.timer * breath.frequency).sin() * 0.02 };
 
         let is_dash = impact.action_timer > 0.0 && impact.action_type == ActionType::Dash;
+        
+        // [大作级优化] 动作结束重置顿帧标记
+        if !is_timer_active && impact.hit_stop_triggered {
+            impact.hit_stop_triggered = false;
+        }
         let tilt_suppression = if is_dash { 0.0 } else { 1.0 / (1.0 + impact.special_rotation.abs() * 5.0) };
         let effective_tilt = if is_dash { 0.0 } else { impact.tilt_amount * tilt_suppression };
         
@@ -1210,8 +1255,8 @@ fn generate_noise_texture(
     height: u32,
     mode: NoiseType,
 ) -> Handle<Image> {
-    use rand::{Rng, SeedableRng};
-    let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+    use rand::SeedableRng;
+    let rng = rand::rngs::StdRng::seed_from_u64(42);
     let mut data = vec![0; (width * height * 4) as usize];
     for y in 0..height {
         for x in 0..width {
@@ -1371,7 +1416,7 @@ pub fn spawn_procedural_landscape(
 ///
 /// 监听玩家的 PhysicalImpact 状态，驱动武器实体的旋转
 pub fn update_weapon_animation(
-    mut weapon_query: Query<(&mut Transform, &Parent), With<PlayerWeapon>>,
+    weapon_query: Query<(&mut Transform, &Parent), With<PlayerWeapon>>,
     player_query: Query<&PhysicalImpact, With<PlayerSpriteMarker>>,
     time: Res<Time>,
 ) {
@@ -1669,7 +1714,7 @@ pub fn spawn_character_sprite(
             commands.entity(entity).insert((
                 PlayerSpriteMarker,
                 AfterImageConfig {
-                    speed_threshold: 12.0, // 略高于普通跑动，仅冲刺时触发
+                    speed_threshold: 12.0, 
                     snapshot_interval: 0.08,
                     ghost_ttl: 0.4,
                     color: Color::srgba(0.0, 0.8, 1.0, 0.5),
@@ -1678,16 +1723,26 @@ pub fn spawn_character_sprite(
                 LastPosition::default(),
             )); 
 
-            // 在玩家身上挂载一个拖尾点
             commands.entity(entity).with_children(|parent| {
-                parent.spawn((
-                    TrailSource,
-                    Transform::from_xyz(0.0, 1.0, 0.0), // 位于腰部重心
-                    Visibility::Hidden,
-                ));
+                parent.spawn((TrailSource, Transform::from_xyz(0.0, 1.0, 0.0), Visibility::Hidden));
             });
         }
-        _ => { if let Some(id) = enemy_id { commands.entity(entity).insert(EnemySpriteMarker { id }); } }
+        _ => { 
+            if let Some(id) = enemy_id { 
+                commands.entity(entity).insert((
+                    EnemySpriteMarker { id },
+                    // [核心修复] 怪物也需要身法配置以支持受击/攻击留影
+                    AfterImageConfig {
+                        speed_threshold: 15.0, // 怪物阈值稍高
+                        snapshot_interval: 0.1,
+                        ghost_ttl: 0.35,
+                        color: Color::srgba(1.0, 0.2, 0.2, 0.5), // 怪物偏红/紫
+                        ..default()
+                    },
+                    LastPosition::default(),
+                )); 
+            } 
+        }
     };
 
     entity
@@ -1837,7 +1892,7 @@ pub fn sync_player_skeletal_animation(
                 }
 
                 // 执行播放
-                let mut transitions = player.play(target_node);
+                let transitions = player.play(target_node);
                 if should_replay {
                     transitions.replay();
                     info!("【3D同步】强制重置动作节点: {:?}", sprite.state);
@@ -1849,7 +1904,7 @@ pub fn sync_player_skeletal_animation(
 
                 // [权重互斥保底] 显式管理所有节点的权重，防止多节点同时播放
                 for node in [config.idle_node, config.run_node, config.strike_node, config.kick_node] {
-                    if let Some(mut anim) = player.animation_mut(node) {
+                    if let Some(anim) = player.animation_mut(node) {
                         anim.set_weight(if node == target_node { 1.0 } else { 0.0 });
                     }
                 }

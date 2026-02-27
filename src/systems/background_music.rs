@@ -136,7 +136,7 @@ fn handle_stop_bgm_events(
 fn handle_crossfade_bgm_events(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut current_bgm: ResMut<CurrentBgm>,
+    current_bgm: ResMut<CurrentBgm>,
     bgm_settings: Res<BgmSettings>,
     mut play_events: EventWriter<PlayBgmEvent>,
     mut events: EventReader<CrossfadeBgmEvent>,

@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 use crate::states::GameState;
-use crate::resources::save::GameStateSave;
 use crate::components::background_music::{BgmType, PlayBgmEvent};
 
 pub struct OpeningPlugin;
@@ -41,7 +40,7 @@ struct SkipOpening(bool);
 fn setup_opening_video(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut bgm_events: EventWriter<PlayBgmEvent>,
+    bgm_events: EventWriter<PlayBgmEvent>,
     first_frame_res: Res<FirstFrameResource>,
     mut global_lock: Local<bool>,
 ) {
@@ -116,7 +115,7 @@ fn setup_opening_video(
 fn video_playback_system(
     mut commands: Commands,
     time: Res<Time>,
-    mut controller: Option<ResMut<VideoController>>,
+    controller: Option<ResMut<VideoController>>,
     mut query: Query<&mut ImageNode, With<VideoFrame>>,
     asset_server: Res<AssetServer>,
     mut bgm_events: EventWriter<PlayBgmEvent>,

@@ -6,6 +6,7 @@ pub mod vfx_orchestrator;
 pub mod gpu_particle;
 pub mod screen_effect;
 pub mod after_image;
+pub mod hit_stop;
 pub mod relic;
 pub mod shop;
 pub mod rest;
@@ -21,6 +22,7 @@ pub use sprite::SpritePlugin;
 pub use vfx_orchestrator::VfxOrchestratorPlugin;
 pub use gpu_particle::GpuParticlePlugin;
 pub use after_image::AfterImagePlugin;
+pub use hit_stop::HitStopPlugin;
 pub use screen_effect::ScreenEffectPlugin;
 pub use relic::{
     RelicPlugin, RelicUiPlugin, CombatStartProcessed,

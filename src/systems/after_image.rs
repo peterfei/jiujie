@@ -18,11 +18,9 @@ impl Plugin for AfterImagePlugin {
     }
 }
 
-/// 记录上一帧位置以计算速度
 #[derive(Component, Default)]
 pub struct LastPosition(pub Vec3);
 
-/// 同步拖尾发射器的生命周期与激活状态
 pub fn sync_trail_emitters(
     mut commands: Commands,
     gpu_assets: Res<GpuParticleAssets>,
@@ -32,14 +30,11 @@ pub fn sync_trail_emitters(
 ) {
     for (entity, parent, mut visibility) in query.iter_mut() {
         if let Ok(config) = config_query.get(parent.get()) {
-            // 如果还没有挂载粒子效果，则挂载
             if existing_effects.get(entity).is_err() {
                 if let Some(effect_handle) = gpu_assets.effects.get(&EffectType::MovementTrail) {
                     commands.entity(entity).insert(ParticleEffect::new(effect_handle.clone()));
                 }
             }
-            
-            // 根据 config.is_active 切换可见性/激活感 (Hanabi 系统会自动响应)
             *visibility = if config.is_active { Visibility::Visible } else { Visibility::Hidden };
         }
     }
@@ -47,52 +42,59 @@ pub fn sync_trail_emitters(
 
 pub fn spawn_after_images(
     mut commands: Commands,
-    mut query: Query<(Entity, &Transform, &mut LastPosition, &mut AfterImageConfig, Option<&SceneRoot>)>,
+    mut query: Query<(&Transform, &mut LastPosition, &mut AfterImageConfig, Option<&SceneRoot>)>,
     time: Res<Time>,
 ) {
     let delta = time.delta_secs();
-    if delta <= 0.0 { return; }
 
-    for (entity, transform, mut last_pos, mut config, scene_root_opt) in query.iter_mut() {
-        // 计算当前帧速度
+    for (transform, mut last_pos, mut config, scene_root_opt) in query.iter_mut() {
         let current_pos = transform.translation;
-        let displacement = (current_pos - last_pos.0).length();
-        let velocity = displacement / delta;
-        
-        if velocity > config.speed_threshold {
-            config.is_active = true;
-            config.timer.tick(time.delta());
-            
-            if config.timer.just_finished() {
-                // 实例化残影
-                let ghost_id = commands.spawn((
-                    GhostInstance {
-                        ttl: Timer::from_seconds(config.ghost_ttl, TimerMode::Once),
-                    },
-                    Transform {
-                        translation: current_pos,
-                        rotation: transform.rotation,
-                        scale: transform.scale,
-                    },
-                    GlobalTransform::default(),
-                    InheritedVisibility::default(),
-                    crate::components::combat::CombatUiRoot, // 统一清理标记
-                )).id();
+        let mut should_snapshot = false;
 
-                if let Some(root) = scene_root_opt {
-                    let model_clone = commands.spawn((
-                        SceneRoot(root.0.clone()),
-                    )).id();
-                    commands.entity(ghost_id).add_child(model_clone);
-                }
-            }
-        } else {
-            config.is_active = false;
-            // 速度不足时，重置定时器进度，确保下次加速时第一时间产生残影
-            config.timer.reset();
+        // 1. 强制快照逻辑 (最高优先级，不依赖 delta)
+        if config.force_snapshot {
+            should_snapshot = true;
+            config.force_snapshot = false;
         }
 
-        // 无论是否触发残影，都更新 LastPosition
+        // 2. 位移触发逻辑
+        if delta > 0.0 {
+            let displacement = (current_pos - last_pos.0).length();
+            let velocity = displacement / delta;
+            
+            if velocity > config.speed_threshold {
+                config.is_active = true;
+                config.timer.tick(time.delta());
+                if config.timer.just_finished() {
+                    should_snapshot = true;
+                }
+            } else {
+                config.is_active = false;
+                config.timer.reset();
+            }
+        }
+
+        if should_snapshot {
+            let ghost_id = commands.spawn((
+                GhostInstance {
+                    ttl: Timer::from_seconds(config.ghost_ttl, TimerMode::Once),
+                },
+                Transform {
+                    translation: current_pos,
+                    rotation: transform.rotation,
+                    scale: transform.scale,
+                },
+                GlobalTransform::default(),
+                InheritedVisibility::default(),
+                crate::components::combat::CombatUiRoot,
+            )).id();
+
+            if let Some(root) = scene_root_opt {
+                let model_clone = commands.spawn(SceneRoot(root.0.clone())).id();
+                commands.entity(ghost_id).add_child(model_clone);
+            }
+        }
+
         last_pos.0 = current_pos;
     }
 }

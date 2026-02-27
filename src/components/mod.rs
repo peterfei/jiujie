@@ -3,6 +3,7 @@
 pub mod animation;
 pub mod after_image;
 pub mod audio;
+pub mod hit_stop;
 pub mod background_music;
 pub mod cards;
 pub mod combat;

@@ -99,7 +99,7 @@ fn create_event_button(parent: &mut ChildBuilder, label: &str, choice: EventChoi
 
 /// 处理机缘事件选择
 fn handle_event_choices(
-    mut commands: Commands,
+    commands: Commands,
     current_state: Res<State<GameState>>,
     mut next_state: ResMut<NextState<GameState>>,
     mut player_query: Query<(&mut Player, &crate::components::Cultivation)>,

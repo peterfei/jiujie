@@ -8,7 +8,7 @@ use crate::components::background_music::{BgmType, PlayBgmEvent, StopBgmEvent};
 
 use crate::components::{
     Player, Enemy, EnemyType, EnemyIntent, EnemyAffix, Card, CardType, CardEffect, CardRarity, Hand, DrawPile, DiscardPile,
-    CombatState, TurnPhase, NodeType, Realm, Cultivation, MapNode, MapProgress, PlayerDeck, DeckConfig, CardPool,
+    CombatState, TurnPhase, NodeType, MapProgress, PlayerDeck, CardPool,
     MapUiRoot, MapNodeButton, RippleEffect, EntranceAnimation, HoverEffect, // 新增导入
     CharacterType, EnemyAttackEvent,
     SpriteMarker, ParticleMarker, EmitterMarker, EffectType, SpawnEffectEvent,
@@ -28,14 +28,13 @@ use crate::components::{
     EnemySpriteMarker, VictoryDelay, RelicCollection, Relic, RelicId,
     EnemyActionQueue, RelicObtainedEvent, RelicTriggeredEvent, HeavenlyStrikeCinematic,
     ParticleEmitter, PlaySfxEvent, SfxType, CardHoverPanelMarker, RelicHoverPanelMarker, DialogueLine,
-    EnvironmentPanel, EnvironmentText, 
-    Particle, DamageNumber, DamageEffectEvent, BlockIconMarker, BlockText, StatusIndicator,
+    EnvironmentPanel, EnvironmentText, DamageEffectEvent, BlockIconMarker, BlockText, StatusIndicator,
     EnemyHpText, EnemyIntentText, EnemyStatusUi, PlayerHpText, PlayerEnergyText, PlayerBlockText,
     SwordIntentText, 
     TopBar, TopBarHpText, TopBarGoldText, EnergyOrb, EndTurnButton, HandArea, CombatUiRoot,
     StatusEffectEvent, Environment, CombatCamera,
 };
-use crate::components::sprite::{CharacterAssets, Rotating, CharacterAnimationEvent, AnimationState, PlayerSpriteMarker, MagicSealMarker, CharacterSprite, Combatant3d, PlayerWeapon, WanJianTriggerEvent};
+use crate::components::sprite::{CharacterAssets, CharacterAnimationEvent, AnimationState, PlayerSpriteMarker, CharacterSprite};
 use crate::systems::sprite::{spawn_character_sprite};
 use crate::systems::enemy_gen::EnemyGenerator;
 
@@ -239,7 +238,8 @@ impl Plugin for GamePlugin {
             crate::systems::sprite::SpritePlugin,
             crate::systems::vfx_orchestrator::VfxOrchestratorPlugin, // 补齐粒子插件
             crate::systems::gpu_particle::GpuParticlePlugin, // GPU 粒子插件
-            crate::systems::after_image::AfterImagePlugin, // 新增残影与拖尾插件
+            crate::systems::hit_stop::HitStopPlugin, // 打击感系统 (优先处理)
+            crate::systems::after_image::AfterImagePlugin, // 身法残影 (响应顿帧)
             crate::systems::ui::UiPlugin,
             crate::systems::map::MapPlugin,
             crate::systems::background_music::BackgroundMusicPlugin, // 背景音乐插件
@@ -1297,7 +1297,7 @@ pub fn process_heavenly_strike_cinematic(
     mut commands: Commands,
     time: Res<Time>,
     mut cinematic: ResMut<HeavenlyStrikeCinematic>,
-    mut player_query: Query<(&mut Player, &crate::components::Cultivation)>,
+    player_query: Query<(&mut Player, &crate::components::Cultivation)>,
     mut enemy_query: Query<&mut Enemy>,
     mut effect_events: EventWriter<SpawnEffectEvent>,
     mut screen_events: EventWriter<ScreenEffectEvent>,
@@ -1472,7 +1472,7 @@ fn handle_combat_button_clicks(
     mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
     mut combat_state: ResMut<CombatState>,
-    mut enemy_query: Query<(Entity, &Enemy)>,
+    enemy_query: Query<(Entity, &Enemy)>,
     mut player_query: Query<&mut Player>, // 新增
     mut queue: ResMut<EnemyActionQueue>,
     mut hand_query: Query<&mut Hand>,
@@ -1535,10 +1535,10 @@ fn handle_combat_button_clicks(
 
 /// 核心系统：逐个处理敌人回合动作
 pub fn process_enemy_turn_queue(
-    mut commands: Commands,
+    commands: Commands,
     mut next_state: ResMut<NextState<GameState>>, 
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    meshes: ResMut<Assets<Mesh>>,
+    materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
     mut queue: ResMut<EnemyActionQueue>,
     combat_state_opt: Option<ResMut<CombatState>>,
@@ -2025,7 +2025,7 @@ fn handle_card_play(
     mut draw_pile_query: Query<&mut DrawPile>,
     mut discard_pile_query: Query<&mut DiscardPile>,
     mut enemy_query: Query<&mut Enemy>,
-    mut events: (
+    events: (
         EventWriter<SpawnEffectEvent>,
         EventWriter<ScreenEffectEvent>,
         EventWriter<PlaySfxEvent>,
@@ -2660,7 +2660,7 @@ fn update_victory_delay(
         
         // 额外清理所有剩余粒子
         for entity in particle_query.iter() {
-            if let Some(mut e) = commands.get_entity(entity) {
+            if let Some(e) = commands.get_entity(entity) {
                 e.despawn_recursive();
             }
         }

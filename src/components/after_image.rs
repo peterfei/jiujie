@@ -9,6 +9,7 @@ pub struct AfterImageConfig {
     pub color: Color,              // 残影与拖尾主色调
     pub timer: Timer,              // 内部节奏控制器
     pub is_active: bool,           // 当前是否处于高速移动状态
+    pub force_snapshot: bool,      // [新增] 强制触发一次快照标记
 }
 
 impl Default for AfterImageConfig {
@@ -20,6 +21,7 @@ impl Default for AfterImageConfig {
             color: Color::srgba(0.0, 0.8, 1.0, 0.6),
             timer: Timer::from_seconds(0.1, TimerMode::Repeating),
             is_active: false,
+            force_snapshot: false,
         }
     }
 }

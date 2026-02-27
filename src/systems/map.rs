@@ -50,7 +50,7 @@ fn cleanup_map_ui(mut commands: Commands, query: Query<Entity, With<MapUiRoot>>)
 pub fn setup_map_ui(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut map_progress: Option<ResMut<MapProgress>>, // 保持 ResMut
+    map_progress: Option<ResMut<MapProgress>>, // 保持 ResMut
     player_query: Query<(&Player, &Cultivation)>,
     player_deck: Res<PlayerDeck>,
     relic_collection: Res<RelicCollection>,

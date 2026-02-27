@@ -5,7 +5,7 @@ use std::path::Path;
 use crate::components::*;
 use crate::components::cards::Card;
 use crate::components::relic::Relic;
-use crate::components::map::{MapNode, MapProgress};
+use crate::components::map::MapNode;
 use crate::components::cultivation::Cultivation;
 
 /// 完整的游戏存档数据
