@@ -1,6 +1,8 @@
 /target
 /openspec
 /tests
+/dist
+/logs
 .gemini-clipboard
 
 # 总结与文章
