@@ -3,6 +3,11 @@
 /tests
 .gemini-clipboard
 
+# 总结与文章
+TDD_SUMMARY_WANJIAN_FOUR_PHASE.md
+docs/wanjian_nan_fix_summary.md
+docs/头条号-九界渡劫技术文章.md
+
 # 游戏存档文件
 savegame.json
 *.sav
