@@ -154,28 +154,47 @@ fn spawn_real_lightning(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh
         }
     }
 
-    // 核心发光材质 (AAA 级：极亮蓝白核心)
+    // 核心发光材质 (AAA 级：加法混合蓝白核心，彻底解决灰化)
     let trunk_mat = materials.add(StandardMaterial { 
-        base_color: Color::srgba(1.0, 1.0, 1.0, 1.0),
-        emissive: LinearRgba::new(1000.0, 1500.0, 5000.0, 1.0), // 极端发光
+        base_color: Color::srgba(0.2, 0.5, 1.0, 1.0),
+        emissive: LinearRgba::new(2000.0, 3000.0, 10000.0, 1.0), // 极端蓝光过载
+        alpha_mode: AlphaMode::Add, 
         unlit: true,
         ..default() 
     });
     let branch_mat = materials.add(StandardMaterial { 
-        base_color: Color::srgba(0.4, 0.2, 0.8, 1.0),
-        emissive: LinearRgba::new(50.0, 20.0, 200.0, 1.0),
+        base_color: Color::srgba(0.4, 0.1, 0.8, 1.0),
+        emissive: LinearRgba::new(100.0, 20.0, 500.0, 1.0),
+        alpha_mode: AlphaMode::Add,
         unlit: true, ..default() 
     });
     
-    // 粗细升级：主干 0.035，确保在 3D 空间中像素凝聚力
-    let trunk_mesh = meshes.add(Cylinder::new(0.035, 1.0));
+    // 粗细定义
+    let trunk_mesh = meshes.add(Cylinder::new(0.04, 1.0));
     let branch_mesh = meshes.add(Cylinder::new(0.015, 1.0));
 
-    // 渲染主干
-    for i in 0..main_path.len() - 1 {
+    // 渲染主干 (带物理渐变 Tapering)
+    let main_len = main_path.len();
+    for i in 0..main_len - 1 {
         let p1 = main_path[i]; let p2 = main_path[i+1];
         let dir = p2 - p1; let len = dir.length(); if len < 0.001 { continue; }
-        commands.spawn((Mesh3d(trunk_mesh.clone()), MeshMaterial3d(trunk_mat.clone()), Transform { translation: p1 + dir * 0.5, rotation: Quat::from_rotation_arc(Vec3::Y, dir.normalize()), scale: Vec3::new(1.0, len, 1.0) }, LightningBolt::new(vec![], 0.3, false).with_branch_level(0), ParticleMarker, CombatUiRoot));
+        
+        // 自上而下的能量衰减
+        let progress = i as f32 / (main_len as f32);
+        let taper_scale = (1.5 * (1.0 - progress)).max(0.25);
+        
+        commands.spawn((
+            Mesh3d(trunk_mesh.clone()), 
+            MeshMaterial3d(trunk_mat.clone()), 
+            Transform { 
+                translation: p1 + dir * 0.5, 
+                rotation: Quat::from_rotation_arc(Vec3::Y, dir.normalize()), 
+                scale: Vec3::new(taper_scale, len, taper_scale) 
+            }, 
+            LightningBolt::new(vec![], 0.3, false).with_branch_level(0), 
+            ParticleMarker, 
+            CombatUiRoot
+        ));
     }
     
     // 渲染侧枝

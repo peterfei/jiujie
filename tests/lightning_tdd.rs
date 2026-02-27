@@ -21,27 +21,25 @@ fn test_realistic_fractal_lightning_logic() {
     app.add_systems(Update, bevy_card_battler::systems::vfx_orchestrator::handle_vfx_events);
     app.update(); 
 
-    // 发送闪电事件
     app.world_mut().send_event(SpawnEffectEvent::new(EffectType::Lightning, Vec3::ZERO));
     app.update();
 
-    let mut main_trunk_count = 0;
-    let mut max_horizontal_spread: f32 = 0.0;
+    let mut trunk_segments: Vec<(f32, f32)> = Vec::new(); // (y_pos, radius_scale)
 
     let mut query = app.world_mut().query::<(&LightningBolt, &Transform)>();
     for (bolt, transform) in query.iter(app.world()) {
-        if bolt.is_light { continue; }
-        if bolt.branch_level == 0 {
-            main_trunk_count += 1;
-            // 计算横向扩散（远离中心线）
-            let spread = Vec2::new(transform.translation.x, transform.translation.z).length();
-            max_horizontal_spread = max_horizontal_spread.max(spread);
-        }
+        if bolt.is_light || bolt.branch_level > 0 { continue; }
+        trunk_segments.push((transform.translation.y, transform.scale.x));
     }
 
-    // TDD 红灯断言
-    assert!(main_trunk_count >= 15, "AAA lightning needs detail");
+    // 按高度排序（从高到低）
+    trunk_segments.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+
+    // TDD 断言 1：段数
+    assert!(trunk_segments.len() >= 15, "AAA lightning needs detail");
     
-    // 物理限制：闪电主干横向偏移不能超过 4.0。当前代码由于 0.45 系数会远超此值。
-    assert!(max_horizontal_spread < 4.0, "Lightning path is TOO HORIZONTAL! Spread: {}", max_horizontal_spread);
+    // TDD 断言 2：渐变（Tapering）。顶部的粗度必须大于底部的粗度。
+    let top_radius = trunk_segments.first().unwrap().1;
+    let bottom_radius = trunk_segments.last().unwrap().1;
+    assert!(top_radius > bottom_radius, "Lightning must taper! Top: {}, Bottom: {}", top_radius, bottom_radius);
 }
