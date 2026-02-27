@@ -1,13 +1,15 @@
-name: 多平台自动构建打包
+name: 自动发布 | Release Automation
 
 on:
   push:
-    branches: [ main ]
+    tags:
+      - 'v*' # 当推送 v0.3.0 等标签时触发
   workflow_dispatch:
 
 env:
-  PROJECT_NAME: bevy_card_battler
-  DISPLAY_NAME: 九界：渡劫
+  PROJECT_NAME: jiujie
+  DISPLAY_NAME: "九界：渡劫"
+  VERSION: ${{ github.ref_name }} # 使用标签名作为版本号
 
 jobs:
   # ==================== Windows 构建 ====================
@@ -15,38 +17,48 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      
       - name: 安装 Rust
         uses: dtolnay/rust-toolchain@stable
-      - name: 编译 Release
-        run: cargo build --release
-      - name: 准备打包目录
-        shell: bash
-        run: |
-          mkdir -p build_dist
-          cp target/release/${{ env.PROJECT_NAME }}.exe build_dist/
-          cp -r assets build_dist/
-      - name: 安装打包工具 (cargo-wix)
-        if: matrix.os == 'windows-latest'
-        uses: taiki-e/install-action@v2
         with:
-          tool: cargo-wix
+          targets: x86_64-pc-windows-msvc
 
-      - name: 构建 Windows MSI 安装包
-        if: matrix.os == 'windows-latest'
+      - name: 编译 Release
+        run: cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: 准备 WiX 工具链
         shell: powershell
         run: |
-          # 确保 WiX 路径在环境路径中 (GitHub Runner 默认路径)
-          $env:PATH += ";C:\Program Files (x86)\WiX Toolset v3.11\bin"
-          cargo wix init
-          cargo wix --no-build
-          if (Test-Path "target/wix/*.msi") {
-            cp target/wix/*.msi build_dist/
-          }
-      - name: 上传 Windows 产物
-        uses: actions/upload-artifact@v4
+          # GitHub Windows Runner 预装了 WiX v3，直接添加路径
+          echo "C:\Program Files (x86)\WiX Toolset v3.11\bin" >> $GITHUB_PATH
+
+      - name: 构建 MSI 安装包 (复刻 build_installer.bat)
+        shell: cmd
+        env:
+          ASSETS_DIR: ${{ github.workspace }}\assets
+          WIX_OBJ_DIR: target\wix
+          TARGET_DIR: target\x86_64-pc-windows-msvc\release
+        run: |
+          mkdir %WIX_OBJ_DIR%
+          
+          :: 1. 收集资源 (Heat)
+          heat.exe dir "%ASSETS_DIR%" -dr AssetsFolder -cg AssetsComponentGroup -var var.AssetsDir -gg -ke -srd -sfrag -template fragment -out "%WIX_OBJ_DIR%\assets.wxs"
+          
+          :: 2. 编译主文件与资源 (Candle)
+          :: 注意：Version 去掉 v 前缀
+          set CLEAN_VER=%VERSION:v=%
+          candle.exe -dVersion="%CLEAN_VER%" -dCargoTargetBinDir="%TARGET_DIR%" -dAssetsDir="%ASSETS_DIR%" -arch x64 -ext WixUIExtension -out "%WIX_OBJ_DIR%\%PROJECT_NAME%.wixobj" wix\%PROJECT_NAME%.wxs
+          candle.exe -dVersion="%CLEAN_VER%" -dCargoTargetBinDir="%TARGET_DIR%" -dAssetsDir="%ASSETS_DIR%" -arch x64 -ext WixUIExtension -out "%WIX_OBJ_DIR%\assets.wixobj" "%WIX_OBJ_DIR%\assets.wxs"
+          
+          :: 3. 链接生成 MSI (Light)
+          light.exe -ext WixUIExtension -cultures:zh-CN -loc wix\main.wxl -out "%PROJECT_NAME%-%VERSION%-x64.msi" "%WIX_OBJ_DIR%\%PROJECT_NAME%.wixobj" "%WIX_OBJ_DIR%\assets.wixobj" -sice:ICE61
+
+      - name: 上传 Release 资产
+        uses: softprops/action-gh-release@v2
         with:
-          name: bevy_card_battler_windows
-          path: build_dist/
+          files: jiujie-*.msi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ==================== macOS 构建 ====================
   build-macos:
@@ -56,30 +68,26 @@ jobs:
       - name: 安装 Rust
         uses: dtolnay/rust-toolchain@stable
       - name: 编译 Release
-        # 此时 Cargo.toml 已移除 x11，不会再触发 -lasound 链接
         run: cargo build --release
       - name: 准备 App Bundle
         shell: bash
         run: |
-          APP_NAME="${{ env.DISPLAY_NAME }}"
-          mkdir -p "build_dist/${APP_NAME}.app/Contents/MacOS"
-          mkdir -p "build_dist/${APP_NAME}.app/Contents/Resources"
-          cp target/release/${{ env.PROJECT_NAME }} "build_dist/${APP_NAME}.app/Contents/MacOS/"
-          cp -r assets "build_dist/${APP_NAME}.app/Contents/Resources/"
-          [ -f assets/icons/icon.icns ] && cp assets/icons/icon.icns "build_dist/${APP_NAME}.app/Contents/Resources/AppIcon.icns"
+          APP_DIR="${{ env.DISPLAY_NAME }}.app"
+          mkdir -p "build_dist/${APP_DIR}/Contents/MacOS"
+          mkdir -p "build_dist/${APP_DIR}/Contents/Resources"
+          cp target/release/${{ env.PROJECT_NAME }} "build_dist/${APP_DIR}/Contents/MacOS/"
+          cp -r assets "build_dist/${APP_DIR}/Contents/Resources/"
           
           # 创建 Info.plist
-          cat > "build_dist/${APP_NAME}.app/Contents/Info.plist" <<EOF
+          cat > "build_dist/${APP_DIR}/Contents/Info.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
               <key>CFBundleExecutable</key>
               <string>${{ env.PROJECT_NAME }}</string>
-              <key>CFBundleIconFile</key>
-              <string>AppIcon.icns</string>
               <key>CFBundleIdentifier</key>
-              <string>com.peterfei.bevy-card-battler</string>
+              <string>com.peterfei.jiujie</string>
               <key>CFBundleName</key>
               <string>${{ env.DISPLAY_NAME }}</string>
               <key>CFBundlePackageType</key>
@@ -89,33 +97,40 @@ jobs:
           </dict>
           </plist>
           EOF
-      - name: 上传 macOS 产物
-        uses: actions/upload-artifact@v4
+          
+          # 打包为 ZIP 方便分发
+          cd build_dist && zip -r "../${{ env.PROJECT_NAME }}-${{ env.VERSION }}-macos.zip" "${APP_DIR}"
+      - name: 上传 Release 资产
+        uses: softprops/action-gh-release@v2
         with:
-          name: bevy_card_battler_macos
-          path: build_dist/
+          files: jiujie-*-macos.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ==================== Linux 构建 ====================
   build-linux:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: 安装 Rust
-        uses: dtolnay/rust-toolchain@stable
       - name: 安装依赖
         run: |
           sudo apt-get update
           sudo apt-get install -y g++ pkg-config libx11-dev libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@stable
       - name: 编译 Release
         run: cargo build --release
-      - name: 准备打包目录
+      - name: 准备分发包
         shell: bash
         run: |
-          mkdir -p build_dist
-          cp target/release/${{ env.PROJECT_NAME }} build_dist/
-          cp -r assets build_dist/
-      - name: 上传 Linux 产物
-        uses: actions/upload-artifact@v4
+          DIST_DIR="jiujie-${{ env.VERSION }}-linux"
+          mkdir -p "$DIST_DIR"
+          cp target/release/${{ env.PROJECT_NAME }} "$DIST_DIR/"
+          cp -r assets "$DIST_DIR/"
+          tar -czvf "${DIST_DIR}.tar.gz" "$DIST_DIR"
+      - name: 上传 Release 资产
+        uses: softprops/action-gh-release@v2
         with:
-          name: bevy_card_battler_linux
-          path: build_dist/
+          files: jiujie-*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
