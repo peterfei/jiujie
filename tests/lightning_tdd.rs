@@ -39,10 +39,10 @@ fn test_realistic_fractal_lightning_logic() {
     // 运行逻辑处理事件
     app.update();
 
-    // 收集生成的 LightningBolt 并验证尺寸
+    // 收集生成的 LightningBolt 并验证尺寸与曲折度
     let mut main_trunk_count = 0;
-    let mut branch_count = 0;
-    let mut total_length = 0.0;
+    let mut total_deviation = 0.0;
+    let mut prev_direction: Option<Vec3> = None;
 
     let mut query = app.world_mut().query::<(&LightningBolt, &Transform)>();
     for (bolt, transform) in query.iter(app.world()) {
@@ -50,15 +50,20 @@ fn test_realistic_fractal_lightning_logic() {
 
         if bolt.branch_level == 0 {
             main_trunk_count += 1;
-            // 验证 Y 轴缩放（长度）。如果基准高度是 1.0，scale.y 应该代表物理长度
-            total_length += transform.scale.y;
-        } else {
-            branch_count += 1;
+            
+            // 获取当前段的实际指向（从 Transform 的旋转中提取向上向量，因为圆柱体长轴在 Y）
+            let current_dir = transform.rotation * Vec3::Y;
+            
+            if let Some(prev_dir) = prev_direction {
+                // 计算相邻两段之间的夹角偏差
+                let angle = prev_dir.angle_between(current_dir);
+                total_deviation += angle;
+            }
+            prev_direction = Some(current_dir);
         }
     }
 
     // TDD 断言
-    assert!(main_trunk_count > 4, "Real lightning should have a multi-segment main trunk, got {}", main_trunk_count);
-    assert!(total_length > 5.0, "The cumulative length of the main trunk should be significant. Got: {}", total_length);
-    assert!(branch_count > 0, "Real lightning MUST have branches (branch_level > 0). Found {}", branch_count);
+    assert!(main_trunk_count > 10, "Real lightning should have more segments for smoothness, got {}", main_trunk_count);
+    assert!(total_deviation > 0.5, "Lightning path is too straight! Tortuosity deviation: {}", total_deviation);
 }

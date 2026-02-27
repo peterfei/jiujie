@@ -282,17 +282,28 @@ fn spawn_real_lightning(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh
     while let Some((p_start, p_end, level)) = to_process.pop() {
         if level > 2 { continue; }
         let mut points = vec![p_start];
-        let num_nodes = if level == 0 { 8 } else { 5 };
+        // 核心升级：主干 20 段，分支 10 段
+        let num_nodes = if level == 0 { 20 } else { 10 };
         for i in 1..num_nodes {
             let t = i as f32 / num_nodes as f32;
             let mut interp = p_start.lerp(p_end, t);
-            let jitter_amt = (1.0 - t) * (1.5 / (level as f32 + 1.0));
-            interp += Vec3::new(rng.gen_range(-jitter_amt..jitter_amt), 0.0, rng.gen_range(-jitter_amt..jitter_amt));
+            
+            // 核心升级：大幅提升抖动幅度（主干高达 4.0）
+            let jitter_base = if level == 0 { 4.0 } else { 1.5 };
+            let jitter_amt = jitter_base * (1.0 - t * 0.4); 
+            
+            interp += Vec3::new(
+                rng.gen_range(-jitter_amt..jitter_amt),
+                rng.gen_range(-0.4..0.4), // 垂直波动
+                rng.gen_range(-jitter_amt..jitter_amt)
+            );
             points.push(interp);
-            let branch_prob = if level == 0 { 0.35 } else { 0.15 };
+            
+            // 核心升级：概率分叉
+            let branch_prob = if level == 0 { 0.28 } else { 0.12 };
             if rng.gen_bool(branch_prob) {
-                let branch_dir = Vec3::new(rng.gen_range(-2.0..2.0), -1.0, rng.gen_range(-2.0..2.0)).normalize();
-                let branch_length = p_start.distance(p_end) * rng.gen_range(0.3..0.6) / (level as f32 + 1.0);
+                let branch_dir = Vec3::new(rng.gen_range(-5.0..5.0), -1.2, rng.gen_range(-5.0..5.0)).normalize();
+                let branch_length = p_start.distance(p_end) * rng.gen_range(0.2..0.45) / (level as f32 + 1.0);
                 to_process.push((interp, interp + branch_dir * branch_length, level + 1));
             }
         }
