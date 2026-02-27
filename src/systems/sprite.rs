@@ -1716,7 +1716,7 @@ pub fn spawn_character_sprite(
                 AfterImageConfig {
                     speed_threshold: 12.0, 
                     snapshot_interval: 0.08,
-                    ghost_ttl: 0.4,
+                    ghost_ttl: 0.8, // 延长至 0.8s
                     color: Color::srgba(0.0, 0.8, 1.0, 0.5),
                     ..default()
                 },
@@ -1733,10 +1733,10 @@ pub fn spawn_character_sprite(
                     EnemySpriteMarker { id },
                     // [核心修复] 怪物也需要身法配置以支持受击/攻击留影
                     AfterImageConfig {
-                        speed_threshold: 15.0, // 怪物阈值稍高
+                        speed_threshold: 15.0, 
                         snapshot_interval: 0.1,
-                        ghost_ttl: 0.35,
-                        color: Color::srgba(1.0, 0.2, 0.2, 0.5), // 怪物偏红/紫
+                        ghost_ttl: 0.7, // 延长
+                        color: Color::srgba(1.0, 0.2, 0.2, 0.5), 
                         ..default()
                     },
                     LastPosition::default(),

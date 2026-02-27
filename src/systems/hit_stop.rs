@@ -30,8 +30,11 @@ pub fn handle_hit_stop_events(
         time.set_relative_speed(event.speed.clamp(0.0, 1.0));
         state.is_active = true;
         
-        // [视觉引导] 顿帧瞬间伴随高频闪白
-        screen_events.send(ScreenEffectEvent::white_flash(0.1));
+        // [核心改进] 延长闪屏并降低遮挡感 (使用半透明强白蓝光)
+        screen_events.send(ScreenEffectEvent::Flash { 
+            color: Color::srgba(1.2, 1.3, 2.0, 0.7), // 过载蓝白，带透明度
+            duration: 0.25 
+        });
         
         // [身法联动] 顿帧瞬间强制产生残影
         for mut config in after_image_query.iter_mut() {
