@@ -284,17 +284,55 @@ fn spawn_real_lightning(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh
     commands.trigger(ScreenEffectEvent::impact(Vec2::new(0.0, -10.0), 0.3));
     
     let mut rng = rand::thread_rng();
-    let start_pos = Vec3::new(target_pos.x + rng.gen_range(-1.0..1.0), 10.0, target_pos.z);
-    let mut points = vec![start_pos];
-    for i in 1..8 { 
-        let t = i as f32 / 8.0; 
-        points.push(start_pos.lerp(target_pos, t) + Vec3::new(rng.gen_range(-(1.0-t)*1.5..(1.0-t)*1.5), 0.0, rng.gen_range(-(1.0-t)*1.5..(1.0-t)*1.5))); 
+    
+    // 生成闪电节点数据的结构
+    struct BoltSegment {
+        start: Vec3,
+        end: Vec3,
+        level: u32,
     }
-    points.push(target_pos);
+    
+    let mut segments = Vec::new();
+    let mut to_process = Vec::new();
+    
+    // 初始主干起点：高空随机位置
+    let start_pos = Vec3::new(target_pos.x + rng.gen_range(-1.0..1.0), 12.0, target_pos.z);
+    to_process.push((start_pos, target_pos, 0)); // (起点, 终点, 树层级)
+    
+    // 生成随机树状结构
+    while let Some((p_start, p_end, level)) = to_process.pop() {
+        if level > 2 { continue; } // 最大 3 级分支
+        
+        let mut points = vec![p_start];
+        let num_nodes = if level == 0 { 8 } else { 5 }; // 主干节点多，分支节点少
+        
+        for i in 1..num_nodes {
+            let t = i as f32 / num_nodes as f32;
+            let mut interp = p_start.lerp(p_end, t);
+            
+            // 随层级增加的抖动 (中点位移)
+            let jitter_amt = (1.0 - t) * (1.5 / (level as f32 + 1.0));
+            interp += Vec3::new(rng.gen_range(-jitter_amt..jitter_amt), 0.0, rng.gen_range(-jitter_amt..jitter_amt));
+            points.push(interp);
+            
+            // 以一定概率生成侧枝
+            let branch_prob = if level == 0 { 0.35 } else { 0.15 };
+            if rng.gen_bool(branch_prob) {
+                let branch_dir = Vec3::new(rng.gen_range(-2.0..2.0), -1.0, rng.gen_range(-2.0..2.0)).normalize();
+                let branch_length = p_start.distance(p_end) * rng.gen_range(0.3..0.6) / (level as f32 + 1.0);
+                let branch_end = interp + branch_dir * branch_length;
+                to_process.push((interp, branch_end, level + 1));
+            }
+        }
+        points.push(p_end);
+        
+        for i in 0..points.len()-1 {
+            segments.push(BoltSegment { start: points[i], end: points[i+1], level });
+        }
+    }
 
     // 2. 核心性能优化：整条闪电仅生成一个中心点光源
-    let center_idx = points.len() / 2;
-    let mid_point = points[center_idx];
+    let mid_point = Vec3::new(target_pos.x, target_pos.y + 6.0, target_pos.z);
     commands.spawn((
         PointLight { 
             color: Color::srgba(0.8, 0.8, 1.0, 1.0), 
@@ -305,7 +343,7 @@ fn spawn_real_lightning(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh
         }, 
         Transform::from_translation(mid_point), 
         CombatUiRoot, 
-        LightningBolt::new(points.clone(), 0.12, false) // 仅作为光源销毁器
+        LightningBolt::new(vec![], 0.12, true) // 仅作为光源销毁器，is_light = true
     ));
 
     // 3. 地面残痕 (Decal)
@@ -333,31 +371,35 @@ fn spawn_real_lightning(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh
         CombatUiRoot
     ));
 
-        // 4. 生成闪电实体
-        let bolt_mesh = meshes.add(Cylinder::new(0.12, 0.12)); // 加粗：从 0.04 -> 0.12
-        let bolt_material = materials.add(StandardMaterial { 
-            base_color: Color::srgba(2.5, 2.5, 5.0, 1.0), // 更亮的电蓝色
-            emissive: LinearRgba::new(50.0, 50.0, 100.0, 1.0), // 显著增强发光
-            ..default() 
-        });
-    
-        for i in 0..points.len() - 1 {
-            let (p1, p2) = (points[i], points[i+1]); 
-            let dir = p2 - p1; 
-            let length = dir.length();
-            if length < 0.01 { continue; }
-            
-            commands.spawn((
-                Mesh3d(bolt_mesh.clone()), 
-                MeshMaterial3d(bolt_material.clone()), 
-                Transform::from_translation(p1 + dir * 0.5).looking_at(p2, Vec3::Y).with_scale(Vec3::new(1.0, 1.0, length)), 
-                LightningBolt::new(points.clone(), 0.35, true), // 延长寿命：从 0.15 -> 0.35
-                ParticleMarker, 
-                CombatUiRoot
-            ));
-        }
+    // 4. 生成闪电实体
+    let trunk_mesh = meshes.add(Cylinder::new(0.12, 0.12)); 
+    let branch_mesh = meshes.add(Cylinder::new(0.05, 0.05)); 
+    let branch2_mesh = meshes.add(Cylinder::new(0.02, 0.02)); 
+
+    let trunk_mat = materials.add(StandardMaterial { base_color: Color::srgba(2.5, 2.5, 5.0, 1.0), emissive: LinearRgba::new(50.0, 50.0, 100.0, 1.0), ..default() });
+    let branch_mat = materials.add(StandardMaterial { base_color: Color::srgba(2.0, 2.0, 4.0, 1.0), emissive: LinearRgba::new(20.0, 20.0, 50.0, 1.0), ..default() });
+
+    for seg in segments {
+        let dir = seg.end - seg.start; 
+        let length = dir.length();
+        if length < 0.01 { continue; }
+        
+        let (mesh, mat, ttl) = match seg.level {
+            0 => (trunk_mesh.clone(), trunk_mat.clone(), 0.35),
+            1 => (branch_mesh.clone(), branch_mat.clone(), 0.20), // 分支寿命更短
+            _ => (branch2_mesh.clone(), branch_mat.clone(), 0.10),
+        };
+        
+        commands.spawn((
+            Mesh3d(mesh), 
+            MeshMaterial3d(mat), 
+            Transform::from_translation(seg.start + dir * 0.5).looking_at(seg.end, Vec3::Y).with_scale(Vec3::new(1.0, 1.0, length)), 
+            LightningBolt::new(vec![], ttl, false).with_branch_level(seg.level), // is_light = false
+            ParticleMarker, 
+            CombatUiRoot
+        ));
     }
-    
+}
     fn update_lightning_bolts(mut commands: Commands, time: Res<Time>, mut query: Query<(Entity, &mut LightningBolt, Option<&MeshMaterial3d<StandardMaterial>>, &mut Transform, Option<&mut PointLight>)>, mut materials: ResMut<Assets<StandardMaterial>>) {
         let delta = time.delta_secs();
         for (entity, mut bolt, mat, mut transform, mut light) in query.iter_mut() {

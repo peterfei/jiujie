@@ -471,6 +471,7 @@ pub struct LightningBolt {
     pub max_ttl: f32,
     pub alpha: f32,
     pub is_light: bool, // 是否是光源实体
+    pub branch_level: u32, // 0为主干，1为一级分支，以此类推
 }
 
 /// 环境残痕组件
@@ -488,6 +489,11 @@ impl Decal {
 
 impl LightningBolt {
     pub fn new(points: Vec<Vec3>, ttl: f32, is_light: bool) -> Self {
-        Self { points, ttl, max_ttl: ttl, alpha: 1.0, is_light }
+        Self { points, ttl, max_ttl: ttl, alpha: 1.0, is_light, branch_level: 0 }
+    }
+    
+    pub fn with_branch_level(mut self, level: u32) -> Self {
+        self.branch_level = level;
+        self
     }
 }
