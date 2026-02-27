@@ -291,12 +291,15 @@ fn setup_gpu_effects(
     color_gradient_poison.add_key(0.0, Vec4::new(0.2, 0.8, 0.2, 0.0));
     color_gradient_poison.add_key(0.3, Vec4::new(0.1, 0.5, 0.1, 0.4));
     color_gradient_poison.add_key(1.0, Vec4::new(0.0, 0.2, 0.0, 0.0));
+    let init_pos_poison = SetPositionSphereModifier { center: writer.lit(Vec3::ZERO).expr(), radius: writer.lit(0.3).expr(), dimension: ShapeDimension::Volume };
+    let init_vel_poison = SetVelocitySphereModifier { center: writer.lit(Vec3::ZERO).expr(), speed: writer.lit(0.4).expr() };
+    let init_lifetime_poison = SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(2.5).expr());
     let effect_poison = effects.add(
         EffectAsset::new(1024, SpawnerSettings::rate(15.0.into()), writer.finish())
             .with_name("PoisonMist")
-            .init(SetPositionSphereModifier { center: writer.lit(Vec3::ZERO).expr(), radius: writer.lit(0.3).expr(), dimension: ShapeDimension::Volume })
-            .init(SetVelocitySphereModifier { center: writer.lit(Vec3::ZERO).expr(), speed: writer.lit(0.4).expr() })
-            .init(SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(2.5).expr()))
+            .init(init_pos_poison)
+            .init(init_vel_poison)
+            .init(init_lifetime_poison)
             .render(ColorOverLifetimeModifier { gradient: color_gradient_poison, blend: ColorBlendMode::Overwrite, mask: ColorBlendMask::RGBA })
             .render(SizeOverLifetimeModifier { gradient: Gradient::constant(Vec3::splat(0.4)), screen_space_size: false }),
     );
@@ -304,12 +307,15 @@ fn setup_gpu_effects(
 
     // --- 8. 蛛丝喷射 (WebShot) ---
     let mut writer = ExprWriter::new();
+    let init_pos_web = SetPositionSphereModifier { center: writer.lit(Vec3::ZERO).expr(), radius: writer.lit(0.1).expr(), dimension: ShapeDimension::Volume };
+    let init_vel_web = SetVelocitySphereModifier { center: writer.lit(Vec3::new(-1.0, 0.0, 0.0)).expr(), speed: writer.lit(8.0).expr() };
+    let init_lifetime_web = SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(0.6).expr());
     let effect_web = effects.add(
         EffectAsset::new(512, SpawnerSettings::once(20.0.into()), writer.finish())
             .with_name("WebShot")
-            .init(SetPositionSphereModifier { center: writer.lit(Vec3::ZERO).expr(), radius: writer.lit(0.1).expr(), dimension: ShapeDimension::Volume })
-            .init(SetVelocitySphereModifier { center: writer.lit(Vec3::new(-1.0, 0.0, 0.0)).expr(), speed: writer.lit(8.0).expr() })
-            .init(SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(0.6).expr()))
+            .init(init_pos_web)
+            .init(init_vel_web)
+            .init(init_lifetime_web)
             .render(ColorOverLifetimeModifier { gradient: Gradient::constant(Vec4::new(0.9, 0.9, 1.0, 1.0)), blend: ColorBlendMode::Overwrite, mask: ColorBlendMask::RGBA })
             .render(SizeOverLifetimeModifier { gradient: Gradient::constant(Vec3::new(0.2, 0.05, 0.05)), screen_space_size: false }),
     );
@@ -317,11 +323,13 @@ fn setup_gpu_effects(
 
     // --- 9. 丝绸尾迹 (SilkTrail) ---
     let mut writer = ExprWriter::new();
+    let init_pos_silk = SetPositionSphereModifier { center: writer.lit(Vec3::ZERO).expr(), radius: writer.lit(0.05).expr(), dimension: ShapeDimension::Surface };
+    let init_lifetime_silk = SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(1.2).expr());
     let effect_silk = effects.add(
         EffectAsset::new(1024, SpawnerSettings::rate(30.0.into()), writer.finish())
             .with_name("SilkTrail")
-            .init(SetPositionSphereModifier { center: writer.lit(Vec3::ZERO).expr(), radius: writer.lit(0.05).expr(), dimension: ShapeDimension::Surface })
-            .init(SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(1.2).expr()))
+            .init(init_pos_silk)
+            .init(init_lifetime_silk)
             .render(ColorOverLifetimeModifier { gradient: Gradient::constant(Vec4::new(0.8, 0.8, 1.0, 0.5)), blend: ColorBlendMode::Overwrite, mask: ColorBlendMask::RGBA })
             .render(SizeOverLifetimeModifier { gradient: Gradient::constant(Vec3::new(0.3, 0.1, 0.1)), screen_space_size: false }),
     );
@@ -332,12 +340,15 @@ fn setup_gpu_effects(
     let mut color_gradient_wolf = Gradient::new();
     color_gradient_wolf.add_key(0.0, Vec4::new(1.5, 0.1, 0.1, 1.0));
     color_gradient_wolf.add_key(1.0, Vec4::new(0.4, 0.0, 0.0, 0.0));
+    let init_pos_wolf = SetPositionSphereModifier { center: writer.lit(Vec3::ZERO).expr(), radius: writer.lit(0.2).expr(), dimension: ShapeDimension::Volume };
+    let init_vel_wolf = SetVelocitySphereModifier { center: writer.lit(Vec3::new(1.0, 0.0, 0.0)).expr(), speed: writer.lit(12.0).expr() };
+    let init_lifetime_wolf = SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(0.3).expr());
     let effect_wolf = effects.add(
         EffectAsset::new(512, SpawnerSettings::once(40.0.into()), writer.finish())
             .with_name("WolfSlash")
-            .init(SetPositionSphereModifier { center: writer.lit(Vec3::ZERO).expr(), radius: writer.lit(0.2).expr(), dimension: ShapeDimension::Volume })
-            .init(SetVelocitySphereModifier { center: writer.lit(Vec3::new(1.0, 0.0, 0.0)).expr(), speed: writer.lit(12.0).expr() })
-            .init(SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(0.3).expr()))
+            .init(init_pos_wolf)
+            .init(init_vel_wolf)
+            .init(init_lifetime_wolf)
             .render(ColorOverLifetimeModifier { gradient: color_gradient_wolf, blend: ColorBlendMode::Overwrite, mask: ColorBlendMask::RGBA })
             .render(SizeOverLifetimeModifier { gradient: Gradient::constant(Vec3::new(0.8, 0.08, 0.08)), screen_space_size: false }),
     );
