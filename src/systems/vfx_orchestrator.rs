@@ -372,33 +372,52 @@ fn spawn_real_lightning(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh
     ));
 
     // 4. 生成闪电实体
-    let trunk_mesh = meshes.add(Cylinder::new(0.12, 0.12)); 
-    let branch_mesh = meshes.add(Cylinder::new(0.05, 0.05)); 
-    let branch2_mesh = meshes.add(Cylinder::new(0.02, 0.02)); 
+    // 显著减细半径，使闪电看起来更锐利，不再像固体冰雹
+    let trunk_mesh = meshes.add(Cylinder::new(0.025, 0.025)); 
+    let branch_mesh = meshes.add(Cylinder::new(0.012, 0.012)); 
+    let branch2_mesh = meshes.add(Cylinder::new(0.006, 0.006)); 
 
-    let trunk_mat = materials.add(StandardMaterial { base_color: Color::srgba(2.5, 2.5, 5.0, 1.0), emissive: LinearRgba::new(50.0, 50.0, 100.0, 1.0), ..default() });
-    let branch_mat = materials.add(StandardMaterial { base_color: Color::srgba(2.0, 2.0, 4.0, 1.0), emissive: LinearRgba::new(20.0, 20.0, 50.0, 1.0), ..default() });
+    let trunk_mat = materials.add(StandardMaterial { 
+        base_color: Color::srgba(3.0, 3.0, 6.0, 1.0), 
+        emissive: LinearRgba::new(80.0, 80.0, 150.0, 1.0), 
+        ..default() 
+    });
+    let branch_mat = materials.add(StandardMaterial { 
+        base_color: Color::srgba(2.0, 2.5, 5.0, 1.0), 
+        emissive: LinearRgba::new(40.0, 45.0, 100.0, 1.0), 
+        ..default() 
+    });
 
     for seg in segments {
-        let dir = seg.end - seg.start; 
-        let length = dir.length();
-        if length < 0.01 { continue; }
+        let dir_vec = seg.end - seg.start; 
+        let length = dir_vec.length();
+        if length < 0.001 { continue; }
+        
+        let direction = dir_vec.normalize();
         
         let (mesh, mat, ttl) = match seg.level {
             0 => (trunk_mesh.clone(), trunk_mat.clone(), 0.35),
-            1 => (branch_mesh.clone(), branch_mat.clone(), 0.20), // 分支寿命更短
-            _ => (branch2_mesh.clone(), branch_mat.clone(), 0.10),
+            1 => (branch_mesh.clone(), branch_mat.clone(), 0.20),
+            _ => (branch2_mesh.clone(), branch_mat.clone(), 0.12),
         };
+        
+        // 核心修复：圆柱体默认是沿 Y 轴的，我们需要将 Y 轴旋转到 direction 方向
+        let rotation = Quat::from_rotation_arc(Vec3::Y, direction);
         
         commands.spawn((
             Mesh3d(mesh), 
             MeshMaterial3d(mat), 
-            Transform::from_translation(seg.start + dir * 0.5).looking_at(seg.end, Vec3::Y).with_scale(Vec3::new(1.0, 1.0, length)), 
-            LightningBolt::new(vec![], ttl, false).with_branch_level(seg.level), // is_light = false
+            Transform {
+                translation: seg.start + dir_vec * 0.5, // 放置在中点
+                rotation,
+                scale: Vec3::new(1.0, length, 1.0), // 在 Y 轴上缩放长度
+            },
+            LightningBolt::new(vec![], ttl, false).with_branch_level(seg.level),
             ParticleMarker, 
             CombatUiRoot
         ));
     }
+}
 }
     fn update_lightning_bolts(mut commands: Commands, time: Res<Time>, mut query: Query<(Entity, &mut LightningBolt, Option<&MeshMaterial3d<StandardMaterial>>, &mut Transform, Option<&mut PointLight>)>, mut materials: ResMut<Assets<StandardMaterial>>) {
         let delta = time.delta_secs();
