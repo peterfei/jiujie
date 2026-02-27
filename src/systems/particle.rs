@@ -176,7 +176,7 @@ pub fn handle_effect_events(
         // --- [GPU 迁移] 优先交由 GPU 粒子系统处理的部分 ---
         match event.effect_type {
             EffectType::DemonAura | EffectType::Fire | EffectType::Ice | 
-            EffectType::ImpactSpark | EffectType::SwordEnergy => {
+            EffectType::ImpactSpark | EffectType::SwordEnergy | EffectType::CloudMist => {
                 // 这些特效已在 GpuParticlePlugin 中处理，此处直接跳过 CPU 生成
                 continue;
             }
@@ -351,47 +351,9 @@ pub fn update_emitters(
 
             
 
-                        let mut pos = transform.translation();
+            let mut pos = transform.translation();
 
-            
-
-                        // [史诗级改进] 主界面云雾全屏横向播种
-
-            
-
-                        if emitter.effect_type == EffectType::CloudMist {
-
-            
-
-                            use rand::Rng;
-
-            
-
-                            let mut rng = rand::thread_rng();
-
-            
-
-                            // 横向铺满，纵向给予一定的初始抖动，使升腾更有层次感
-
-            
-
-                            pos.x += rng.gen_range(-800.0..800.0);
-
-            
-
-                            pos.y += rng.gen_range(-50.0..150.0);
-
-            
-
-                        }
-
-            
-
-                        
-
-            
-
-                        let particle = emitter.config.spawn_particle(pos, emitter.effect_type);
+            let particle = emitter.config.spawn_particle(pos, emitter.effect_type);
 
             
 

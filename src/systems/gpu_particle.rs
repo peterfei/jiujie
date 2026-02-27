@@ -243,6 +243,48 @@ fn setup_gpu_effects(
     );
     gpu_assets.effects.insert(EffectType::SwordEnergy, effect_sword);
 
+    // --- 6. 灵山云雾 (CloudMist) ---
+    let mut writer = ExprWriter::new();
+    let mut color_gradient_mist = Gradient::new();
+    color_gradient_mist.add_key(0.0, Vec4::new(0.05, 0.05, 0.05, 0.0));
+    color_gradient_mist.add_key(0.2, Vec4::new(0.08, 0.08, 0.08, 0.25));
+    color_gradient_mist.add_key(0.8, Vec4::new(0.04, 0.04, 0.04, 0.15));
+    color_gradient_mist.add_key(1.0, Vec4::new(0.02, 0.02, 0.02, 0.0));
+
+    let mut size_gradient_mist = Gradient::new();
+    size_gradient_mist.add_key(0.0, Vec3::splat(2.0));
+    size_gradient_mist.add_key(1.0, Vec3::splat(8.0));
+
+    let init_pos_mist = SetPositionSphereModifier {
+        center: writer.lit(Vec3::ZERO).expr(),
+        radius: writer.lit(5.0).expr(),
+        dimension: ShapeDimension::Volume,
+    };
+    // 赋予一个缓慢向上的浮力
+    let init_vel_mist = SetVelocitySphereModifier {
+        center: writer.lit(Vec3::new(0.0, -1.0, 0.0)).expr(),
+        speed: writer.lit(0.5).expr(),
+    };
+    let init_lifetime_mist = SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(15.0).expr());
+    
+    let effect_mist = effects.add(
+        EffectAsset::new(1024, SpawnerSettings::rate(5.0.into()), writer.finish())
+            .with_name("CloudMist")
+            .init(init_pos_mist)
+            .init(init_vel_mist)
+            .init(init_lifetime_mist)
+            .render(ColorOverLifetimeModifier { 
+                gradient: color_gradient_mist,
+                blend: ColorBlendMode::Overwrite,
+                mask: ColorBlendMask::RGBA,
+            })
+            .render(SizeOverLifetimeModifier { 
+                gradient: size_gradient_mist, 
+                screen_space_size: false 
+            }),
+    );
+    gpu_assets.effects.insert(EffectType::CloudMist, effect_mist);
+
     commands.insert_resource(gpu_assets);
 }
 
@@ -260,6 +302,7 @@ fn handle_gpu_effect_events(
                 EffectType::Ice => 2.0,
                 EffectType::ImpactSpark => 1.0,
                 EffectType::SwordEnergy => 1.5,
+                EffectType::CloudMist => 20.0, // 较长的环境背景
                 _ => 2.0,
             };
 
