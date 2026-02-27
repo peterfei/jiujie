@@ -8,8 +8,8 @@
 // 在 Release 构建中隐藏控制台窗口 (Windows)
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use bevy_card_battler::plugins::{CorePlugin, MenuPlugin, GamePlugin};
-use bevy_card_battler::systems::{RelicPlugin, RelicUiPlugin, ShopPlugin, RestPlugin};
+use jiujie::plugins::{CorePlugin, MenuPlugin, GamePlugin};
+use jiujie::systems::{RelicPlugin, RelicUiPlugin, ShopPlugin, RestPlugin};
 use bevy::prelude::*;
 use bevy::render::RenderPlugin;
 use bevy::render::settings::{WgpuSettings, PowerPreference};
@@ -44,7 +44,7 @@ fn main() {
             .set(
             WindowPlugin {
                 primary_window: Some(Window {
-                    title: format!("{} v{}", bevy_card_battler::GAME_NAME, bevy_card_battler::VERSION),
+                    title: format!("{} v{}", jiujie::GAME_NAME, jiujie::VERSION),
                     resolution: (1280., 720.).into(),
                     present_mode: bevy::window::PresentMode::AutoNoVsync, // 减少输入延迟
                     ..default()

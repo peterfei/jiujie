@@ -34,7 +34,7 @@
 ## 5. 联系我们 (Contact Us)
 
 如果您对本隐私策略有任何疑问，请通过以下方式联系我们：
-*   GitHub Issues: https://github.com/peterfei/bevy_card_battler/issues
+*   GitHub Issues: https://github.com/peterfei/JiuJie/issues
 
 ---
 
@@ -74,4 +74,4 @@ Since we do not collect any data, we knowingly do not collect personal informati
 ## 5. Contact Us
 
 If you have any questions about this Privacy Policy, please contact us via:
-*   GitHub Issues: https://github.com/peterfei/bevy_card_battler/issues
+*   GitHub Issues: https://github.com/peterfei/JiuJie/issues

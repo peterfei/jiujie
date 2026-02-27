@@ -1,10 +1,10 @@
 [package]
-name = "bevy_card_battler"
+name = "jiujie"
 version = "0.3.0"
 edition = "2021"
 authors = ["PeterFei"]
 description = "九界:渡劫 - 修仙肉鸽卡牌游戏"
-repository = "https://github.com/peterfei/bevy_card_battler"
+repository = "https://github.com/peterfei/JiuJie"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
