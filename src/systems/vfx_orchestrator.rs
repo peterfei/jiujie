@@ -257,16 +257,36 @@ fn phase_two_celestial_mandala(p: &mut Particle, lp: f32, hub: Vec2) {
     p.position = hub + Vec2::new(angle.cos() * r, angle.sin() * r * 0.3 + 45.0);
 }
 
-fn phase_three_ominous_pause(p: &mut Particle, lp: f32, se: &mut EventWriter<ScreenEffectEvent>, eq: &Query<(Entity, &Transform), With<EnemySpriteMarker>>) {
-    if let Some(te) = p.target_entity { if let Ok((_, tr)) = eq.get(te) { p.target = Some(tr.translation.truncate()); } }
+fn phase_three_ominous_pause(p: &mut Particle, _lp: f32, _se: &mut EventWriter<ScreenEffectEvent>, eq: &Query<(Entity, &Transform), With<EnemySpriteMarker>>) {
+    update_wanjian_target(p, eq);
 }
 
-fn phase_four_mach_piercing(p: &mut Particle, lp: f32, ev: &mut EventWriter<SpawnEffectEvent>, _se: &mut EventWriter<ScreenEffectEvent>, _eq: &Query<(Entity, &Transform), With<EnemySpriteMarker>>, eiq: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &crate::components::sprite::PhysicalImpact), With<EnemySpriteMarker>>, cq: &Query<(&Camera, &GlobalTransform), With<Camera3d>>, commands: &mut Commands) {
+fn phase_four_mach_piercing(p: &mut Particle, lp: f32, ev: &mut EventWriter<SpawnEffectEvent>, _se: &mut EventWriter<ScreenEffectEvent>, eq: &Query<(Entity, &Transform), With<EnemySpriteMarker>>, _eiq: &Query<(Entity, &crate::components::sprite::EnemySpriteMarker, &crate::components::sprite::PhysicalImpact), With<EnemySpriteMarker>>, _cq: &Query<(&Camera, &GlobalTransform), With<Camera3d>>, _commands: &mut Commands) {
     let t = (lp - 0.55) / 0.45;
+    
+    // 飞行中也进行目标修正（以防目标在阶段三到阶段四之间消失）
+    if p.target.is_none() {
+        update_wanjian_target(p, eq);
+    }
+
     if let Some(target) = p.target {
         if p.lock_pos.is_none() { p.lock_pos = Some(p.position); }
-        let lp = p.lock_pos.unwrap(); p.position = lp.lerp(target, t.powi(2));
+        let lp_pos = p.lock_pos.unwrap(); p.position = lp_pos.lerp(target, t.powi(2));
         if t > 0.95 && p.seed < 0.2 { ev.send(SpawnEffectEvent::new(EffectType::ImpactSpark, target.extend(0.0)).burst(5)); }
+    }
+}
+
+/// [核心辅助] 万剑归宗智能寻敌算法
+pub fn update_wanjian_target(p: &mut Particle, eq: &Query<(Entity, &Transform), With<EnemySpriteMarker>>) {
+    let mut found = false;
+    if let Some(te) = p.target_entity { if let Ok((_, tr)) = eq.get(te) { p.target = Some(tr.translation.truncate()); found = true; } }
+    if !found {
+        let mut best: Option<(f32, Vec2, Entity)> = None;
+        for (e, tr) in eq.iter() {
+            let d = p.position.distance(tr.translation.truncate());
+            if best.is_none() || d < best.unwrap().0 { best = Some((d, tr.translation.truncate(), e)); }
+        }
+        if let Some((_, pos, e)) = best { p.target = Some(pos); p.target_entity = Some(e); }
     }
 }
 
