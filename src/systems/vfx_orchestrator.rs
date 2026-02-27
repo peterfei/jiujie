@@ -123,10 +123,17 @@ fn spawn_real_lightning(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh
             let p1 = main_path[i]; let p2 = main_path[i+1];
             let mid = p1.lerp(p2, 0.5);
             let dist = p1.distance(p2);
-            // 垂直于路径的随机偏移
-            let offset = Vec3::new(rng.gen_range(-1.0..1.0), rng.gen_range(-0.2..0.2), rng.gen_range(-1.0..1.0)).normalize_or_zero() * dist * 0.45;
+            
+            // 核心修复：路径纠偏逻辑
+            // 计算当前点到“起点-终点”中心线的垂向偏差，并强制拉回
+            let ideal_line_pos = start_pos.lerp(target_pos, 1.0 - (mid.y / 15.0));
+            let pull_back = (ideal_line_pos - mid) * 0.6; // 50% 纠偏力
+            
+            // 随机位移：主要在水平面上，且随分段缩短而减小幅度
+            let offset = Vec3::new(rng.gen_range(-1.0..1.0), rng.gen_range(-0.1..0.1), rng.gen_range(-1.0..1.0)).normalize_or_zero() * dist * 0.3;
+            
             new_path.push(p1);
-            new_path.push(mid + offset);
+            new_path.push(mid + offset + pull_back);
         }
         new_path.push(*main_path.last().unwrap());
         main_path = new_path;
@@ -149,19 +156,20 @@ fn spawn_real_lightning(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh
 
     // 核心发光材质 (AAA 级：极亮蓝白核心)
     let trunk_mat = materials.add(StandardMaterial { 
-        base_color: Color::srgba(0.8, 0.9, 1.0, 1.0),
-        emissive: LinearRgba::new(200.0, 300.0, 1000.0, 1.0), // 强制 Bloom 过载
-        unlit: true, ..default() 
+        base_color: Color::srgba(1.0, 1.0, 1.0, 1.0),
+        emissive: LinearRgba::new(1000.0, 1500.0, 5000.0, 1.0), // 极端发光
+        unlit: true,
+        ..default() 
     });
     let branch_mat = materials.add(StandardMaterial { 
         base_color: Color::srgba(0.4, 0.2, 0.8, 1.0),
         emissive: LinearRgba::new(50.0, 20.0, 200.0, 1.0),
         unlit: true, ..default() 
     });
-
-    // 极细 Mesh (0.015)
-    let trunk_mesh = meshes.add(Cylinder::new(0.015, 1.0));
-    let branch_mesh = meshes.add(Cylinder::new(0.008, 1.0));
+    
+    // 粗细升级：主干 0.035，确保在 3D 空间中像素凝聚力
+    let trunk_mesh = meshes.add(Cylinder::new(0.035, 1.0));
+    let branch_mesh = meshes.add(Cylinder::new(0.015, 1.0));
 
     // 渲染主干
     for i in 0..main_path.len() - 1 {
