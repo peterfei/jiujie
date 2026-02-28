@@ -3,10 +3,19 @@
 [![Bevy](https://img.shields.io/badge/引擎-Bevy_0.15-orange.svg)](https://bevyengine.org)
 [![Rust](https://img.shields.io/badge/语言-Rust_1.80+-red.svg)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/协议-MIT%20或%20Apache--2.0-blue.svg)](LICENSE)
+[![Microsoft Store](https://img.shields.io/badge/Microsoft_Store-九界：渡劫-0078d4?logo=microsoft)](https://apps.microsoft.com/store/detail/9N2XV5GGRN98?cid=DevShareMCLPCS)
 
 [English Version](./README_EN.md)
 
 > **"身法如幻，惊雷裂空。在这场跨越九界的肉鸽渡劫之旅中，体验极致的打击感与视觉美学。"**
+
+---
+
+## 🎮 立即试玩 | Download & Play
+
+您可以直接通过 Windows 商店免费下载试玩版：
+
+[**👉 立即在 Microsoft Store 获取《九界：渡劫》**](https://apps.microsoft.com/store/detail/9N2XV5GGRN98?cid=DevShareMCLPCS)
 
 ---
 

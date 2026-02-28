@@ -3,10 +3,19 @@
 [![Bevy](https://img.shields.io/badge/Engine-Bevy_0.15-orange.svg)](https://bevyengine.org)
 [![Rust](https://img.shields.io/badge/Language-Rust_1.80+-red.svg)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/License-MIT%20or%20Apache--2.0-blue.svg)](LICENSE)
+[![Microsoft Store](https://img.shields.io/badge/Microsoft_Store-JiuJie-0078d4?logo=microsoft)](https://apps.microsoft.com/store/detail/9N2XV5GGRN98?cid=DevShareMCLPCS)
 
 [中文版](./README.md)
 
 > **"Ghostly movements, crackling thunders. Experience the ultimate hit-feel and visual aesthetics in this Xianxia Roguelike journey."**
+
+---
+
+## 🎮 Download & Play
+
+Get the trial version directly from the Microsoft Store:
+
+[**👉 Get JiuJie: Tribulation on Microsoft Store**](https://apps.microsoft.com/store/detail/9N2XV5GGRN98?cid=DevShareMCLPCS)
 
 ---
 
