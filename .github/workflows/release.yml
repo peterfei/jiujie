@@ -34,16 +34,16 @@ jobs:
         run: |
           $ver = "${{ env.VERSION }}".Replace("v", "")
           $content = Get-Content wix/jiujie.wxs.template
-          $content = $content.Replace("${WIX_UPGRADE_CODE}", "${{ env.WIX_UPGRADE_CODE }}")
-          $content = $content.Replace("${VERSION}", $ver)
-          $content = $content.Replace("${APP_NAME}", "Jiujie")
-          $content = $content.Replace("${MANUFACTURER}", "${{ env.MANUFACTURER }}")
+          $content = $content.Replace("__WIX_UPGRADE_CODE__", "${{ env.WIX_UPGRADE_CODE }}")
+          $content = $content.Replace("__VERSION__", $ver)
+          $content = $content.Replace("__APP_NAME__", "Jiujie")
+          $content = $content.Replace("__MANUFACTURER__", "${{ env.MANUFACTURER }}")
           $content | Out-File -Encoding UTF8 wix/jiujie.wxs
           
           $loc = Get-Content wix/main.wxl.template
-          $loc = $loc.Replace("${DISPLAY_NAME}", "${{ env.DISPLAY_NAME }}")
-          $loc = $loc.Replace("${MANUFACTURER}", "${{ env.MANUFACTURER }}")
-          $loc = $loc.Replace("${APP_NAME}", "jiujie")
+          $loc = $loc.Replace("__DISPLAY_NAME__", "${{ env.DISPLAY_NAME }}")
+          $loc = $loc.Replace("__MANUFACTURER__", "${{ env.MANUFACTURER }}")
+          $loc = $loc.Replace("__APP_NAME__", "jiujie")
           $loc | Out-File -Encoding UTF8 wix/main.wxl
 
       - name: 编译 Release

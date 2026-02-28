@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <!-- 脱敏后的安装包模板 | De-sensitized Installer Template -->
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
-    <Product Id='*' Name='!(loc.ProductName)' UpgradeCode='${WIX_UPGRADE_CODE}' Manufacturer='!(loc.Manufacturer)' Language='2052' Codepage='936' Version='${VERSION}'>
+    <Product Id='*' Name='!(loc.ProductName)' UpgradeCode='__WIX_UPGRADE_CODE__' Manufacturer='!(loc.Manufacturer)' Language='2052' Codepage='936' Version='__VERSION__'>
         <Package Id='*' Keywords='!(loc.Keywords)' Description='!(loc.Description)' Manufacturer='!(loc.Manufacturer)' InstallerVersion='450' Languages='2052' Compressed='yes' InstallScope='perMachine' SummaryCodepage='936' Platform='x64'/>
 
         <MajorUpgrade Schedule='afterInstallInitialize' DowngradeErrorMessage='!(loc.DowngradeErrorMessage)'/>
@@ -11,7 +11,7 @@
 
         <Directory Id='TARGETDIR' Name='SourceDir'>
             <Directory Id='ProgramFiles64Folder' Name='PFiles'>
-                <Directory Id='APPLICATIONFOLDER' Name='${APP_NAME}'>
+                <Directory Id='APPLICATIONFOLDER' Name='__APP_NAME__'>
                     <Component Id='binary0' Guid='*' Win64='yes'>
                         <File Id='exe0' Name='jiujie.exe' DiskId='1' Source='$(var.CargoTargetBinDir)\jiujie.exe' KeyPath='yes'/>
                     </Component>
@@ -31,14 +31,14 @@
             <Component Id="ApplicationShortcut" Guid="*">
                 <Shortcut Id="ApplicationStartMenuShortcut" Name="!(loc.ShortcutFolderName)" Description="!(loc.ShortcutDescription)" Target="[APPLICATIONFOLDER]jiujie.exe" WorkingDirectory="APPLICATIONFOLDER"/>
                 <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
-                <RegistryValue Root="HKCU" Key="Software\${MANUFACTURER}\${APP_NAME}" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+                <RegistryValue Root="HKCU" Key="Software\__MANUFACTURER__\__APP_NAME__" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
             </Component>
         </DirectoryRef>
 
         <DirectoryRef Id="DesktopFolder">
             <Component Id="DesktopShortcut" Guid="*">
                 <Shortcut Id="ApplicationDesktopShortcut" Name="!(loc.ShortcutFolderName)" Description="!(loc.ShortcutDescription)" Target="[APPLICATIONFOLDER]jiujie.exe" WorkingDirectory="APPLICATIONFOLDER"/>
-                <RegistryValue Root="HKCU" Key="Software\${MANUFACTURER}\${APP_NAME}" Name="desktop_shortcut" Type="integer" Value="1" KeyPath="yes"/>
+                <RegistryValue Root="HKCU" Key="Software\__MANUFACTURER__\__APP_NAME__" Name="desktop_shortcut" Type="integer" Value="1" KeyPath="yes"/>
             </Component>
         </DirectoryRef>
 
