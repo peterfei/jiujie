@@ -59,9 +59,12 @@ The project integrates advanced visual and performance solutions, verified by ov
 - [x] **Synchronized Feedback**: Seamless integration of hit-stop, high-frequency screen flashes, particle overloads, and ghostly snapshots.
 - [x] **WanJian: Smart Targeting**: Missile-style distribution algorithm that automatically spreads attacks across multiple targets and recalibrates mid-flight if a target dies.
 
-### 🏗️ Software Architecture
-- [x] **VFX Orchestrator Pattern**: Decouples logic from rendering, allowing complex 4-phase state machine management for advanced effects.
-- [x] **Headless Integration Testing**: A robust suite of physical consistency tests capable of running in CI environments or headless macOS instances.
+### 🏗️ Core Game Systems (Baseline)
+- [x] **Cultivation Progression**: Comprehensive realm systems (Qi Refining, Foundation Establishment) with probability-based "Tribulation Breakthrough" mechanics.
+- [x] **Procedural Roguelike Map**: Graph-based non-linear node generation featuring combat, events, shops, and rest sites.
+- [x] **Modular 3D Entity System**: Support for dynamic model loading, real-time bone attachment for weapons, and NPR material optimization.
+- [x] **Decoupled Combat FSM**: Rigorous turn-based state machine supporting multiple enemies, dynamic intent prediction, and complex buffer resolution.
+- [x] **Robust Save/Load System**: Reliable serialization of decks, relics, and cultivation states across sessions.
 
 ---
 
