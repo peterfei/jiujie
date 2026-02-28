@@ -38,6 +38,7 @@ jobs:
           $content = $content.Replace("__VERSION__", $ver)
           $content = $content.Replace("__APP_NAME__", "Jiujie")
           $content = $content.Replace("__MANUFACTURER__", "${{ env.MANUFACTURER }}")
+          # 显式使用 UTF8 (在 PowerShell 5.1 中默认带 BOM)
           $content | Out-File -Encoding utf8 wix/jiujie.wxs
           
           $loc = Get-Content wix/main.wxl.template
