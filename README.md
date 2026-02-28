@@ -1,5 +1,9 @@
 # 九界：渡劫 (JiuJie)
 
+<p align="center">
+  <img src="./assets/icons/icon_1024.png" width="256" height="256" alt="JiuJie Logo">
+</p>
+
 [![Bevy](https://img.shields.io/badge/引擎-Bevy_0.15-orange.svg)](https://bevyengine.org)
 [![Rust](https://img.shields.io/badge/语言-Rust_1.80+-red.svg)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/协议-MIT%20或%20Apache--2.0-blue.svg)](LICENSE)
@@ -51,9 +55,13 @@
 
 ## 🎮 视觉预览
 
-*(预留 GIF 展示位置)*
-> **[万剑归宗 - 多目标智能打击]**
-> **[身法移动 - 流光拖尾与膨胀残影]**
+<p align="center">
+  <video src="./assets/video/screen.mp4" width="800" controls autoplay loop muted>
+    您的浏览器不支持 HTML5 视频。
+  </video>
+</p>
+
+> **[身法移动 - 流光拖尾与膨胀残影 | 万剑归宗 - 多目标智能打击]**
 
 ---
 

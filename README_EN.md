@@ -1,5 +1,9 @@
 # JiuJie: Tribulation
 
+<p align="center">
+  <img src="./assets/icons/icon_1024.png" width="256" height="256" alt="JiuJie Logo">
+</p>
+
 [![Bevy](https://img.shields.io/badge/Engine-Bevy_0.15-orange.svg)](https://bevyengine.org)
 [![Rust](https://img.shields.io/badge/Language-Rust_1.80+-red.svg)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/License-MIT%20or%20Apache--2.0-blue.svg)](LICENSE)
@@ -24,6 +28,18 @@ Get the trial version directly from the Microsoft Store:
 **JiuJie: Tribulation** is a high-performance Xianxia Roguelike card battler built with the **Bevy Engine (Rust)**.
 
 More than just a game, it serves as a technical laboratory for 3D rendering in Rust. By combining minimalist sprite aesthetics with AAA-grade dynamic feedback and procedural VFX, it aims to deliver a visceral "Ascension" experience.
+
+---
+
+## 🎮 Visual Preview
+
+<p align="center">
+  <video src="./assets/video/screen.mp4" width="800" controls autoplay loop muted>
+    Your browser does not support the video tag.
+  </video>
+</p>
+
+> **[Movement Trails & After-images | WanJian Smart Targeting]**
 
 ---
 
