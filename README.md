@@ -56,7 +56,9 @@
 ## 🎮 视觉预览
 
 <p align="center">
-  <img src="./assets/video/screen.mp4" width="800" alt="JiuJie Gameplay Preview">
+  <video src="https://github.com/user-attachments/assets/e7ad31af-04df-489d-903b-fdd1f234d12a" width="800" controls autoplay loop muted>
+    您的浏览器不支持 HTML5 视频。
+  </video>
 </p>
 
 > **[身法移动 - 流光拖尾与膨胀残影 | 万剑归宗 - 多目标智能打击]**
