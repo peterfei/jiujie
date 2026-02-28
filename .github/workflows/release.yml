@@ -13,6 +13,10 @@ env:
   MANUFACTURER: "PeterFei" # 可通过 Secrets 覆盖
   WIX_UPGRADE_CODE: "F50F4705-932B-4FF5-A3E6-34285FC6E6BD"
 
+# 核心修复：显式授权 CI 写入权限以创建 Release
+permissions:
+  contents: write
+
 jobs:
   # ==================== Windows 构建 ====================
   build-windows:
