@@ -2,7 +2,7 @@
 <!-- 脱敏后的安装包模板 | De-sensitized Installer Template -->
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
     <Product Id='*' Name='!(loc.ProductName)' UpgradeCode='__WIX_UPGRADE_CODE__' Manufacturer='!(loc.Manufacturer)' Language='2052' Codepage='65001' Version='__VERSION__'>
-        <Package Id='*' Keywords='!(loc.Keywords)' Description='!(loc.Description)' Manufacturer='!(loc.Manufacturer)' InstallerVersion='450' Languages='2052' Compressed='yes' InstallScope='perMachine' SummaryCodepage='65001' Platform='x64'/>
+        <Package Id='*' Keywords='!(loc.Keywords)' Description='!(loc.Description)' Manufacturer='!(loc.Manufacturer)' InstallerVersion='450' Languages='2052' Compressed='yes' InstallScope='perMachine' SummaryCodepage='936' Platform='x64'/>
 
         <MajorUpgrade Schedule='afterInstallInitialize' DowngradeErrorMessage='!(loc.DowngradeErrorMessage)'/>
 
