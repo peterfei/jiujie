@@ -34,9 +34,7 @@ More than just a game, it serves as a technical laboratory for 3D rendering in R
 ## 🎮 Visual Preview
 
 <p align="center">
-  <video src="./assets/video/screen.mp4" width="800" controls autoplay loop muted>
-    Your browser does not support the video tag.
-  </video>
+  <img src="./assets/video/screen.mp4" width="800" alt="JiuJie Gameplay Preview">
 </p>
 
 > **[Movement Trails & After-images | WanJian Smart Targeting]**
