@@ -9,7 +9,9 @@ on:
 env:
   PROJECT_NAME: jiujie
   DISPLAY_NAME: "九界：渡劫"
-  VERSION: ${{ github.ref_name }} # 使用标签名作为版本号
+  VERSION: ${{ github.ref_name }}
+  MANUFACTURER: "PeterFei" # 可通过 Secrets 覆盖
+  WIX_UPGRADE_CODE: "F50F4705-932B-4FF5-A3E6-34285FC6E6BD"
 
 jobs:
   # ==================== Windows 构建 ====================
@@ -22,6 +24,23 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
+
+      - name: 准备 WiX 配置 (从模板生成)
+        shell: powershell
+        run: |
+          $ver = "${{ env.VERSION }}".Replace("v", "")
+          $content = Get-Content wix/jiujie.wxs.template
+          $content = $content.Replace("${WIX_UPGRADE_CODE}", "${{ env.WIX_UPGRADE_CODE }}")
+          $content = $content.Replace("${VERSION}", $ver)
+          $content = $content.Replace("${APP_NAME}", "Jiujie")
+          $content = $content.Replace("${MANUFACTURER}", "${{ env.MANUFACTURER }}")
+          $content | Out-File -Encoding UTF8 wix/jiujie.wxs
+          
+          $loc = Get-Content wix/main.wxl.template
+          $loc = $loc.Replace("${DISPLAY_NAME}", "${{ env.DISPLAY_NAME }}")
+          $loc = $loc.Replace("${MANUFACTURER}", "${{ env.MANUFACTURER }}")
+          $loc = $loc.Replace("${APP_NAME}", "jiujie")
+          $loc | Out-File -Encoding UTF8 wix/main.wxl
 
       - name: 编译 Release
         run: cargo build --release --target x86_64-pc-windows-msvc

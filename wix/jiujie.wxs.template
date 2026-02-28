@@ -1,0 +1,60 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- 脱敏后的安装包模板 | De-sensitized Installer Template -->
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+    <Product Id='*' Name='!(loc.ProductName)' UpgradeCode='${WIX_UPGRADE_CODE}' Manufacturer='!(loc.Manufacturer)' Language='2052' Codepage='936' Version='${VERSION}'>
+        <Package Id='*' Keywords='!(loc.Keywords)' Description='!(loc.Description)' Manufacturer='!(loc.Manufacturer)' InstallerVersion='450' Languages='2052' Compressed='yes' InstallScope='perMachine' SummaryCodepage='936' Platform='x64'/>
+
+        <MajorUpgrade Schedule='afterInstallInitialize' DowngradeErrorMessage='!(loc.DowngradeErrorMessage)'/>
+
+        <Media Id='1' Cabinet='media1.cab' EmbedCab='yes' DiskPrompt='!(loc.DiskPrompt)'/>
+        <Property Id='DiskPrompt' Value='!(loc.DiskPrompt)'/>
+
+        <Directory Id='TARGETDIR' Name='SourceDir'>
+            <Directory Id='ProgramFiles64Folder' Name='PFiles'>
+                <Directory Id='APPLICATIONFOLDER' Name='${APP_NAME}'>
+                    <Component Id='binary0' Guid='*' Win64='yes'>
+                        <File Id='exe0' Name='jiujie.exe' DiskId='1' Source='$(var.CargoTargetBinDir)\jiujie.exe' KeyPath='yes'/>
+                    </Component>
+                    <Component Id='License' Guid='*' Win64='yes'>
+                        <File Id='LicenseFile' Name='License.rtf' DiskId='1' Source='wix\License.rtf' KeyPath='yes'/>
+                    </Component>
+                    <Directory Id='AssetsFolder' Name='assets' />
+                </Directory>
+            </Directory>
+            <Directory Id="ProgramMenuFolder">
+                <Directory Id="ApplicationProgramsFolder" Name="!(loc.ShortcutFolderName)"/>
+            </Directory>
+            <Directory Id="DesktopFolder" Name="Desktop" />
+        </Directory>
+
+        <DirectoryRef Id="ApplicationProgramsFolder">
+            <Component Id="ApplicationShortcut" Guid="*">
+                <Shortcut Id="ApplicationStartMenuShortcut" Name="!(loc.ShortcutFolderName)" Description="!(loc.ShortcutDescription)" Target="[APPLICATIONFOLDER]jiujie.exe" WorkingDirectory="APPLICATIONFOLDER"/>
+                <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
+                <RegistryValue Root="HKCU" Key="Software\${MANUFACTURER}\${APP_NAME}" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+            </Component>
+        </DirectoryRef>
+
+        <DirectoryRef Id="DesktopFolder">
+            <Component Id="DesktopShortcut" Guid="*">
+                <Shortcut Id="ApplicationDesktopShortcut" Name="!(loc.ShortcutFolderName)" Description="!(loc.ShortcutDescription)" Target="[APPLICATIONFOLDER]jiujie.exe" WorkingDirectory="APPLICATIONFOLDER"/>
+                <RegistryValue Root="HKCU" Key="Software\${MANUFACTURER}\${APP_NAME}" Name="desktop_shortcut" Type="integer" Value="1" KeyPath="yes"/>
+            </Component>
+        </DirectoryRef>
+
+        <Feature Id='MainProgram' Title='!(loc.MainProgramTitle)' Description='!(loc.MainProgramDescription)' Level='1' ConfigurableDirectory='APPLICATIONFOLDER' AllowAdvertise='no' Display='expand' Absent='disallow'>
+            <ComponentRef Id='binary0'/><ComponentRef Id='License'/><ComponentRef Id='ApplicationShortcut'/>
+            <ComponentGroupRef Id='AssetsComponentGroup'/>
+        </Feature>
+
+        <Feature Id='DesktopShortcutFeature' Title='创建桌面快捷方式' Description='在桌面添加游戏启动图标' Level='1' AllowAdvertise='no'>
+            <ComponentRef Id='DesktopShortcut'/>
+        </Feature>
+
+        <SetProperty Id='ARPINSTALLLOCATION' Value='[APPLICATIONFOLDER]' After='CostFinalize'/>
+        <Icon Id='ProductICO' SourceFile='assets\icons\favicon.ico'/>
+        <Property Id='ARPPRODUCTICON' Value='ProductICO' />
+        <UIRef Id='WixUI_FeatureTree'/>
+        <WixVariable Id='WixUILicenseRtf' Value='wix\License.rtf'/>
+    </Product>
+</Wix>

@@ -5,6 +5,11 @@
 /logs
 .gemini-clipboard
 
+# WiX 敏感配置
+wix/*.wxs
+wix/*.wxl
+!wix/*.template
+
 # 总结与文章
 TDD_SUMMARY_WANJIAN_FOUR_PHASE.md
 docs/wanjian_nan_fix_summary.md
