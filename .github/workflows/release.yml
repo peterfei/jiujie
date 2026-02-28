@@ -38,13 +38,13 @@ jobs:
           $content = $content.Replace("__VERSION__", $ver)
           $content = $content.Replace("__APP_NAME__", "Jiujie")
           $content = $content.Replace("__MANUFACTURER__", "${{ env.MANUFACTURER }}")
-          $content | Out-File -Encoding UTF8 wix/jiujie.wxs
+          $content | Out-File -Encoding utf8 wix/jiujie.wxs
           
           $loc = Get-Content wix/main.wxl.template
           $loc = $loc.Replace("__DISPLAY_NAME__", "${{ env.DISPLAY_NAME }}")
           $loc = $loc.Replace("__MANUFACTURER__", "${{ env.MANUFACTURER }}")
           $loc = $loc.Replace("__APP_NAME__", "jiujie")
-          $loc | Out-File -Encoding UTF8 wix/main.wxl
+          $loc | Out-File -Encoding utf8 wix/main.wxl
 
       - name: 编译 Release
         run: cargo build --release --target x86_64-pc-windows-msvc

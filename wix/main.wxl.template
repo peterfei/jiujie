@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<WixLocalization Culture='zh-CN' Codepage='936' xmlns='http://schemas.microsoft.com/wix/2006/localization'>
+<WixLocalization Culture='zh-CN' xmlns='http://schemas.microsoft.com/wix/2006/localization'>
     <String Id='ProductName'>__DISPLAY_NAME__</String>
     <String Id='ShortcutFolderName'>__DISPLAY_NAME__</String>
     <String Id='Manufacturer'>__MANUFACTURER__</String>
