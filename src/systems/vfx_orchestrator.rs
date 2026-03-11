@@ -262,8 +262,9 @@ fn sync_3d_sword_transform(p: &mut Particle, prog: f32, transform: &mut Transfor
     let prev = transform.translation;
     let next_y = if local_prog < 0.15 { 0.8 + (local_prog/0.15)*4.2 } else if local_prog < 0.6 { 5.0 + (p.elapsed*4.0).sin()*0.1 } else { 5.0 * (1.0 - ((local_prog-0.6)/0.4).powi(3)) + 0.2 };
     transform.translation = Vec3::new(p.position.x/100.0, next_y, -p.position.y/100.0);
-    transform.rotation = Quat::from_rotation_arc(Vec3::Y, (transform.translation - prev).normalize_or(Vec3::Y));
-    transform.scale = Vec3::splat(0.32); *visibility = if local_prog < 0.05 { Visibility::Hidden } else { Visibility::Visible };
+    transform.rotation = Quat::from_rotation_arc(Vec3::NEG_Y, (transform.translation - prev).normalize_or(Vec3::Y));
+    transform.scale = Vec3::splat(0.32);
+ *visibility = if local_prog < 0.05 { Visibility::Hidden } else { Visibility::Visible };
 }
 
 fn phase_one_the_call(p: &mut Particle, lp: f32, _h: Vec2, se: &mut EventWriter<ScreenEffectEvent>) {
