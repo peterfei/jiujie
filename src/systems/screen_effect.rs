@@ -1,6 +1,6 @@
-//! 屏幕特效系统
+//! 屏幕特效系统 (高保真色彩修正版)
 //!
-//! 处理屏幕震动、闪光等全局视觉特效
+//! 处理屏幕震动、闪光等全局视觉特效，确保 SDR 下色彩不溢出。
 
 use bevy::prelude::*;
 use rand::Rng;
@@ -43,8 +43,21 @@ fn update_screen_warning(
     }
 }
 
-/// 创建闪光覆盖层
-fn spawn_flash_overlay(commands: &mut Commands, color: Color, duration: f32) {
+/// 创建闪光覆盖层 (单实例逻辑，防止颜色叠加变白)
+fn spawn_flash_overlay(commands: &mut Commands, color: Color, duration: f32, existing_flash: &Query<Entity, With<ScreenFlash>>) {
+    // 1. 彻底清除旧的闪屏实体，防止颜色叠加
+    for entity in existing_flash.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+
+    // 2. 强制颜色截断，适配 SDR
+    let safe_color = match color {
+        Color::Srgba(c) => Color::srgba(c.red.clamp(0.0, 1.0), c.green.clamp(0.0, 1.0), c.blue.clamp(0.0, 1.0), c.alpha.clamp(0.0, 1.0)),
+        Color::LinearRgba(c) => Color::linear_rgba(c.red.clamp(0.0, 1.0), c.green.clamp(0.0, 1.0), c.blue.clamp(0.0, 1.0), c.alpha.clamp(0.0, 1.0)),
+        _ => color,
+    };
+
+    // 3. 生成新的覆盖层
     commands
         .spawn((
             Node {
@@ -55,9 +68,9 @@ fn spawn_flash_overlay(commands: &mut Commands, color: Color, duration: f32) {
                 top: Val::Px(0.0),
                 ..default()
             },
-            BackgroundColor(color),
-            ZIndex(2000), 
-            ScreenFlash::new(color, duration),
+            BackgroundColor(safe_color),
+            ZIndex(9999), 
+            ScreenFlash::new(safe_color, duration),
             ScreenEffectMarker,
             CombatUiRoot,
         ));
@@ -68,6 +81,7 @@ pub fn handle_screen_effects(
     mut commands: Commands,
     mut events: EventReader<ScreenEffectEvent>,
     camera_query: Query<(Entity, &Transform, Option<&CameraShake>), With<Camera>>, 
+    existing_flash: Query<Entity, With<ScreenFlash>>,
 ) {
     let mut max_trauma = 0.0f32;
     let mut min_decay = 100.0f32;
@@ -88,7 +102,7 @@ pub fn handle_screen_effects(
                 has_effect = true;
             }
             ScreenEffectEvent::Flash { color, duration } => {
-                spawn_flash_overlay(&mut commands, *color, *duration);
+                spawn_flash_overlay(&mut commands, *color, *duration, &existing_flash);
             }
         }
     }
@@ -119,17 +133,13 @@ pub fn update_camera_shake(
 ) {
     for (entity, mut shake, mut transform) in query.iter_mut() {
         let delta = time.delta_secs();
-        
         shake.trauma -= shake.decay * delta;
         shake.trauma = shake.trauma.max(0.0);
-
         let damping = 5.0; 
         shake.impulse = shake.impulse * (1.0 - damping * delta).max(0.0);
 
         if shake.trauma <= 0.0 && shake.impulse.length() < 0.01 {
-            if let Some(base) = shake.base_translation {
-                transform.translation = base;
-            }
+            if let Some(base) = shake.base_translation { transform.translation = base; }
             commands.entity(entity).remove::<CameraShake>();
             continue;
         }
@@ -137,7 +147,6 @@ pub fn update_camera_shake(
         let mut rng = rand::thread_rng();
         let angle = rng.gen::<f32>() * std::f32::consts::PI * 2.0;
         let shake_magnitude = shake.trauma * shake.trauma * 1.5; 
-
         shake.offset.x = angle.cos() * shake_magnitude + shake.impulse.x;
         shake.offset.y = angle.sin() * shake_magnitude + shake.impulse.y;
 
@@ -147,7 +156,7 @@ pub fn update_camera_shake(
     }
 }
 
-/// 更新屏幕闪光
+/// 更新屏幕闪光 (同步 Alpha)
 fn update_screen_flash(
     mut commands: Commands,
     mut query: Query<(Entity, &mut ScreenFlash, &mut BackgroundColor)>,
@@ -155,12 +164,14 @@ fn update_screen_flash(
 ) {
     for (entity, mut flash, mut bg_color) in query.iter_mut() {
         flash.elapsed += time.delta_secs();
-        let alpha = flash.current_alpha();
+        let alpha = flash.current_alpha().clamp(0.0, 1.0);
 
-        if let Color::Srgba(mut srgba) = bg_color.0 {
-            srgba.alpha = alpha.clamp(0.0, 1.0);
-            bg_color.0 = Color::Srgba(srgba);
-        }
+        let current_color = bg_color.0;
+        bg_color.0 = match current_color {
+            Color::Srgba(mut c) => { c.alpha = alpha; Color::Srgba(c) },
+            Color::LinearRgba(mut c) => { c.alpha = alpha; Color::LinearRgba(c) },
+            _ => current_color,
+        };
 
         if flash.is_finished() {
             commands.entity(entity).despawn_recursive();
@@ -168,32 +179,9 @@ fn update_screen_flash(
     }
 }
 
-/// 辅助函数：触发屏幕震动
-pub fn shake_camera(commands: &mut Commands, trauma: f32) {
-    commands.trigger(ScreenEffectEvent::shake(trauma));
-}
-
-/// 辅助函数：触发轻震动
-pub fn light_shake(commands: &mut Commands) {
-    commands.trigger(ScreenEffectEvent::light_shake());
-}
-
-/// 辅助函数：触发强震动
-pub fn heavy_shake(commands: &mut Commands) {
-    commands.trigger(ScreenEffectEvent::heavy_shake());
-}
-
-/// 辅助函数：触发红色闪光
-pub fn red_flash(commands: &mut Commands, duration: f32) {
-    commands.trigger(ScreenEffectEvent::red_flash(duration));
-}
-
-/// 辅助函数：触发白色闪光
-pub fn white_flash(commands: &mut Commands, duration: f32) {
-    commands.trigger(ScreenEffectEvent::white_flash(duration));
-}
-
-/// 辅助函数：触发自定义闪光
-pub fn flash_screen(commands: &mut Commands, color: Color, duration: f32) {
-    commands.trigger(ScreenEffectEvent::flash(color, duration));
-}
+pub fn shake_camera(commands: &mut Commands, trauma: f32) { commands.trigger(ScreenEffectEvent::shake(trauma)); }
+pub fn light_shake(commands: &mut Commands) { commands.trigger(ScreenEffectEvent::light_shake()); }
+pub fn heavy_shake(commands: &mut Commands) { commands.trigger(ScreenEffectEvent::heavy_shake()); }
+pub fn red_flash(commands: &mut Commands, duration: f32) { commands.trigger(ScreenEffectEvent::red_flash(duration)); }
+pub fn white_flash(commands: &mut Commands, duration: f32) { commands.trigger(ScreenEffectEvent::white_flash(duration)); }
+pub fn flash_screen(commands: &mut Commands, color: Color, duration: f32) { commands.trigger(ScreenEffectEvent::flash(color, duration)); }

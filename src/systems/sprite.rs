@@ -491,6 +491,12 @@ pub fn update_physical_impacts(
                                     use crate::components::particle::EffectType;
                                     let hit_pos = (impact.home_position + impact.current_offset) * 100.0 + to_enemy * 60.0;
                                     effect_events.send(crate::components::particle::SpawnEffectEvent::new(EffectType::WolfSlash, hit_pos).burst(8));
+                                    
+                                    // 关键修复：发送红色闪屏
+                                    screen_events.send(crate::components::screen_effect::ScreenEffectEvent::Flash {
+                                        color: Color::srgba(1.0, 0.0, 0.0, 0.6),
+                                        duration: 0.25,
+                                    });
                                 }
                             } else {
                                 // [彻底归位]
@@ -546,6 +552,12 @@ pub fn update_physical_impacts(
                                     use crate::components::particle::EffectType;
                                     let hit_pos = (impact.home_position + impact.current_offset) * 100.0 + to_enemy * 70.0;
                                     effect_events.send(crate::components::particle::SpawnEffectEvent::new(EffectType::WolfSlash, hit_pos).burst(8));
+
+                                    // 关键修复：发送红色闪屏 (第二段)
+                                    screen_events.send(crate::components::screen_effect::ScreenEffectEvent::Flash {
+                                        color: Color::srgba(1.0, 0.0, 0.0, 0.6),
+                                        duration: 0.25,
+                                    });
                                 }
                             } else {
                                 // [关键] 斩击结束，开始返回
