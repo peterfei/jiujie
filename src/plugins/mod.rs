@@ -362,8 +362,6 @@ fn stop_bgm(mut bgm_events: EventWriter<StopBgmEvent>) {
 // 核心系统
 // ============================================================================
 
-use bevy::core_pipeline::tonemapping::Tonemapping;
-use bevy::render::camera::Exposure; // 引入曝光控制
 
 /// 第一帧资源加载
 fn start_loading_first_frame(mut commands: Commands, asset_server: Res<AssetServer>) {
