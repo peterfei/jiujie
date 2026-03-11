@@ -394,40 +394,32 @@ fn setup_camera(mut commands: Commands) {
         },
     ));
 
-    // 2. 3D 相机 (大作级画质：开启 ACES 色调映射，极致色彩表现)
+    // 2. 3D 相机
     commands.spawn((
         Camera3d::default(),
-        Tonemapping::AcesFitted, // 3A 大作级的色彩映射，消除泛灰
-        Exposure::default(), // [关键修复] 引入标准曝光控制
         Projection::Perspective(PerspectiveProjection {
-            fov: 32.0f32.to_radians(), // 进一步缩窄 FOV，长焦感更强
+            fov: 32.0f32.to_radians(), 
             ..default()
         }),
         Camera {
-            clear_color: ClearColorConfig::Custom(Color::srgb(0.5, 0.7, 0.9)), 
+            clear_color: ClearColorConfig::Custom(Color::srgb(0.1, 0.1, 0.15)), 
             order: 0, 
             hdr: false, 
             ..default()
         },
         Msaa::Sample4, 
         CombatCamera {
-            distance: 13.0, // 稍微拉远一点点，增加纵深
+            distance: 13.0,
             target: Vec3::new(0.0, 1.2, 0.0),
             ..default()
         },
         Transform::from_xyz(0.0, 5.5, 12.0).looking_at(Vec3::new(0.0, 1.2, 0.0), Vec3::Y),
-        DistanceFog {
-            color: Color::srgba(0.65, 0.75, 0.9, 1.0),
-            // 极远雾化：50米内绝对清晰，只保留远山胧影
-            falloff: FogFalloff::Linear { start: 50.0, end: 120.0 },
-            ..default()
-        },
     ));
 
-    // 3. 全局环境光 (巅峰画质平衡：降低环境光以突出主光轮廓)
+    // 3. 全局环境光 (回归标准亮度)
     commands.insert_resource(AmbientLight {
         color: Color::srgb(0.85, 0.95, 1.0),
-        brightness: 800.0,
+        brightness: 150.0, // 从 800 降到 150
     });
 }
 

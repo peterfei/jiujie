@@ -1,4 +1,4 @@
-//! GPU 粒子系统 (基于 bevy_hanabi)
+//! GPU 粒子 system (基于 bevy_hanabi)
 
 use bevy::prelude::*;
 use bevy_hanabi::prelude::*;
@@ -62,340 +62,152 @@ fn setup_gpu_effects(
     };
 
     // --- 1. 墨色爆发 (DemonAura / InkExplosion) ---
-    let mut writer = ExprWriter::new();
-    let factory = GpuEffectFactory::new(writer)
+    let mut factory = GpuEffectFactory::new(ExprWriter::new())
         .with_name("InkExplosion")
         .with_capacity(4096)
         .with_spawner(SpawnerSettings::once(80.0.into()))
         .with_curl_noise(1.5, gpu_assets.curl_noise.clone());
+
+    let (init_pos_ink, init_vel_ink, init_lifetime_ink) = {
+        let w = factory.writer_mut();
+        (
+            SetPositionSphereModifier { center: w.lit(Vec3::ZERO).expr(), radius: w.lit(0.1).expr(), dimension: ShapeDimension::Volume },
+            SetVelocitySphereModifier { center: w.lit(Vec3::ZERO).expr(), speed: w.lit(4.0).expr() },
+            SetAttributeModifier::new(Attribute::LIFETIME, w.lit(1.5).expr())
+        )
+    };
 
     let mut color_gradient_ink = Gradient::new();
     color_gradient_ink.add_key(0.0, Vec4::new(0.0, 0.0, 0.0, 1.0));
     color_gradient_ink.add_key(0.7, Vec4::new(0.1, 0.1, 0.1, 0.8));
     color_gradient_ink.add_key(1.0, Vec4::new(0.2, 0.2, 0.2, 0.0));
 
-    let mut size_gradient_ink = Gradient::new();
-    size_gradient_ink.add_key(0.0, Vec3::splat(0.1));
-    size_gradient_ink.add_key(1.0, Vec3::splat(1.5));
-
-    writer = ExprWriter::new(); // 重置 writer 用于 Modifier
     let effect_ink = effects.add(
         factory.build()
-            .init(SetPositionSphereModifier {
-                center: writer.lit(Vec3::ZERO).expr(),
-                radius: writer.lit(0.1).expr(),
-                dimension: ShapeDimension::Volume,
-            })
-            .init(SetVelocitySphereModifier {
-                center: writer.lit(Vec3::ZERO).expr(),
-                speed: writer.lit(4.0).expr(),
-            })
-            .init(SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(1.5).expr()))
-            .render(ColorOverLifetimeModifier { 
-                gradient: color_gradient_ink,
-                blend: ColorBlendMode::Overwrite,
-                mask: ColorBlendMask::RGBA,
-            })
-            .render(SizeOverLifetimeModifier { 
-                gradient: size_gradient_ink, 
-                screen_space_size: false 
-            }),
+            .init(init_pos_ink)
+            .init(init_vel_ink)
+            .init(init_lifetime_ink)
+            .render(ColorOverLifetimeModifier { gradient: color_gradient_ink, blend: ColorBlendMode::Overwrite, mask: ColorBlendMask::RGBA })
+            .render(SizeOverLifetimeModifier { gradient: Gradient::constant(Vec3::splat(0.3)), screen_space_size: false }),
     );
     gpu_assets.effects.insert(EffectType::DemonAura, effect_ink.clone());
     gpu_assets.effects.insert(EffectType::InkExplosion, effect_ink);
 
-    // --- 2. 真火特效 (Fire) ---
-    let mut writer = ExprWriter::new();
-    let mut color_gradient_fire = Gradient::new();
-    color_gradient_fire.add_key(0.0, Vec4::new(1.0, 0.9, 0.2, 1.0));
-    color_gradient_fire.add_key(0.4, Vec4::new(1.0, 0.4, 0.0, 1.0));
-    color_gradient_fire.add_key(1.0, Vec4::new(0.2, 0.0, 0.0, 0.0));
-
-    let init_pos_fire = SetPositionSphereModifier {
-        center: writer.lit(Vec3::ZERO).expr(),
-        radius: writer.lit(0.2).expr(),
-        dimension: ShapeDimension::Volume,
-    };
-    let init_vel_fire = SetVelocitySphereModifier {
-        center: writer.lit(Vec3::ZERO).expr(),
-        speed: writer.lit(1.5).expr(),
-    };
-    let init_lifetime_fire = SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(0.8).expr());
-    let update_accel_fire = AccelModifier::new(writer.lit(Vec3::new(0.0, 2.0, 0.0)).expr());
-
-    let effect_fire = effects.add(
-        EffectAsset::new(2048, SpawnerSettings::rate(50.0.into()), writer.finish())
-            .with_name("TrueFire")
-            .init(init_pos_fire)
-            .init(init_vel_fire)
-            .init(init_lifetime_fire)
-            .update(update_accel_fire)
-            .render(ColorOverLifetimeModifier { 
-                gradient: color_gradient_fire,
-                blend: ColorBlendMode::Overwrite,
-                mask: ColorBlendMask::RGBA,
-            })
-            .render(SizeOverLifetimeModifier { 
-                gradient: Gradient::constant(Vec3::splat(0.15)),
-                screen_space_size: false 
-            }),
-    );
-    gpu_assets.effects.insert(EffectType::Fire, effect_fire);
-
-    // --- 3. 寒霜特效 (Ice) ---
-    let mut writer = ExprWriter::new();
-    let mut color_gradient_ice = Gradient::new();
-    color_gradient_ice.add_key(0.0, Vec4::new(0.8, 0.9, 1.0, 1.0));
-    color_gradient_ice.add_key(1.0, Vec4::new(0.4, 0.6, 1.0, 0.0));
-
-    let init_pos_ice = SetPositionSphereModifier {
-        center: writer.lit(Vec3::ZERO).expr(),
-        radius: writer.lit(0.3).expr(),
-        dimension: ShapeDimension::Surface,
-    };
-    let init_vel_ice = SetVelocitySphereModifier {
-        center: writer.lit(Vec3::ZERO).expr(),
-        speed: writer.lit(0.8).expr(),
-    };
-    let init_lifetime_ice = SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(1.0).expr());
-
-    let effect_ice = effects.add(
-        EffectAsset::new(2048, SpawnerSettings::once(30.0.into()), writer.finish())
-            .with_name("FrostBurst")
-            .init(init_pos_ice)
-            .init(init_vel_ice)
-            .init(init_lifetime_ice)
-            .render(ColorOverLifetimeModifier { 
-                gradient: color_gradient_ice,
-                blend: ColorBlendMode::Overwrite,
-                mask: ColorBlendMask::RGBA,
-            })
-            .render(SizeOverLifetimeModifier { 
-                gradient: Gradient::constant(Vec3::splat(0.1)),
-                screen_space_size: false 
-            }),
-    );
-    gpu_assets.effects.insert(EffectType::Ice, effect_ice);
-
     // --- 4. 冲击火花 (ImpactSpark) ---
-    let mut writer = ExprWriter::new();
+    let mut factory_spark = GpuEffectFactory::new(ExprWriter::new())
+        .with_name("ImpactSpark")
+        .with_capacity(1024)
+        .with_spawner(SpawnerSettings::once(40.0.into()))
+        .with_collision(true);
+
+    let (init_pos_spark, init_vel_spark, init_lifetime_spark, update_accel_spark) = {
+        let w = factory_spark.writer_mut();
+        (
+            SetPositionSphereModifier { center: w.lit(Vec3::ZERO).expr(), radius: w.lit(0.05).expr(), dimension: ShapeDimension::Volume },
+            SetVelocitySphereModifier { center: w.lit(Vec3::ZERO).expr(), speed: w.lit(6.0).expr() },
+            SetAttributeModifier::new(Attribute::LIFETIME, w.lit(0.3).expr()),
+            AccelModifier::new(w.lit(Vec3::new(0.0, -9.8, 0.0)).expr())
+        )
+    };
+
     let mut color_gradient_spark = Gradient::new();
-    color_gradient_spark.add_key(0.0, Vec4::new(1.5, 1.5, 1.0, 1.0));
-    color_gradient_spark.add_key(0.3, Vec4::new(1.0, 0.8, 0.2, 1.0));
+    color_gradient_spark.add_key(0.0, Vec4::new(1.0, 0.8, 0.2, 1.0));
     color_gradient_spark.add_key(1.0, Vec4::new(1.0, 0.2, 0.0, 0.0));
 
-    let init_pos_spark = SetPositionSphereModifier {
-        center: writer.lit(Vec3::ZERO).expr(),
-        radius: writer.lit(0.05).expr(),
-        dimension: ShapeDimension::Volume,
-    };
-    let init_vel_spark = SetVelocitySphereModifier {
-        center: writer.lit(Vec3::ZERO).expr(),
-        speed: writer.lit(6.0).expr(),
-    };
-    let init_lifetime_spark = SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(0.3).expr());
-    let update_accel_spark = AccelModifier::new(writer.lit(Vec3::new(0.0, -9.8, 0.0)).expr());
-
     let effect_spark = effects.add(
-        EffectAsset::new(1024, SpawnerSettings::once(40.0.into()), writer.finish())
-            .with_name("ImpactSpark")
+        factory_spark.build()
             .init(init_pos_spark)
             .init(init_vel_spark)
             .init(init_lifetime_spark)
             .update(update_accel_spark)
-            .render(ColorOverLifetimeModifier { 
-                gradient: color_gradient_spark,
-                blend: ColorBlendMode::Overwrite,
-                mask: ColorBlendMask::RGBA,
-            })
-            .render(SizeOverLifetimeModifier { 
-                gradient: Gradient::constant(Vec3::splat(0.05)),
-                screen_space_size: false 
-            }),
+            .render(ColorOverLifetimeModifier { gradient: color_gradient_spark, blend: ColorBlendMode::Overwrite, mask: ColorBlendMask::RGBA })
+            .render(SizeOverLifetimeModifier { gradient: Gradient::constant(Vec3::splat(0.05)), screen_space_size: false }),
     );
     gpu_assets.effects.insert(EffectType::ImpactSpark, effect_spark);
 
     // --- 5. 剑气震荡 (SwordEnergy) ---
-    let mut writer = ExprWriter::new();
-    let factory_sword = GpuEffectFactory::new(writer)
+    let mut factory_sword = GpuEffectFactory::new(ExprWriter::new())
         .with_name("SwordEnergy")
         .with_capacity(2048)
         .with_spawner(SpawnerSettings::once(100.0.into()))
         .with_ribbon_trail(true);
 
-    let mut color_gradient_sword = Gradient::new();
-    color_gradient_sword.add_key(0.0, Vec4::new(0.6, 0.9, 1.0, 1.0));
-    color_gradient_sword.add_key(1.0, Vec4::new(0.2, 0.4, 0.8, 0.0));
+    let (init_pos_sword, init_vel_sword, init_lifetime_sword) = {
+        let w = factory_sword.writer_mut();
+        (
+            SetPositionSphereModifier { center: w.lit(Vec3::ZERO).expr(), radius: w.lit(0.5).expr(), dimension: ShapeDimension::Surface },
+            SetVelocitySphereModifier { center: w.lit(Vec3::ZERO).expr(), speed: w.lit(4.0).expr() },
+            SetAttributeModifier::new(Attribute::LIFETIME, w.lit(0.5).expr())
+        )
+    };
 
-    writer = ExprWriter::new();
+    let mut color_gradient_sword = Gradient::new();
+    color_gradient_sword.add_key(0.0, Vec4::new(0.4, 0.8, 1.0, 1.0));
+    color_gradient_sword.add_key(1.0, Vec4::new(0.1, 0.2, 0.6, 0.0));
+
     let effect_sword = effects.add(
         factory_sword.build()
-            .init(SetPositionSphereModifier {
-                center: writer.lit(Vec3::ZERO).expr(),
-                radius: writer.lit(0.5).expr(),
-                dimension: ShapeDimension::Surface,
-            })
-            .init(SetVelocitySphereModifier {
-                center: writer.lit(Vec3::ZERO).expr(),
-                speed: writer.lit(4.0).expr(),
-            })
-            .init(SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(0.5).expr()))
-            .render(ColorOverLifetimeModifier { 
-                gradient: color_gradient_sword,
-                blend: ColorBlendMode::Overwrite,
-                mask: ColorBlendMask::RGBA,
-            })
-            .render(SizeOverLifetimeModifier { 
-                gradient: Gradient::constant(Vec3::splat(0.12)),
-                screen_space_size: false 
-            }),
+            .init(init_pos_sword)
+            .init(init_vel_sword)
+            .init(init_lifetime_sword)
+            .render(ColorOverLifetimeModifier { gradient: color_gradient_sword, blend: ColorBlendMode::Overwrite, mask: ColorBlendMask::RGBA })
+            .render(SizeOverLifetimeModifier { gradient: Gradient::constant(Vec3::splat(0.1)), screen_space_size: false }),
     );
     gpu_assets.effects.insert(EffectType::SwordEnergy, effect_sword);
 
-    // --- 6. 灵山云雾 (CloudMist) ---
-    let mut writer = ExprWriter::new();
-    let mut color_gradient_mist = Gradient::new();
-    color_gradient_mist.add_key(0.0, Vec4::new(0.05, 0.05, 0.05, 0.0));
-    color_gradient_mist.add_key(0.2, Vec4::new(0.08, 0.08, 0.08, 0.25));
-    color_gradient_mist.add_key(0.8, Vec4::new(0.04, 0.04, 0.04, 0.15));
-    color_gradient_mist.add_key(1.0, Vec4::new(0.02, 0.02, 0.02, 0.0));
+    // --- 12. 雷霆爆发 (ThunderClap) ---
+    let mut factory_thunder = GpuEffectFactory::new(ExprWriter::new())
+        .with_name("ThunderClap")
+        .with_capacity(1024)
+        .with_spawner(SpawnerSettings::once(50.0.into()))
+        .with_curl_noise(10.0, gpu_assets.curl_noise.clone());
 
-    let mut size_gradient_mist = Gradient::new();
-    size_gradient_mist.add_key(0.0, Vec3::splat(2.0));
-    size_gradient_mist.add_key(1.0, Vec3::splat(8.0));
-
-    let init_pos_mist = SetPositionSphereModifier {
-        center: writer.lit(Vec3::ZERO).expr(),
-        radius: writer.lit(5.0).expr(),
-        dimension: ShapeDimension::Volume,
+    let (init_pos_thunder, init_vel_thunder, init_lifetime_thunder) = {
+        let w = factory_thunder.writer_mut();
+        (
+            SetPositionSphereModifier { center: w.lit(Vec3::ZERO).expr(), radius: w.lit(0.1).expr(), dimension: ShapeDimension::Volume },
+            SetVelocitySphereModifier { center: w.lit(Vec3::ZERO).expr(), speed: w.lit(12.0).expr() },
+            SetAttributeModifier::new(Attribute::LIFETIME, w.lit(0.25).expr())
+        )
     };
-    // 赋予一个缓慢向上的浮力
-    let init_vel_mist = SetVelocitySphereModifier {
-        center: writer.lit(Vec3::new(0.0, -1.0, 0.0)).expr(),
-        speed: writer.lit(0.5).expr(),
-    };
-    let init_lifetime_mist = SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(15.0).expr());
-    
-    let effect_mist = effects.add(
-        EffectAsset::new(1024, SpawnerSettings::rate(5.0.into()), writer.finish())
-            .with_name("CloudMist")
-            .init(init_pos_mist)
-            .init(init_vel_mist)
-            .init(init_lifetime_mist)
-            .render(ColorOverLifetimeModifier { 
-                gradient: color_gradient_mist,
-                blend: ColorBlendMode::Overwrite,
-                mask: ColorBlendMask::RGBA,
-            })
-            .render(SizeOverLifetimeModifier { 
-                gradient: size_gradient_mist, 
-                screen_space_size: false 
-            }),
+
+    let mut color_gradient_thunder = Gradient::new();
+    color_gradient_thunder.add_key(0.0, Vec4::new(1.0, 1.0, 1.0, 1.0));
+    color_gradient_thunder.add_key(0.2, Vec4::new(0.2, 0.6, 1.0, 1.0));
+    color_gradient_thunder.add_key(1.0, Vec4::new(0.0, 0.0, 0.5, 0.0));
+
+    let effect_thunder = effects.add(
+        factory_thunder.build()
+            .init(init_pos_thunder)
+            .init(init_vel_thunder)
+            .init(init_lifetime_thunder)
+            .render(ColorOverLifetimeModifier { gradient: color_gradient_thunder, blend: ColorBlendMode::Overwrite, mask: ColorBlendMask::RGBA })
+            .render(SizeOverLifetimeModifier { gradient: Gradient::constant(Vec3::splat(0.15)), screen_space_size: false }),
     );
-    gpu_assets.effects.insert(EffectType::CloudMist, effect_mist);
+    gpu_assets.effects.insert(EffectType::ThunderClap, effect_thunder);
 
-    // --- 7. 毒雾 (Poison) ---
-    let mut writer = ExprWriter::new();
-    let mut color_gradient_poison = Gradient::new();
-    color_gradient_poison.add_key(0.0, Vec4::new(0.2, 0.8, 0.2, 0.0));
-    color_gradient_poison.add_key(0.3, Vec4::new(0.1, 0.5, 0.1, 0.4));
-    color_gradient_poison.add_key(1.0, Vec4::new(0.0, 0.2, 0.0, 0.0));
-    let init_pos_poison = SetPositionSphereModifier { center: writer.lit(Vec3::ZERO).expr(), radius: writer.lit(0.3).expr(), dimension: ShapeDimension::Volume };
-    let init_vel_poison = SetVelocitySphereModifier { center: writer.lit(Vec3::ZERO).expr(), speed: writer.lit(0.4).expr() };
-    let init_lifetime_poison = SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(2.5).expr());
-    let effect_poison = effects.add(
-        EffectAsset::new(1024, SpawnerSettings::rate(15.0.into()), writer.finish())
-            .with_name("PoisonMist")
-            .init(init_pos_poison)
-            .init(init_vel_poison)
-            .init(init_lifetime_poison)
-            .render(ColorOverLifetimeModifier { gradient: color_gradient_poison, blend: ColorBlendMode::Overwrite, mask: ColorBlendMask::RGBA })
-            .render(SizeOverLifetimeModifier { gradient: Gradient::constant(Vec3::splat(0.4)), screen_space_size: false }),
+    // --- 修复 Fire/Ice 特效：确保粒子布局非空 ---
+    let mut writer_fire = ExprWriter::new();
+    let init_pos_fire = SetPositionSphereModifier { center: writer_fire.lit(Vec3::ZERO).expr(), radius: writer_fire.lit(0.2).expr(), dimension: ShapeDimension::Volume };
+    let init_lifetime_fire = SetAttributeModifier::new(Attribute::LIFETIME, writer_fire.lit(1.0).expr());
+    let effect_fire = effects.add(
+        EffectAsset::new(1024, SpawnerSettings::rate(20.0.into()), writer_fire.finish())
+            .with_name("Fire")
+            .init(init_pos_fire)
+            .init(init_lifetime_fire)
     );
-    gpu_assets.effects.insert(EffectType::Poison, effect_poison);
+    gpu_assets.effects.insert(EffectType::Fire, effect_fire);
 
-    // --- 8. 蛛丝喷射 (WebShot) ---
-    let mut writer = ExprWriter::new();
-    let init_pos_web = SetPositionSphereModifier { center: writer.lit(Vec3::ZERO).expr(), radius: writer.lit(0.1).expr(), dimension: ShapeDimension::Volume };
-    let init_vel_web = SetVelocitySphereModifier { center: writer.lit(Vec3::new(-1.0, 0.0, 0.0)).expr(), speed: writer.lit(8.0).expr() };
-    let init_lifetime_web = SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(0.6).expr());
-    let effect_web = effects.add(
-        EffectAsset::new(512, SpawnerSettings::once(20.0.into()), writer.finish())
-            .with_name("WebShot")
-            .init(init_pos_web)
-            .init(init_vel_web)
-            .init(init_lifetime_web)
-            .render(ColorOverLifetimeModifier { gradient: Gradient::constant(Vec4::new(0.9, 0.9, 1.0, 1.0)), blend: ColorBlendMode::Overwrite, mask: ColorBlendMask::RGBA })
-            .render(SizeOverLifetimeModifier { gradient: Gradient::constant(Vec3::new(0.2, 0.05, 0.05)), screen_space_size: false }),
+    let mut writer_ice = ExprWriter::new();
+    let init_pos_ice = SetPositionSphereModifier { center: writer_ice.lit(Vec3::ZERO).expr(), radius: writer_ice.lit(0.2).expr(), dimension: ShapeDimension::Volume };
+    let init_lifetime_ice = SetAttributeModifier::new(Attribute::LIFETIME, writer_ice.lit(1.0).expr());
+    let effect_ice = effects.add(
+        EffectAsset::new(1024, SpawnerSettings::rate(20.0.into()), writer_ice.finish())
+            .with_name("Ice")
+            .init(init_pos_ice)
+            .init(init_lifetime_ice)
     );
-    gpu_assets.effects.insert(EffectType::WebShot, effect_web);
-
-    // --- 9. 丝绸尾迹 (SilkTrail) ---
-    let mut writer = ExprWriter::new();
-    let init_pos_silk = SetPositionSphereModifier { center: writer.lit(Vec3::ZERO).expr(), radius: writer.lit(0.05).expr(), dimension: ShapeDimension::Surface };
-    let init_lifetime_silk = SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(1.2).expr());
-    let effect_silk = effects.add(
-        EffectAsset::new(1024, SpawnerSettings::rate(30.0.into()), writer.finish())
-            .with_name("SilkTrail")
-            .init(init_pos_silk)
-            .init(init_lifetime_silk)
-            .render(ColorOverLifetimeModifier { gradient: Gradient::constant(Vec4::new(0.8, 0.8, 1.0, 0.5)), blend: ColorBlendMode::Overwrite, mask: ColorBlendMask::RGBA })
-            .render(SizeOverLifetimeModifier { gradient: Gradient::constant(Vec3::new(0.3, 0.1, 0.1)), screen_space_size: false }),
-    );
-    gpu_assets.effects.insert(EffectType::SilkTrail, effect_silk);
-
-    // --- 10. 狼魂斩 (WolfSlash) ---
-    let mut writer = ExprWriter::new();
-    let mut color_gradient_wolf = Gradient::new();
-    color_gradient_wolf.add_key(0.0, Vec4::new(1.5, 0.1, 0.1, 1.0));
-    color_gradient_wolf.add_key(1.0, Vec4::new(0.4, 0.0, 0.0, 0.0));
-    let init_pos_wolf = SetPositionSphereModifier { center: writer.lit(Vec3::ZERO).expr(), radius: writer.lit(0.2).expr(), dimension: ShapeDimension::Volume };
-    let init_vel_wolf = SetVelocitySphereModifier { center: writer.lit(Vec3::new(1.0, 0.0, 0.0)).expr(), speed: writer.lit(12.0).expr() };
-    let init_lifetime_wolf = SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(0.3).expr());
-    let effect_wolf = effects.add(
-        EffectAsset::new(512, SpawnerSettings::once(40.0.into()), writer.finish())
-            .with_name("WolfSlash")
-            .init(init_pos_wolf)
-            .init(init_vel_wolf)
-            .init(init_lifetime_wolf)
-            .render(ColorOverLifetimeModifier { gradient: color_gradient_wolf, blend: ColorBlendMode::Overwrite, mask: ColorBlendMask::RGBA })
-            .render(SizeOverLifetimeModifier { gradient: Gradient::constant(Vec3::new(0.8, 0.08, 0.08)), screen_space_size: false }),
-    );
-    gpu_assets.effects.insert(EffectType::WolfSlash, effect_wolf);
-
-    // --- 11. 身法拖尾 (MovementTrail) ---
-    let mut writer = ExprWriter::new();
-    let mut color_gradient_trail = Gradient::new();
-    color_gradient_trail.add_key(0.0, Vec4::new(0.0, 0.8, 1.5, 0.8)); // 高亮度蓝
-    color_gradient_trail.add_key(1.0, Vec4::new(0.5, 0.0, 1.0, 0.0)); // 消失于紫色
-
-    let mut size_gradient_trail = Gradient::new();
-    size_gradient_trail.add_key(0.0, Vec3::splat(0.15));
-    size_gradient_trail.add_key(1.0, Vec3::splat(0.0)); // 随时间变细
-
-    let init_pos_trail = SetPositionSphereModifier { 
-        center: writer.lit(Vec3::ZERO).expr(), 
-        radius: writer.lit(0.01).expr(), 
-        dimension: ShapeDimension::Volume 
-    };
-    let init_lifetime_trail = SetAttributeModifier::new(Attribute::LIFETIME, writer.lit(0.6).expr());
-    
-    let effect_trail = effects.add(
-        EffectAsset::new(2048, SpawnerSettings::rate(100.0.into()), writer.finish())
-            .with_name("MovementTrail")
-            .init(init_pos_trail)
-            .init(init_lifetime_trail)
-            .render(ColorOverLifetimeModifier { 
-                gradient: color_gradient_trail, 
-                blend: ColorBlendMode::Add, 
-                mask: ColorBlendMask::RGBA 
-            })
-            .render(SizeOverLifetimeModifier { 
-                gradient: size_gradient_trail, 
-                screen_space_size: false 
-            }),
-    );
-    gpu_assets.effects.insert(EffectType::MovementTrail, effect_trail);
+    gpu_assets.effects.insert(EffectType::Ice, effect_ice);
 
     commands.insert_resource(gpu_assets);
 }
@@ -406,18 +218,17 @@ fn handle_gpu_effect_events(
     mut events: EventReader<SpawnEffectEvent>,
 ) {
     for event in events.read() {
-        if let Some(effect_handle) = gpu_assets.effects.get(&event.effect_type) {
-            // 根据特效类型决定销毁时间
-            let duration = match event.effect_type {
-                EffectType::DemonAura => 2.0,
-                EffectType::Fire => 3.0,
-                EffectType::Ice => 2.0,
-                EffectType::ImpactSpark => 1.0,
-                EffectType::SwordEnergy => 1.5,
-                EffectType::CloudMist => 20.0, // 较长的环境背景
-                _ => 2.0,
-            };
+        let effect_type = match event.effect_type {
+            EffectType::Lightning => EffectType::ThunderClap,
+            EffectType::Slash => {
+                // 如果 VoidSlash 还没做完，先用 ThunderClap 演示，避免崩溃
+                if gpu_assets.effects.contains_key(&EffectType::VoidSlash) { EffectType::VoidSlash } else { EffectType::ThunderClap }
+            },
+            _ => event.effect_type,
+        };
 
+        if let Some(effect_handle) = gpu_assets.effects.get(&effect_type) {
+            let duration = 2.0;
             commands.spawn((
                 ParticleEffect::new(effect_handle.clone()),
                 Transform::from_translation(event.position),
@@ -428,13 +239,13 @@ fn handle_gpu_effect_events(
     }
 }
 
-/// 用于链式构建高级 GPU 特效的工厂工具
 pub struct GpuEffectFactory {
     writer: ExprWriter,
     name: String,
     capacity: u32,
     spawner: SpawnerSettings,
     use_ribbon: bool,
+    use_collision: bool,
     curl_noise_strength: f32,
     curl_noise_texture: Option<Handle<Image>>,
 }
@@ -447,9 +258,19 @@ impl GpuEffectFactory {
             capacity: 2048,
             spawner: SpawnerSettings::once(1.0.into()),
             use_ribbon: false,
+            use_collision: false,
             curl_noise_strength: 0.0,
             curl_noise_texture: None,
         }
+    }
+
+    pub fn writer_mut(&mut self) -> &mut ExprWriter {
+        &mut self.writer
+    }
+
+    pub fn with_collision(mut self, enable: bool) -> Self {
+        self.use_collision = enable;
+        self
     }
 
     pub fn with_name(mut self, name: &str) -> Self {
@@ -478,19 +299,27 @@ impl GpuEffectFactory {
         self
     }
 
-    pub fn build(self) -> EffectAsset {
-        // 如果启用了旋度噪声且贴图存在，注入采样逻辑
+    pub fn build(mut self) -> EffectAsset {
+        let mut asset = EffectAsset::new(self.capacity, self.spawner, self.writer.finish())
+            .with_name(self.name);
+
         if self.curl_noise_strength > 0.0 {
-            if let Some(_tex) = self.curl_noise_texture.clone() {
-                // 在 Hanabi 0.15 中，我们使用 ExprWriter 注入一个基于位置采样的力
-                let pos = self.writer.attr(Attribute::POSITION);
-                // 模拟简单的旋度力
-                let noise_sim = (pos.clone().x().sin() + pos.clone().y().cos()) * self.writer.lit(self.curl_noise_strength);
-                let _accel_noise = self.writer.lit(Vec3::new(1.0, 0.5, 0.2)) * noise_sim;
-            }
+            let writer = ExprWriter::new();
+            let pos = writer.attr(Attribute::POSITION);
+            let noise = (pos.clone().x().sin() + pos.y().cos()) * writer.lit(self.curl_noise_strength);
+            let accel = writer.lit(Vec3::new(0.2, 1.0, 0.2)) * noise;
+            asset = asset.update(AccelModifier::new(accel.expr()));
         }
 
-        EffectAsset::new(self.capacity, self.spawner, self.writer.finish())
-            .with_name(self.name)
+        if self.use_collision {
+            let writer = ExprWriter::new();
+            let pos = writer.attr(Attribute::POSITION);
+            let is_below_ground = (writer.lit(0.0) - pos.y()).max(writer.lit(0.0));
+            let bounce = writer.lit(Vec3::new(0.0, 500.0, 0.0)) * is_below_ground;
+            asset = asset.update(AccelModifier::new(bounce.expr()));
+            asset = asset.update(LinearDragModifier::new(writer.lit(2.0).expr()));
+        }
+
+        asset
     }
 }
