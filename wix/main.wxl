@@ -1,15 +1,15 @@
-﻿<?xml version='1.0' encoding='utf-8'?>
-<WixLocalization Culture='zh-CN' Codepage='65001' xmlns='http://schemas.microsoft.com/wix/2006/localization'>
-    <String Id='ProductName'>九界:渡劫</String>
-    <String Id='ShortcutFolderName'>九界 渡劫</String>
-    <String Id='Manufacturer'>CN=BFB76822-8992-4D24-B38C-71F0C2BABD49</String>
+<?xml version='1.0' encoding='gb2312'?>
+<WixLocalization Culture='zh-CN' Codepage='936' xmlns='http://schemas.microsoft.com/wix/2006/localization'>
+    <String Id='ProductName'>�Ž磺�ɽ�</String>
+    <String Id='ShortcutFolderName'>�Ž磺�ɽ�</String>
+    <String Id='Manufacturer'>peterfei</String>
     <String Id='PublisherDisplayName'>peterfei</String>
-    <String Id='PackageIdentityName'>peterfei.212526B6F806E</String>
-    <String Id='Description'>九界:渡劫 - 修仙肉鸽卡牌游戏</String>
-    <String Id='Keywords'>Installer,Game,修仙,肉鸽,卡牌</String>
-    <String Id='DowngradeErrorMessage'>已安装更高版本的 [ProductName]。安装程序将退出。</String>
-    <String Id='MainProgramTitle'>主程序</String>
-    <String Id='MainProgramDescription'>安装《九界:渡劫》核心运行文件</String>
-    <String Id='ShortcutName'>九界:渡劫</String>
-    <String Id='ShortcutDescription'>开始修行《九界:渡劫》</String>
+    <String Id='PackageIdentityName'>peterfei.jiujie</String>
+    <String Id='Description'>�Ž磺�ɽ� - ������뿨����Ϸ</String>
+    <String Id='Keywords'>Installer,Game,����,���,����</String>
+    <String Id='DowngradeErrorMessage'>�Ѱ�װ���߰汾�� [ProductName]����װ�����˳���</String>
+    <String Id='MainProgramTitle'>������</String>
+    <String Id='MainProgramDescription'>��װ���Ž磺�ɽ١����������ļ�</String>
+    <String Id='ShortcutName'>�Ž磺�ɽ�</String>
+    <String Id='ShortcutDescription'>��ʼ���С��Ž磺�ɽ١�</String>
 </WixLocalization>
