@@ -77,7 +77,7 @@
 
 ### 环境依赖
 *   Rust 1.80+
-*   支持 WGPU 的主流显卡 (Nvidia/AMD/Apple Silicon)
+*   支持 WGPU 的主流显卡 (Nvidia/AMD/Intel)
 
 ### 构建与运行
 ```bash

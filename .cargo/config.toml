@@ -48,3 +48,7 @@ check-revoke = false
 # Linux特定配置
 linker = "clang"
 rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[target.x86_64-pc-windows-msvc]
+# 静态链接 C++ 运行时库 (CRT)，确保在没有安装 VC++ Redistributable 的电脑上也能运行
+rustflags = ["-C", "target-feature=+crt-static"]

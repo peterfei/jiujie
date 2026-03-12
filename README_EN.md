@@ -72,7 +72,7 @@ The project integrates advanced visual and performance solutions, verified by ov
 
 ### Prerequisites
 *   Rust 1.80+
-*   GPU with WGPU support (Nvidia/AMD/Apple Silicon)
+*   GPU with WGPU support (Nvidia/AMD/Intel)
 
 ### Build & Run
 ```bash
