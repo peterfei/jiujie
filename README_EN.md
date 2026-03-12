@@ -86,6 +86,16 @@ cargo run --release
 
 ---
 
+## 📅 Changelog
+
+### v0.3.1 (2025-03-12)
+*   **Store Compliance**: Resolved "Confusing Metadata" and "Software Dependency" issues flagged by Microsoft Store review.
+*   **Runtime Enhancement**: Implemented static linking for the C++ Runtime (CRT), ensuring the game runs on clean Windows environments without manual DLL installation.
+*   **Metadata Cleanup**: Removed competitive platform names (Apple Silicon, etc.) from project metadata to comply with store policies.
+*   **Version Sync**: Updated `Cargo.toml` and `AppxManifest.xml` to reflect version 0.3.1.
+
+---
+
 ## 🤝 Contributing & License
 Contributions via Issues or PRs are highly welcome.
 Licensed under MIT or Apache-2.0.
